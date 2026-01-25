@@ -1,4 +1,5 @@
 <img width="2976" height="1440" alt="hadrian" src="https://github.com/user-attachments/assets/22fe98c9-4878-4321-85ae-9956916b307e" />
+
 # Hadrian
 
 **API Security Testing Framework**
@@ -7,7 +8,7 @@ Hadrian is a security testing framework for REST APIs that tests for OWASP API v
 
 ## Features
 
-- **OWASP API Top 10 Coverage**: Test for BOLA, broken authentication, injection, and more
+- **OWASP API Top 10 Coverage**: Test for BOLA and broken authentication
 - **Role-Based Testing**: Define roles with permissions and test cross-role access
 - **Template-Driven**: YAML templates for customizable security tests
 - **Multiple Output Formats**: Terminal, JSON, and Markdown reports
@@ -359,13 +360,13 @@ go test ./pkg/runner/...
 |----------|------|--------|
 | API1:2023 | Broken Object Level Authorization | ✅ |
 | API2:2023 | Broken Authentication | ✅ |
-| API3:2023 | Broken Object Property Level Authorization | ✅ |
+| API3:2023 | Broken Object Property Level Authorization | ⏳ |
 | API4:2023 | Unrestricted Resource Consumption | ⏳ |
-| API5:2023 | Broken Function Level Authorization | ✅ |
+| API5:2023 | Broken Function Level Authorization | ⏳ |
 | API6:2023 | Unrestricted Access to Sensitive Business Flows | ⏳ |
-| API7:2023 | Server Side Request Forgery | ✅ |
-| API8:2023 | Security Misconfiguration | ✅ |
-| API9:2023 | Improper Inventory Management | ✅ |
+| API7:2023 | Server Side Request Forgery | ⏳ |
+| API8:2023 | Security Misconfiguration | ⏳ |
+| API9:2023 | Improper Inventory Management | ⏳ |
 | API10:2023 | Unsafe Consumption of APIs | ⏳ |
 
 ## License
