@@ -1,0 +1,269 @@
+package rest
+
+import (
+	"fmt"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/plugins"
+)
+
+type RESTPlugin struct{}
+
+func init() {
+	// Self-register via init()
+	plugins.Register(plugins.ProtocolREST, &RESTPlugin{})
+}
+
+func (p *RESTPlugin) Name() string {
+	return "REST/OpenAPI Parser"
+}
+
+func (p *RESTPlugin) Type() plugins.Protocol {
+	return plugins.ProtocolREST
+}
+
+func (p *RESTPlugin) CanParse(input []byte, filename string) bool {
+	// Check file extension
+	ext := filepath.Ext(filename)
+	if ext != ".json" && ext != ".yaml" && ext != ".yml" {
+		return false
+	}
+
+	// Check for OpenAPI/Swagger markers
+	str := string(input)
+	return strings.Contains(str, "openapi") ||
+		strings.Contains(str, "swagger") ||
+		strings.Contains(str, "\"paths\"")
+}
+
+func (p *RESTPlugin) Parse(input []byte) (*model.APISpec, error) {
+	// Load OpenAPI spec
+	loader := openapi3.NewLoader()
+	doc, err := loader.LoadFromData(input)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse OpenAPI: %w", err)
+	}
+
+	// Validate spec
+	if err := doc.Validate(loader.Context); err != nil {
+		return nil, fmt.Errorf("invalid OpenAPI spec: %w", err)
+	}
+
+	// Convert to internal model
+	spec := &model.APISpec{
+		BaseURL: extractBaseURL(doc),
+		Info: model.APIInfo{
+			Title:       doc.Info.Title,
+			Version:     doc.Info.Version,
+			Description: doc.Info.Description,
+		},
+		Operations: make([]*model.Operation, 0),
+	}
+
+	// Convert paths to operations
+	for path, pathItem := range doc.Paths.Map() {
+		for method, operation := range pathItem.Operations() {
+			op := convertOperation(path, method, operation, spec.BaseURL)
+			spec.Operations = append(spec.Operations, op)
+		}
+	}
+
+	return spec, nil
+}
+
+// Helper functions (to be implemented)
+
+func extractBaseURL(doc *openapi3.T) string {
+	if doc.Servers != nil && len(doc.Servers) > 0 {
+		return doc.Servers[0].URL
+	}
+	return ""
+}
+
+func convertOperation(path, method string, operation *openapi3.Operation, baseURL string) *model.Operation {
+	op := &model.Operation{
+		Method:             strings.ToUpper(method),
+		Path:               path,
+		PathParams:         extractParameters(operation.Parameters, "path"),
+		QueryParams:        extractParameters(operation.Parameters, "query"),
+		HeaderParams:       extractParameters(operation.Parameters, "header"),
+		RequiresAuth:       hasSecurityRequirement(operation.Security),
+		ResourceType:       extractResourceType(path),
+		OwnerField:         guessOwnerField(path),
+		SuccessStatus:      extractSuccessStatus(operation.Responses),
+		UnauthorizedStatus: extractUnauthorizedStatus(operation.Responses),
+		Tags:               operation.Tags,
+		ResponseSchemas:    make(map[int]*model.Schema),
+	}
+
+	// Extract request body schema
+	if operation.RequestBody != nil && operation.RequestBody.Value != nil {
+		for _, content := range operation.RequestBody.Value.Content {
+			if content.Schema != nil && content.Schema.Value != nil {
+				op.BodySchema = convertSchema(content.Schema.Value)
+				break
+			}
+		}
+	}
+
+	// Extract response schemas
+	if operation.Responses != nil {
+		for statusStr, response := range operation.Responses.Map() {
+			if response.Value != nil {
+				for _, content := range response.Value.Content {
+					if content.Schema != nil && content.Schema.Value != nil {
+						status := parseStatus(statusStr)
+						op.ResponseSchemas[status] = convertSchema(content.Schema.Value)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return op
+}
+
+func extractParameters(params openapi3.Parameters, in string) []model.Parameter {
+	var result []model.Parameter
+	for _, param := range params {
+		if param.Value != nil && param.Value.In == in {
+			p := model.Parameter{
+				Name:     param.Value.Name,
+				In:       param.Value.In,
+				Required: param.Value.Required,
+			}
+
+			// Extract type from schema
+			if param.Value.Schema != nil && param.Value.Schema.Value != nil {
+				p.Type = param.Value.Schema.Value.Type
+				if param.Value.Schema.Value.Example != nil {
+					p.Example = param.Value.Schema.Value.Example
+				}
+			}
+
+			result = append(result, p)
+		}
+	}
+	return result
+}
+
+func hasSecurityRequirement(security *openapi3.SecurityRequirements) bool {
+	if security == nil {
+		return false
+	}
+	for _, req := range *security {
+		if len(req) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func extractResourceType(path string) string {
+	// Extract from /api/users/{id} → "users"
+	// Extract from /users → "users"
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	for _, part := range parts {
+		// Skip path parameters like {id}
+		if !strings.HasPrefix(part, "{") && part != "" && part != "api" {
+			return part
+		}
+	}
+	return ""
+}
+
+func guessOwnerField(path string) string {
+	// Extract from /api/users/{id} → "id"
+	// Extract from /users/{userId} → "userId"
+	// Extract from /pets/{pet_id} → "pet_id"
+	parts := strings.Split(path, "/")
+	for _, part := range parts {
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") {
+			// Remove braces
+			field := strings.Trim(part, "{}")
+			return field
+		}
+	}
+	return ""
+}
+
+func extractSuccessStatus(responses *openapi3.Responses) int {
+	if responses == nil {
+		return 0
+	}
+
+	// Find first 2xx status
+	for statusStr := range responses.Map() {
+		status := parseStatus(statusStr)
+		if status >= 200 && status < 300 {
+			return status
+		}
+	}
+
+	return 0
+}
+
+func extractUnauthorizedStatus(responses *openapi3.Responses) int {
+	if responses == nil {
+		return 0
+	}
+
+	// Check for 401 or 403
+	for statusStr := range responses.Map() {
+		status := parseStatus(statusStr)
+		if status == 401 || status == 403 {
+			return status
+		}
+	}
+
+	return 0
+}
+
+func convertSchema(schema *openapi3.Schema) *model.Schema {
+	if schema == nil {
+		return nil
+	}
+
+	result := &model.Schema{
+		Type:       schema.Type,
+		Properties: make(map[string]*model.SchemaProperty),
+		Required:   schema.Required,
+	}
+
+	// Convert properties
+	for name, propRef := range schema.Properties {
+		if propRef != nil && propRef.Value != nil {
+			prop := &model.SchemaProperty{
+				Type:   propRef.Value.Type,
+				Format: propRef.Value.Format,
+			}
+			if propRef.Value.Example != nil {
+				prop.Example = propRef.Value.Example
+			}
+			result.Properties[name] = prop
+		}
+	}
+
+	return result
+}
+
+func parseStatus(statusStr string) int {
+	// Handle "200", "2XX", "default"
+	if statusStr == "default" {
+		return 0
+	}
+	if strings.Contains(statusStr, "X") {
+		// Extract first digit for wildcard patterns like "2XX"
+		if len(statusStr) > 0 && statusStr[0] >= '0' && statusStr[0] <= '9' {
+			return int(statusStr[0]-'0') * 100
+		}
+		return 0
+	}
+	status, _ := strconv.Atoi(statusStr)
+	return status
+}

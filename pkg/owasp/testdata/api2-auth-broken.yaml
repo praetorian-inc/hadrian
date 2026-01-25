@@ -1,0 +1,31 @@
+id: api2-auth-broken
+info:
+  name: "Broken Authentication - Token Manipulation"
+  category: "API2:2023"
+  severity: "HIGH"
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  has_path_parameter: false
+  requires_auth: true
+  methods: ["GET", "POST"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+    matchers:
+      - type: status
+        status: [200]
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "authentication_bypass"

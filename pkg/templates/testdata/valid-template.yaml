@@ -1,0 +1,31 @@
+id: test-template
+info:
+  name: "Test Template"
+  category: "TEST"
+  severity: "HIGH"
+  author: "Hadrian"
+  tags: ["test"]
+  requires_llm_triage: false
+  test_pattern: "simple"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+http:
+  - method: "GET"
+    path: "/test"
+    matchers:
+      - type: status
+        status: [200]
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"

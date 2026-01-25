@@ -1,0 +1,64 @@
+# API1: BOLA (Broken Object Level Authorization) - Three-Phase Mutation Test
+id: api1-bola-mutation
+info:
+  name: "API1 BOLA - Broken Object Level Authorization"
+  category: "API1"
+  severity: "CRITICAL"
+  author: "Security Team"
+  tags:
+    - "authorization"
+    - "bola"
+    - "three-phase"
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods:
+    - GET
+    - PUT
+    - DELETE
+  returns_object: true
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+test_phases:
+  setup:
+    operation: "create"
+    auth: "victim"
+    data:
+      name: "Test Resource"
+      description: "Resource for BOLA testing"
+    store_response_field: "id"
+    expected_status: 201
+
+  attack:
+    operation: "read"
+    auth: "attacker"
+    use_stored_field: "id"
+    check_field: "id"
+    expected_value: "{{stored_id}}"
+    expected_status: 200
+
+  verify:
+    operation: "read"
+    auth: "victim"
+    use_stored_field: "id"
+    expected_status: 200
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      status_code: 200
+    - type: "body_field"
+      body_field: "id"
+      exists: true
+  vulnerability_pattern: "Attacker can access resource created by victim"
+  conditions:
+    - attack_phase_status:
+        - 200
+      verify_phase_status:
+        - 200

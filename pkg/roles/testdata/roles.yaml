@@ -1,0 +1,22 @@
+objects:
+  - users
+  - posts
+  - comments
+
+roles:
+  - name: admin
+    permissions:
+      - "*:*:*"
+
+  - name: moderator
+    permissions:
+      - "read:*:all"
+      - "write:posts:all"
+      - "delete:comments:all"
+
+  - name: user
+    permissions:
+      - "read:users:own"
+      - "write:users:own"
+      - "read:posts:public"
+      - "write:posts:own"
