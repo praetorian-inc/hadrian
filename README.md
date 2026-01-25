@@ -1,5 +1,4 @@
-<img width="2944" height="1440" alt="hadrian" src="https://github.com/user-attachments/assets/b47c85d7-6020-4ddb-85c2-4baf9c9d6a24" />
-
+<img width="2976" height="1440" alt="hadrian" src="https://github.com/user-attachments/assets/aa8a3b8a-d2a9-4ee9-936a-b9230dd84577" />
 # Hadrian
 
 **API Security Testing Framework**
