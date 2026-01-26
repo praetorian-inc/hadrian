@@ -1,0 +1,84 @@
+# API1: Horizontal Privilege Escalation - Update Operation
+# Detects when User A can modify User B's resources at the same permission level
+id: api1-horizontal-update
+info:
+  name: "Horizontal Privilege Escalation - Update"
+  description: "Detects when User A can modify User B's resources at the same permission level"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "praetorian"
+  tags:
+    - "horizontal-privesc"
+    - "authorization"
+    - "owasp-api"
+    - "data-modification"
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods:
+    - PUT
+    - PATCH
+  path_pattern: ".*/orders?/.*"
+  returns_object: true
+
+role_selector:
+  attacker_permission_level: "same"
+  victim_permission_level: "same"
+
+test_phases:
+  setup:
+    description: "Victim creates an order"
+    operation: "create"
+    auth: "victim"
+    endpoint: "/workshop/api/shop/orders"
+    data:
+      product_id: "1"
+      quantity: 1
+    store_response_field: "id"
+    store_response_fields:
+      - field: "id"
+        as: "order_id"
+      - field: "quantity"
+        as: "original_quantity"
+    expected_status: 201
+
+  attack:
+    description: "Attacker attempts to modify victim's order"
+    operation: "update"
+    auth: "attacker"
+    endpoint: "/workshop/api/shop/orders/{order_id}"
+    use_stored_field: "order_id"
+    data:
+      quantity: 999
+    expected_status: 200
+
+  verify:
+    description: "Confirm victim's order was modified (data integrity violation)"
+    operation: "read"
+    auth: "victim"
+    endpoint: "/workshop/api/shop/orders/{order_id}"
+    use_stored_field: "order_id"
+    expected_status: 200
+    verify_field_changed:
+      field: "quantity"
+      original_value: "original_quantity"
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      phase: "attack"
+      status_code: 200
+      message: "Attacker successfully modified victim's order"
+    - type: "field_changed"
+      phase: "verify"
+      field: "quantity"
+      message: "Data integrity violated - order quantity was changed"
+  vulnerability_pattern: "horizontal-privilege-escalation-update"
+  conditions:
+    - attack_phase_status:
+        - 200
+      verify_phase_status:
+        - 200

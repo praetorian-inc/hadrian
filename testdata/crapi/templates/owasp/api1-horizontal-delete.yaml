@@ -1,0 +1,75 @@
+# API1: Horizontal Privilege Escalation - Delete Operation
+# Detects when User A can delete User B's resources at the same permission level
+id: api1-horizontal-delete
+info:
+  name: "Horizontal Privilege Escalation - Delete"
+  description: "Detects when User A can delete User B's resources at the same permission level"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "praetorian"
+  tags:
+    - "horizontal-privesc"
+    - "authorization"
+    - "owasp-api"
+    - "data-destruction"
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods:
+    - DELETE
+  path_pattern: ".*/posts?/.*"
+  returns_object: true
+
+role_selector:
+  attacker_permission_level: "same"
+  victim_permission_level: "same"
+
+test_phases:
+  setup:
+    description: "Victim creates a community post"
+    operation: "create"
+    auth: "victim"
+    endpoint: "/community/api/v2/community/posts"
+    data:
+      title: "Test Post"
+      content: "This is a test post for horizontal privesc testing"
+    store_response_field: "id"
+    expected_status: 201
+
+  attack:
+    description: "Attacker attempts to delete victim's post"
+    operation: "delete"
+    auth: "attacker"
+    endpoint: "/community/api/v2/community/posts/{id}"
+    use_stored_field: "id"
+    expected_status: 200
+
+  verify:
+    description: "Confirm victim's post was deleted (resource no longer exists)"
+    operation: "read"
+    auth: "victim"
+    endpoint: "/community/api/v2/community/posts/{id}"
+    use_stored_field: "id"
+    expected_status: 404
+    resource_deleted: true
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      phase: "attack"
+      status_code: 200
+      message: "Attacker successfully deleted victim's post"
+    - type: "status_code"
+      phase: "verify"
+      status_code: 404
+      message: "Resource confirmed deleted - data destruction occurred"
+  vulnerability_pattern: "horizontal-privilege-escalation-delete"
+  conditions:
+    - attack_phase_status:
+        - 200
+        - 204
+      verify_phase_status:
+        - 404

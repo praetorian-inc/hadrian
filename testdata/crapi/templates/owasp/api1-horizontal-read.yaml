@@ -1,0 +1,70 @@
+# API1: Horizontal Privilege Escalation - Read Operation
+# Detects when User A can read User B's resources at the same permission level
+id: api1-horizontal-read
+info:
+  name: "Horizontal Privilege Escalation - Read"
+  description: "Detects when User A can read User B's resources at the same permission level"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "praetorian"
+  tags:
+    - "horizontal-privesc"
+    - "authorization"
+    - "owasp-api"
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods:
+    - GET
+  path_pattern: ".*/vehicle.*/location.*"
+  returns_object: true
+
+role_selector:
+  attacker_permission_level: "same"
+  victim_permission_level: "same"
+
+test_phases:
+  setup:
+    description: "Victim creates/owns a vehicle resource"
+    operation: "create"
+    auth: "victim"
+    endpoint: "/identity/api/v2/vehicle"
+    data:
+      vin: "TEST123456789"
+      year: 2024
+      make: "TestMake"
+      model: "TestModel"
+    store_response_field: "id"
+    expected_status: 201
+
+  attack:
+    description: "Attacker attempts to read victim's vehicle location"
+    operation: "read"
+    auth: "attacker"
+    endpoint: "/identity/api/v2/vehicle/{id}/location"
+    use_stored_field: "id"
+    expected_status: 200
+
+  verify:
+    description: "Confirm victim's resource still exists"
+    operation: "read"
+    auth: "victim"
+    endpoint: "/identity/api/v2/vehicle/{id}/location"
+    use_stored_field: "id"
+    expected_status: 200
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      phase: "attack"
+      status_code: 200
+      message: "Attacker successfully read victim's vehicle location"
+  vulnerability_pattern: "horizontal-privilege-escalation-read"
+  conditions:
+    - attack_phase_status:
+        - 200
+      verify_phase_status:
+        - 200
