@@ -1,2 +1,6 @@
 # binary
 hadrian
+
+# environment files with secrets
+.env
+*.env
