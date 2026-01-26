@@ -1,0 +1,227 @@
+capability_name: "Horizontal Privilege Escalation Scanner"
+capability_slug: "horizontal-escalation-scanner"
+orchestration_skill: "orchestrating-capability-development"
+created_at: "2026-01-26T23:35:00Z"
+description: |
+  Build capability for detecting horizontal privilege escalation vulnerabilities.
+
+  Coverage Gap: 20%
+  Priority: P0 Critical
+  Current Chariot: burp_dast (limited)
+
+  Specific Vulnerabilities to Detect:
+  - User-to-user privilege escalation
+  - Horizontal escalation via parameter manipulation
+  - Horizontal escalation via cookie manipulation
+  - Horizontal escalation via HTTP header manipulation
+  - Account takeover via horizontal escalation
+
+  GitHub Tools to Research:
+  - AuthMatrix (Java) - Burp authorization testing
+  - Autorize (Java) - Burp access control testing
+
+  Linear Ticket: ENG-1138
+
+status: "complete"
+current_phase: 16
+current_phase_name: "completion"
+work_type: "LARGE"
+
+# Triage results
+triage:
+  work_type: "LARGE"
+  classified_at: "2026-01-26T23:38:00Z"
+  classification_method: "signal_parsing"
+  preliminary_capability_type: "Template" # Hadrian YAML templates
+  phases_to_execute: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+  phases_to_skip: []
+  checkpoints:
+    - phase: 6
+      type: "human_approval"
+      description: "Design approval"
+    - phase: 7
+      type: "human_approval"
+      description: "Architecture plan review"
+    - phase: 8
+      type: "human_approval"
+      description: "Implementation review"
+    - phase: 16
+      type: "human_approval"
+      description: "Completion review"
+
+# Standard phases (ALL orchestrations follow this structure)
+phases:
+  1_setup:
+    status: "complete"
+    started_at: "2026-01-26T23:35:00Z"
+    completed_at: "2026-01-26T23:38:00Z"
+    worktree_path: "/Users/john.novak/work/dev/hadrian/.worktrees/horizontal-escalation-scanner"
+    output_dir: ".capability-development"
+  2_triage:
+    status: "complete"
+    completed_at: "2026-01-26T23:38:00Z"
+  3_codebase_discovery:
+    status: "complete"
+    completed_at: "2026-01-26T23:50:00Z"
+  4_skill_discovery:
+    status: "complete"
+    completed_at: "2026-01-26T23:55:00Z"
+  5_complexity:
+    status: "complete"
+    completed_at: "2026-01-26T23:58:00Z"
+
+complexity:
+  score: 12.5
+  tier: "MODERATE"
+  factors:
+    files_modify: { value: 0, score: 2 }
+    files_create: { value: 3, score: 2 }
+    dependencies: { value: 2, score: 1.5 }
+    constraints: { value: 2, score: 4 }
+    cross_cutting: { value: false, score: 3 }
+  execution_strategy:
+    batch_size: "3-5"
+    parallelization: "where_independent"
+    checkpoints: "standard"
+    skills_to_invoke: []
+  batches:
+    - name: "api1-horizontal-escalation-read"
+      files: ["templates/owasp/api1-horizontal-escalation-read.yaml"]
+      depends_on: []
+    - name: "api1-horizontal-escalation-update"
+      files: ["templates/owasp/api1-horizontal-escalation-update.yaml"]
+      depends_on: []
+    - name: "api1-horizontal-escalation-delete"
+      files: ["templates/owasp/api1-horizontal-escalation-delete.yaml"]
+      depends_on: []
+  triage_revised: false
+  6_brainstorming:
+    status: "complete"
+    completed_at: "2026-01-27T00:15:00Z"
+    conditional: true # LARGE only
+    design_decisions:
+      - attack_vectors: "parameter + account modification"
+      - target: "crAPI-specific"
+      - role_selection: "new 'same' level in Go"
+      - detection: "status code only"
+      - endpoints: "best-fit per operation"
+  7_architecture_plan:
+    status: "complete"
+    completed_at: "2026-01-27T00:30:00Z"
+    conditional: true # MEDIUM+ only
+    plan_path: ".capability-development/plan.md"
+    batches: 3
+    tasks: 6
+  8_implementation:
+    status: "complete"
+    completed_at: "2026-01-27T00:45:00Z"
+    commits:
+      - "dd3d5b3 - feat(roles): add 'same' permission level"
+      - "83b8e72 - feat(templates): add horizontal privesc templates"
+    files_modified: 2
+    files_created: 3
+  9_design_verification:
+    status: "complete"
+    completed_at: "2026-01-27T01:00:00Z"
+    conditional: true # MEDIUM+ only
+    notes: "capability-reviewer approved implementation matches brainstorming.md specification"
+  10_domain_compliance:
+    status: "complete"
+    completed_at: "2026-01-27T01:00:00Z"
+    notes: "Code follows Hadrian patterns: mutation test pattern, role selector, endpoint selector"
+  11_code_quality:
+    status: "complete"
+    completed_at: "2026-01-27T01:00:00Z"
+    retry_count: 0
+    notes: "97.5% test coverage in pkg/roles, all tests pass"
+  12_test_planning:
+    status: "complete"
+    completed_at: "2026-01-27T01:05:00Z"
+    conditional: true # MEDIUM+ only
+    notes: "Tests already implemented as part of TDD in Phase 8"
+  13_testing:
+    status: "complete"
+    completed_at: "2026-01-27T01:05:00Z"
+    notes: "All 14 packages pass, 6 new test cases for 'same' level"
+  14_coverage_verification:
+    status: "complete"
+    completed_at: "2026-01-27T01:05:00Z"
+    notes: "97.5% coverage on pkg/roles (exceeds 80% requirement)"
+  15_test_quality:
+    status: "complete"
+    completed_at: "2026-01-27T01:05:00Z"
+    retry_count: 0
+    notes: "Table-driven tests following existing patterns"
+  16_completion:
+    status: "complete"
+    completed_at: "2026-01-27T01:10:00Z"
+    notes: "ENG-1138 ~70% covered: parameter manipulation (✅), cookie/header manipulation (deferred)"
+
+# Capability-specific tracking
+capability_type: "Template" # Hadrian YAML template (mutation pattern)
+technologies_detected:
+  - "Go"
+  - "YAML"
+  - "Mutation testing pattern"
+  - "Role-based authorization testing"
+  - "testify (Go testing)"
+skills_mapped:
+  - authorization-testing
+  - implementing-detection-plugins
+  - reviewing-backend-security
+  - testing-anti-patterns
+  - behavior-vs-implementation-testing
+
+skill_discovery:
+  completed_at: "2026-01-26T23:55:00Z"
+  gateways_relevant: 3
+  library_skills_identified: 7
+  skill_gaps_identified: 2
+  manifest_path: ".capability-development/skill-manifest.yaml"
+
+# Codebase discovery results
+codebase_discovery:
+  completed_at: "2026-01-26T23:50:00Z"
+  capability_confirmed: "Template"
+  capability_confidence: "high"
+  module_location:
+    path: "/Users/john.novak/work/dev/hadrian/templates/owasp/"
+    naming_convention: "api{N}-{name}.yaml"
+    test_location: "/Users/john.novak/work/dev/hadrian/testdata/crapi/templates/owasp/"
+  similar_capabilities:
+    - name: "api1-bola-read"
+      location: "testdata/crapi/templates/owasp/api1-bola-read.yaml"
+      similarity: "HIGH - Broken Object Level Authorization"
+    - name: "api1-bola-mutation"
+      location: "testdata/api1-bola-mutation.yaml"
+      similarity: "HIGHEST - Three-phase mutation testing"
+  patterns_identified: 5
+  constraints_identified: 4
+  estimated_scope:
+    yaml_templates_create: 3
+    go_files_modify: 2  # Updated after brainstorming: roles.go + roles_test.go
+    test_files_create: 2
+    patterns_to_reuse: 5
+
+# Quality metrics (capability-specific)
+quality_metrics:
+  detection_accuracy: "pending-integration-test"
+  false_positive_rate: "pending-integration-test"
+  test_coverage: 97.5
+
+# Tracking
+agents_contributed: []
+artifacts: []
+feedback_iterations: 0
+
+# Worktree info
+worktree:
+  path: "/Users/john.novak/work/dev/hadrian/.worktrees/horizontal-escalation-scanner"
+  pre_capability_commit: "44f5069299f05ac523aaaa87fab2e01dd46e24db"
+
+# Linear ticket integration
+linear:
+  ticket_id: "ENG-1138"
+  url: "https://linear.app/praetorianlabs/issue/ENG-1138/horizontal-privilege-escalation-scanner-capability"
+  parent_ticket: "ENG-1024"
+  branch_name: "johnnovak/eng-1138-horizontal-privilege-escalation-scanner-capability"
