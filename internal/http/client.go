@@ -1,14 +1,16 @@
 package http
 
 import (
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/praetorian-inc/hadrian/pkg/log"
 )
 
 // Client wraps stdlib HTTP client with proxy support
@@ -47,7 +49,7 @@ func New(config *Config) (*Client, error) {
 
 		// Log CA cert fingerprint for audit (HR-3)
 		fingerprint := sha256.Sum256(caCert)
-		fmt.Printf("[INFO] CA cert fingerprint (SHA-256): %x\n", fingerprint[:16])
+		log.Info("CA cert fingerprint (SHA-256): %x", fingerprint[:16])
 	}
 
 	// Configure transport with proxy support
@@ -75,12 +77,12 @@ func New(config *Config) (*Client, error) {
 
 		transport.Proxy = http.ProxyURL(proxyURL)
 
-		fmt.Printf("[WARN] Using HTTP proxy: %s\n", config.Proxy)
+		log.Warn("Using HTTP proxy: %s", config.Proxy)
 	}
 
 	// Warn if insecure mode
 	if config.Insecure {
-		fmt.Println("[WARN] TLS verification disabled (--insecure). Use only with trusted proxies.")
+		log.Warn("TLS verification disabled (--insecure). Use only with trusted proxies.")
 	}
 
 	return &Client{

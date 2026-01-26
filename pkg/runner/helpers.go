@@ -9,6 +9,7 @@ import (
 	"time"
 
 	http "github.com/praetorian-inc/hadrian/internal/http"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/llm"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
@@ -92,7 +93,7 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 	client, err := llm.NewClient(ctx)
 	if err != nil {
 		// LLM is optional - return findings without triage
-		fmt.Printf("[WARN] LLM triage disabled: %v\n", err)
+		log.Warn("LLM triage disabled: %v", err)
 		return findings, nil
 	}
 
@@ -129,7 +130,7 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 
 		result, err := client.Triage(ctx, req)
 		if err != nil {
-			fmt.Printf("[WARN] LLM triage failed for %s: %v\n", finding.ID, err)
+			log.Warn("LLM triage failed for %s: %v", finding.ID, err)
 			continue
 		}
 
@@ -196,6 +197,13 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 		finding.Category, finding.Name,
 		finding.Method+" "+finding.Endpoint)
 
+	// Show role information
+	if finding.AttackerRole != "" && finding.VictimRole != "" {
+		fmt.Fprintf(r.writer, "  Roles: attacker=%s, victim=%s\n", finding.AttackerRole, finding.VictimRole)
+	} else if finding.AttackerRole != "" {
+		fmt.Fprintf(r.writer, "  Role: %s\n", finding.AttackerRole)
+	}
+
 	if finding.IsVulnerability {
 		fmt.Fprintf(r.writer, "  Vulnerability confirmed (confidence: %.0f%%)\n", finding.Confidence*100)
 	}
@@ -211,19 +219,19 @@ func (r *TerminalReporter) GenerateReport(findings []*model.Finding, stats *Stat
 
 	fmt.Fprintf(r.writer, "Findings Summary:\n")
 	if stats.Critical > 0 {
-		fmt.Fprintf(r.writer, "  %sCRITICAL: %d%s\n", colorRed, stats.Critical, colorReset)
+		fmt.Fprintf(r.writer, "  %s%sCRITICAL: %d%s\n", colorRed, colorBold, stats.Critical, colorReset)
 	}
 	if stats.High > 0 {
-		fmt.Fprintf(r.writer, "  %sHIGH: %d%s\n", colorYellow, stats.High, colorReset)
+		fmt.Fprintf(r.writer, "  %s%sHIGH: %d%s\n", colorRed, colorBold, stats.High, colorReset)
 	}
 	if stats.Medium > 0 {
-		fmt.Fprintf(r.writer, "  MEDIUM: %d\n", stats.Medium)
+		fmt.Fprintf(r.writer, "  %s%sMEDIUM: %d%s\n", colorYellow, colorBold, stats.Medium, colorReset)
 	}
 	if stats.Low > 0 {
-		fmt.Fprintf(r.writer, "  LOW: %d\n", stats.Low)
+		fmt.Fprintf(r.writer, "  %s%sLOW: %d%s\n", colorBlue, colorBold, stats.Low, colorReset)
 	}
 	if stats.Info > 0 {
-		fmt.Fprintf(r.writer, "  INFO: %d\n", stats.Info)
+		fmt.Fprintf(r.writer, "  %s%sINFO: %d%s\n", colorGreen, colorBold, stats.Info, colorReset)
 	}
 
 	fmt.Fprintf(r.writer, "\nTotal findings: %d\n", stats.Findings)
@@ -362,13 +370,15 @@ func (r *MarkdownReporter) Close() error {
 // HELPERS
 // =============================================================================
 
-// Terminal color codes
+// Import color constants from pkg/log to avoid duplication (DRY)
 const (
-	colorReset  = "\033[0m"
-	colorRed    = "\033[31m"
-	colorYellow = "\033[33m"
-	colorGreen  = "\033[32m"
-	colorBold   = "\033[1m"
+	colorReset   = log.ColorReset
+	colorRed     = log.ColorRed
+	colorYellow  = log.ColorYellow
+	colorGreen   = log.ColorGreen
+	colorBlue    = log.ColorBlue
+	colorMagenta = log.ColorMagenta
+	colorBold    = log.ColorBold
 )
 
 func getSeverityColor(severity model.Severity) string {
@@ -376,9 +386,13 @@ func getSeverityColor(severity model.Severity) string {
 	case model.SeverityCritical:
 		return colorRed + colorBold
 	case model.SeverityHigh:
-		return colorYellow + colorBold
+		return colorRed + colorBold // HIGH is also bold red, consistent with summary output
 	case model.SeverityMedium:
 		return colorYellow
+	case model.SeverityLow:
+		return colorBlue
+	case model.SeverityInfo:
+		return colorGreen
 	default:
 		return colorReset
 	}

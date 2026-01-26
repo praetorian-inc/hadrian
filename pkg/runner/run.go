@@ -6,10 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -184,11 +186,11 @@ func runTest(ctx context.Context, config Config) error {
 	// Filter by OWASP categories if specified
 	if len(config.OWASPCategories) > 0 {
 		tmplFiles = filterTemplatesByOWASP(tmplFiles, config.OWASPCategories)
-		fmt.Printf("[INFO] Filtered to %d templates matching OWASP categories: %v\n", len(tmplFiles), config.OWASPCategories)
+		log.Info("Filtered to %d templates matching OWASP categories: %v", len(tmplFiles), config.OWASPCategories)
 	}
 
-	fmt.Printf("[INFO] Loaded %d templates from %s\n", len(tmplFiles), templateDir)
-	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
+	log.Info("Loaded %d templates from %s", len(tmplFiles), templateDir)
+	log.Info("Testing %d operations against %d roles", len(spec.Operations), len(rolesCfg.Roles))
 
 	// 9. Create template executor
 	executor := templates.NewExecutor(httpClient)
@@ -205,7 +207,7 @@ func runTest(ctx context.Context, config Config) error {
 			// Execute template for each role combination
 			findings, err := executeTemplate(ctx, executor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
 			if err != nil {
-				fmt.Printf("[WARN] Template %s failed on %s %s: %v\n", tmpl.ID, op.Method, op.Path, err)
+				log.Warn("Template %s failed on %s %s: %v", tmpl.ID, op.Method, op.Path, err)
 				continue
 			}
 
@@ -302,13 +304,13 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 			if strings.Contains(path, cat) || cat == "all" {
 				tmpl, err := templates.Parse(path)
 				if err != nil {
-					fmt.Printf("[WARN] Failed to parse template %s: %v\n", path, err)
+					log.Warn("Failed to parse template %s: %v", path, err)
 					return nil
 				}
 
 				compiled, err := templates.Compile(tmpl)
 				if err != nil {
-					fmt.Printf("[WARN] Failed to compile template %s: %v\n", path, err)
+					log.Warn("Failed to compile template %s: %v", path, err)
 					return nil
 				}
 
@@ -355,6 +357,14 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 		return false
 	}
 
+	// Check path pattern (regex match)
+	if sel.PathPattern != "" {
+		matched, err := regexp.MatchString(sel.PathPattern, op.Path)
+		if err != nil || !matched {
+			return false
+		}
+	}
+
 	return true
 }
 
@@ -369,6 +379,44 @@ func executeTemplate(
 	baseURL string,
 ) ([]*model.Finding, error) {
 	var findings []*model.Finding
+
+	// For unauthenticated endpoints, run test only once without roles
+	if !tmpl.EndpointSelector.RequiresAuth {
+		variables := map[string]string{
+			"baseURL": baseURL,
+		}
+		for _, p := range op.PathParams {
+			if p.Example != nil {
+				variables[p.Name] = fmt.Sprintf("%v", p.Example)
+			} else {
+				variables[p.Name] = "1"
+			}
+		}
+
+		result, err := executor.Execute(ctx, tmpl, op, "", variables)
+		if err != nil {
+			return nil, err
+		}
+
+		if result.Matched {
+			finding := &model.Finding{
+				ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+				Category:        tmpl.Info.Category,
+				Name:            tmpl.Info.Name,
+				Severity:        model.Severity(tmpl.Info.Severity),
+				Endpoint:        op.Path,
+				Method:          op.Method,
+				AttackerRole:    "anonymous",
+				IsVulnerability: true,
+				Evidence: model.Evidence{
+					Response: result.Response,
+				},
+				Timestamp: time.Now(),
+			}
+			findings = append(findings, finding)
+		}
+		return findings, nil
+	}
 
 	// Get roles based on selector
 	attackerRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.AttackerPermissionLevel)

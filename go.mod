@@ -12,7 +12,6 @@ require (
 
 require (
 	github.com/stretchr/testify v1.8.4
-	go.uber.org/goleak v1.3.0
 	golang.org/x/time v0.14.0
 )
 

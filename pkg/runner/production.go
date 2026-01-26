@@ -2,6 +2,8 @@ package runner
 
 import (
 	"bufio"
+
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"fmt"
 	"net"
 	"net/url"
@@ -80,7 +82,7 @@ func BlockInternalIPs(targetURL string, allowInternal bool) error {
 				if !allowInternal {
 					return fmt.Errorf("SSRF blocked: target IP %s is in private range %s (use --allow-internal to override)", ip, cidr)
 				}
-				fmt.Printf("[WARN] Testing internal IP: %s\n", ip)
+				log.Warn("Testing internal IP: %s", ip)
 			}
 		}
 	}
@@ -121,6 +123,6 @@ func ConfirmProductionTesting(baseURL string, allowProd bool) error {
 		return fmt.Errorf("production testing not confirmed")
 	}
 
-	fmt.Println("[INFO] Production testing confirmed by user")
+	log.Info("Production testing confirmed by user")
 	return nil
 }

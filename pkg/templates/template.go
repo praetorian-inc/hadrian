@@ -52,9 +52,9 @@ type TestPhases struct {
 }
 
 type Phase struct {
-	Operation          string            `yaml:"operation"`                     // create, read, update, delete
-	Auth               string            `yaml:"auth"`                          // attacker, victim
-	Data               map[string]string `yaml:"data,omitempty"`                // Request body data
+	Operation          string            `yaml:"operation"`                      // create, read, update, delete
+	Auth               string            `yaml:"auth"`                           // attacker, victim
+	Data               map[string]string `yaml:"data,omitempty"`                 // Request body data
 	StoreResponseField string            `yaml:"store_response_field,omitempty"` // Field to store
 	UseStoredField     string            `yaml:"use_stored_field,omitempty"`     // Use stored value
 	CheckField         string            `yaml:"check_field,omitempty"`          // Field to verify
@@ -62,11 +62,35 @@ type Phase struct {
 	ExpectedStatus     int               `yaml:"expected_status,omitempty"`
 }
 
+// RateLimit defines rate limiting detection criteria
+type RateLimit struct {
+	Threshold    int      `yaml:"threshold"`
+	StatusCodes  []int    `yaml:"status_codes"`
+	BodyPatterns []string `yaml:"body_patterns"`
+}
+
+// Backoff defines backoff/retry behavior for server overwhelm
+type Backoff struct {
+	StatusCodes  []int    `yaml:"status_codes"`
+	BodyPatterns []string `yaml:"body_patterns"`
+	WaitSeconds  int      `yaml:"wait_seconds"`
+	Limit        int      `yaml:"limit"`
+}
+
 type HTTPTest struct {
 	Method  string            `yaml:"method"`
 	Path    string            `yaml:"path"`
 	Headers map[string]string `yaml:"headers"`
 	Body    string            `yaml:"body,omitempty"`
+
+	// Number of times to repeat request
+	Repeat int `yaml:"repeat,omitempty"`
+
+	// Rate limiting detection (separate from backoff)
+	RateLimit *RateLimit `yaml:"rate_limit,omitempty"`
+
+	// Backoff/retry behavior for server overwhelm
+	Backoff *Backoff `yaml:"backoff,omitempty"`
 
 	Matchers []Matcher `yaml:"matchers"`
 }

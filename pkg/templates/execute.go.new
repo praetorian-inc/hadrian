@@ -1,0 +1,170 @@
+package templates
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/praetorian-inc/hadrian/pkg/model"
+)
+
+// HTTPClient interface for dependency injection
+type HTTPClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+// Executor runs compiled templates against operations
+type Executor struct {
+	httpClient HTTPClient
+	cache      *Cache
+}
+
+func NewExecutor(client HTTPClient) *Executor {
+	return &Executor{
+		httpClient: client,
+		cache:      NewCache(1000), // Cache 1000 compiled templates
+	}
+}
+
+// Execute runs template against operation
+func (e *Executor) Execute(
+	ctx context.Context,
+	tmpl *CompiledTemplate,
+	operation *model.Operation,
+	authHeader string,
+	variables map[string]string,
+) (*ExecutionResult, error) {
+	result := &ExecutionResult{
+		TemplateID: tmpl.ID,
+		Operation:  operation,
+		Matched:    false,
+		Findings:   []model.Finding{},
+	}
+
+	// Execute each HTTP test in template
+	for _, test := range tmpl.HTTP {
+		// Determine repeat count (default 1)
+		repeatCount := 1
+		if test.Repeat > 0 {
+			repeatCount = test.Repeat
+		}
+
+		// Track rate limit responses for repeated requests
+		rateLimitCount := 0
+		var lastResp *http.Response
+		var lastBody string
+		var lastBodyHash string
+		var lastBodyBytes []byte
+
+		// Get backoff settings from new Backoff struct
+		backoffSecs := 5 // Default 5 second backoff
+		maxRetries := 3  // Default max retries
+		var backoffStatusCodes []int
+		var backoffBodyPatterns []string
+
+		if test.Backoff != nil {
+			if test.Backoff.WaitSeconds > 0 {
+				backoffSecs = test.Backoff.WaitSeconds
+			}
+			if test.Backoff.Limit > 0 {
+				maxRetries = test.Backoff.Limit
+			}
+			backoffStatusCodes = test.Backoff.StatusCodes
+			backoffBodyPatterns = test.Backoff.BodyPatterns
+		}
+
+		// Get rate limit settings from new RateLimit struct
+		rateLimitThreshold := 1 // Default: any rate limit response means protected
+		var rateLimitStatusCodes []int
+		var rateLimitBodyPatterns []string
+
+		if test.RateLimit != nil {
+			if test.RateLimit.Threshold > 0 {
+				rateLimitThreshold = test.RateLimit.Threshold
+			}
+			rateLimitStatusCodes = test.RateLimit.StatusCodes
+			rateLimitBodyPatterns = test.RateLimit.BodyPatterns
+		}
+
+		// Default rate limit status codes if not specified
+		if len(rateLimitStatusCodes) == 0 {
+			rateLimitStatusCodes = []int{429} // Default to 429 Too Many Requests
+		}
+
+		for i := 0; i < repeatCount; i++ {
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				return result, ctx.Err()
+			default:
+			}
+
+			// Retry loop for server overwhelm (backoff)
+			var resp *http.Response
+			var bodyBytes []byte
+			var bodyStr string
+			serverOverwhelmed := false
+
+			for retry := 0; retry <= maxRetries; retry++ {
+				// Build request (must rebuild for each attempt)
+				req, err := buildRequest(ctx, test, operation, authHeader, variables)
+				if err != nil {
+					return nil, fmt.Errorf("failed to build request: %w", err)
+				}
+
+				// Execute HTTP request
+				resp, err = e.httpClient.Do(req)
+				if err != nil {
+					return nil, fmt.Errorf("HTTP request failed: %w", err)
+				}
+
+				// Read response body
+				bodyBytes, err = io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil {
+					return nil, fmt.Errorf("failed to read response body: %w", err)
+				}
+				bodyStr = string(bodyBytes)
+
+				// Check if server is overwhelmed using BACKOFF criteria (separate from rate limit)
+				serverOverwhelmed = false
+				if len(backoffStatusCodes) > 0 || len(backoffBodyPatterns) > 0 {
+					// Check status code match for backoff
+					statusMatch := false
+					if len(backoffStatusCodes) > 0 {
+						for _, code := range backoffStatusCodes {
+							if resp.StatusCode == code {
+								statusMatch = true
+								break
+							}
+						}
+					} else {
+						// No status codes specified, only check body patterns
+						statusMatch = true
+					}
+
+					// Check body pattern match for backoff
+					bodyMatch := false
+					if len(backoffBodyPatterns) > 0 {
+						for _, pattern := range backoffBodyPatterns {
+							if strings.Contains(bodyStr, pattern) {
+								bodyMatch = true
+								break
+							}
+						}
+					} else {
+						// No body patterns specified, only check status codes
+						bodyMatch = true
+					}
+
+					// Server is overwhelmed if both status and body match (when specified)
+					if statusMatch && bodyMatch {
+						serverOverwhelmed = true
+					}
+				}
+

@@ -8,8 +8,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 )
 
 // HTTPClient interface for dependency injection
@@ -47,42 +49,233 @@ func (e *Executor) Execute(
 
 	// Execute each HTTP test in template
 	for _, test := range tmpl.HTTP {
-		// Build request
-		req, err := buildRequest(ctx, test, operation, authHeader, variables)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build request: %w", err)
+		// Determine repeat count (default 1)
+		repeatCount := 1
+		if test.Repeat > 0 {
+			repeatCount = test.Repeat
 		}
 
-		// Execute HTTP request
-		resp, err := e.httpClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("HTTP request failed: %w", err)
+		// Track rate limit responses for repeated requests
+		rateLimitCount := 0
+		backoffExhausted := false
+		var lastResp *http.Response
+		var lastBody string
+		var lastBodyHash string
+		var lastBodyBytes []byte
+
+		// Get backoff settings from new Backoff struct
+		backoffSecs := 5 // Default 5 second backoff
+		maxRetries := 3  // Default max retries
+		var backoffStatusCodes []int
+		var backoffBodyPatterns []string
+
+		if test.Backoff != nil {
+			if test.Backoff.WaitSeconds > 0 {
+				backoffSecs = test.Backoff.WaitSeconds
+			}
+			if test.Backoff.Limit > 0 {
+				maxRetries = test.Backoff.Limit
+			}
+			backoffStatusCodes = test.Backoff.StatusCodes
+			backoffBodyPatterns = test.Backoff.BodyPatterns
 		}
-		defer resp.Body.Close()
 
-		// Read response body
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response body: %w", err)
+		// Get rate limit settings from new RateLimit struct
+		rateLimitThreshold := 1 // Default: any rate limit response means protected
+		var rateLimitStatusCodes []int
+		var rateLimitBodyPatterns []string
+
+		if test.RateLimit != nil {
+			if test.RateLimit.Threshold > 0 {
+				rateLimitThreshold = test.RateLimit.Threshold
+			}
+			rateLimitStatusCodes = test.RateLimit.StatusCodes
+			rateLimitBodyPatterns = test.RateLimit.BodyPatterns
 		}
-		body := string(bodyBytes)
 
-		// Compute body hash
-		hash := sha256.Sum256(bodyBytes)
-		bodyHash := fmt.Sprintf("%x", hash)
+		// Default rate limit status codes if not specified
+		if len(rateLimitStatusCodes) == 0 {
+			rateLimitStatusCodes = []int{429} // Default to 429 Too Many Requests
+		}
 
-		// Run matchers
-		matched := evaluateMatchers(tmpl.CompiledMatchers, resp, body)
+		for i := 0; i < repeatCount; i++ {
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				return result, ctx.Err()
+			default:
+			}
 
-		if matched {
-			result.Matched = true
-			result.Response = model.HTTPResponse{
-				StatusCode: resp.StatusCode,
-				Headers:    flattenHeaders(resp.Header),
-				Body:       body,
-				BodyHash:   bodyHash,
-				Size:       len(bodyBytes),
-				Truncated:  false,
+			// Retry loop for server overwhelm (backoff)
+			var resp *http.Response
+			var bodyBytes []byte
+			var bodyStr string
+			serverOverwhelmed := false
+
+			for retry := 0; retry <= maxRetries; retry++ {
+				// Build request (must rebuild for each attempt)
+				req, err := buildRequest(ctx, test, operation, authHeader, variables)
+				if err != nil {
+					return nil, fmt.Errorf("failed to build request: %w", err)
+				}
+
+				// Execute HTTP request
+				resp, err = e.httpClient.Do(req)
+				if err != nil {
+					return nil, fmt.Errorf("HTTP request failed: %w", err)
+				}
+
+				// Read response body
+				bodyBytes, err = io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if err != nil {
+					return nil, fmt.Errorf("failed to read response body: %w", err)
+				}
+				bodyStr = string(bodyBytes)
+
+				// Check if server is overwhelmed using BACKOFF criteria (separate from rate limit)
+				serverOverwhelmed = false
+				if len(backoffStatusCodes) > 0 || len(backoffBodyPatterns) > 0 {
+					// Check status code match for backoff
+					statusMatch := false
+					if len(backoffStatusCodes) > 0 {
+						for _, code := range backoffStatusCodes {
+							if resp.StatusCode == code {
+								statusMatch = true
+								break
+							}
+						}
+					} else {
+						// No status codes specified, only check body patterns
+						statusMatch = true
+					}
+
+					// Check body pattern match for backoff
+					bodyMatch := false
+					if len(backoffBodyPatterns) > 0 {
+						for _, pattern := range backoffBodyPatterns {
+							if strings.Contains(bodyStr, pattern) {
+								bodyMatch = true
+								break
+							}
+						}
+					} else {
+						// No body patterns specified, only check status codes
+						bodyMatch = true
+					}
+
+					// Server is overwhelmed if both status and body match (when specified)
+					if statusMatch && bodyMatch {
+						serverOverwhelmed = true
+					}
+				}
+
+				if serverOverwhelmed && retry < maxRetries {
+					// Server overwhelmed - backoff and retry
+					log.Info("Backoff triggered (attempt %d/%d), waiting %d seconds...", retry+1, maxRetries, backoffSecs)
+					time.Sleep(time.Duration(backoffSecs) * time.Second)
+					continue
+				}
+
+				// Either not overwhelmed or max retries reached
+				break
+			}
+
+			// If backoff limit was exhausted (still overwhelmed after all retries), stop the repeat loop
+			if serverOverwhelmed {
+				log.Info("Backoff limit reached (%d retries exhausted). Stopping requests for this test.", maxRetries)
+				backoffExhausted = true
+				// Store last response for result reporting
+				lastResp = resp
+				lastBody = bodyStr
+				lastBodyBytes = bodyBytes
+				hash := sha256.Sum256(bodyBytes)
+				lastBodyHash = fmt.Sprintf("%x", hash)
+				break // Stop the entire repeat loop
+			}
+
+			// After retries, check if this is a rate limit response (separate from backoff)
+			isRateLimited := false
+			for _, code := range rateLimitStatusCodes {
+				if resp.StatusCode == code {
+					// If body patterns specified for rate limit, must also match one of them
+					if len(rateLimitBodyPatterns) > 0 {
+						for _, pattern := range rateLimitBodyPatterns {
+							if strings.Contains(bodyStr, pattern) {
+								isRateLimited = true
+								break
+							}
+						}
+					} else {
+						// No body patterns specified, just status code match
+						isRateLimited = true
+					}
+					break
+				}
+			}
+
+			if isRateLimited {
+				rateLimitCount++
+			}
+
+			// Early termination if rate limit threshold reached
+			if rateLimitCount >= rateLimitThreshold {
+				log.Info("Rate limit detected after %d requests. Endpoint is protected.", i+1)
+				// Store response before breaking for result reporting
+				lastResp = resp
+				lastBody = bodyStr
+				lastBodyBytes = bodyBytes
+				hash := sha256.Sum256(bodyBytes)
+				lastBodyHash = fmt.Sprintf("%x", hash)
+				break // Stop sending requests, rate limiting confirmed
+			}
+
+			// Store last response for matching
+			lastResp = resp
+			lastBody = bodyStr
+			lastBodyBytes = bodyBytes
+			hash := sha256.Sum256(bodyBytes)
+			lastBodyHash = fmt.Sprintf("%x", hash)
+		}
+
+		// For rate limit tests: check if we hit rate limiting
+		if test.Repeat > 0 {
+			// Skip vulnerability marking if backoff was exhausted (test inconclusive)
+			if backoffExhausted {
+				log.Info("Test inconclusive due to server overwhelm. Not marking as vulnerable.")
+				continue
+			}
+			// Vulnerable if we didn't hit rate limiting after N requests
+			if rateLimitCount < rateLimitThreshold {
+				result.Matched = true
+				result.Response = model.HTTPResponse{
+					StatusCode: lastResp.StatusCode,
+					Headers:    flattenHeaders(lastResp.Header),
+					Body:       fmt.Sprintf("Rate limit test: %d requests, %d rate-limited. Threshold: %d", repeatCount, rateLimitCount, rateLimitThreshold),
+					BodyHash:   lastBodyHash,
+					Size:       len(lastBodyBytes),
+					Truncated:  false,
+				}
+				result.RateLimitInfo = &RateLimitInfo{
+					RequestCount:   repeatCount,
+					RateLimitCount: rateLimitCount,
+					Threshold:      rateLimitThreshold,
+				}
+			}
+		} else {
+			// Standard matching for non-rate-limit tests
+			matched := evaluateMatchers(tmpl.CompiledMatchers, lastResp, lastBody)
+
+			if matched {
+				result.Matched = true
+				result.Response = model.HTTPResponse{
+					StatusCode: lastResp.StatusCode,
+					Headers:    flattenHeaders(lastResp.Header),
+					Body:       lastBody,
+					BodyHash:   lastBodyHash,
+					Size:       len(lastBodyBytes),
+					Truncated:  false,
+				}
 			}
 		}
 	}
@@ -111,10 +304,11 @@ func buildRequest(
 		}
 	}
 
-	// Build full URL
-	// Note: For now, if operation.Path contains full URL (from APISpec.BaseURL + path),
-	// use it directly. Otherwise just use path as-is for the URL.
+	// Build full URL - prepend baseURL if available
 	url := path
+	if baseURL, ok := variables["baseURL"]; ok && baseURL != "" && !strings.HasPrefix(path, "http") {
+		url = strings.TrimSuffix(baseURL, "/") + path
+	}
 
 	// Determine method
 	method := test.Method
@@ -262,9 +456,17 @@ func flattenHeaders(headers http.Header) map[string]string {
 
 // ExecutionResult contains the result of template execution
 type ExecutionResult struct {
-	TemplateID string
-	Operation  *model.Operation
-	Matched    bool
-	Response   model.HTTPResponse
-	Findings   []model.Finding
+	TemplateID    string
+	Operation     *model.Operation
+	Matched       bool
+	Response      model.HTTPResponse
+	Findings      []model.Finding
+	RateLimitInfo *RateLimitInfo
+}
+
+// RateLimitInfo contains results from rate limit testing
+type RateLimitInfo struct {
+	RequestCount   int
+	RateLimitCount int
+	Threshold      int
 }

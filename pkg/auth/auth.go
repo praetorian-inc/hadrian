@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,8 +39,8 @@ func Load(filePath string) (*AuthConfig, error) {
 	if info, err := os.Stat(filePath); err == nil {
 		mode := info.Mode().Perm()
 		if mode&0077 != 0 {
-			fmt.Printf("[WARN] SECURITY: %s has insecure permissions %o (should be 0600)\n", filePath, mode)
-			fmt.Println("[WARN] Run: chmod 0600", filePath)
+			log.Warn("SECURITY: %s has insecure permissions %o (should be 0600)", filePath, mode)
+			log.Warn("Run: chmod 0600 %s", filePath)
 		}
 	}
 
@@ -62,10 +63,15 @@ func Load(filePath string) (*AuthConfig, error) {
 
 		// Detect hardcoded secrets (CR-3)
 		if detectHardcodedSecret(roleAuth.Token) {
-			fmt.Printf("[WARN] SECURITY: Role '%s' has hardcoded token. Use environment variables: ${TOKEN_VAR}\n", roleName)
+			log.Warn("SECURITY: Role '%s' has hardcoded token. Use environment variables: ${TOKEN_VAR}", roleName)
 		}
 		if detectHardcodedSecret(roleAuth.APIKey) {
-			fmt.Printf("[WARN] SECURITY: Role '%s' has hardcoded API key. Use environment variables: ${KEY_VAR}\n", roleName)
+			log.Warn("SECURITY: Role '%s' has hardcoded API key. Use environment variables: ${KEY_VAR}", roleName)
+		}
+
+		// Warn about empty credentials (will cause tests to be skipped)
+		if roleAuth.Token == "" && roleAuth.APIKey == "" && roleAuth.Username == "" {
+			log.Warn("Role '%s' has no credentials configured - tests for this role will be skipped", roleName)
 		}
 	}
 
