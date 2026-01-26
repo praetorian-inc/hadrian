@@ -1,0 +1,19 @@
+{
+  "findings": null,
+  "stats": {
+    "total_tests": 0,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 0,
+    "findings": 0,
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0,
+    "info": 0,
+    "duration": 29553189,
+    "operation_count": 44,
+    "role_count": 5,
+    "templates_loaded": 2
+  }
+}

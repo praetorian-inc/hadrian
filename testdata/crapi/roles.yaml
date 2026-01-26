@@ -1,0 +1,171 @@
+# crAPI (Completely Ridiculous API) - Roles Configuration
+# OWASP Intentionally Vulnerable API for Security Testing
+# https://github.com/OWASP/crAPI
+
+objects:
+  - users          # User accounts and profiles
+  - vehicles       # Registered vehicles with location data
+  - posts          # Community forum posts
+  - comments       # Comments on forum posts
+  - videos         # User profile videos
+  - orders         # Shop orders and returns
+  - products       # Shop product catalog
+  - coupons        # Discount coupons
+  - reports        # Mechanic service reports
+  - mechanics      # Mechanic accounts
+  - service_requests  # Service requests assigned to mechanics
+
+roles:
+  # Admin - Full system access, can manage all users and content
+  - name: admin
+    permissions:
+      - "*:*:*"
+    auth:
+      token: "${CRAPI_ADMIN_TOKEN}"
+
+  # Mechanic - Service provider role with access to service requests
+  - name: mechanic
+    permissions:
+      - "read:users:own"
+      - "write:users:own"
+      - "read:service_requests:own"    # Can see assigned service requests
+      - "read:reports:all"              # Can view mechanic reports
+      - "write:reports:own"             # Can create reports for their services
+      - "read:vehicles:org"             # Can see vehicle info for service
+      - "read:mechanics:public"         # Can see other mechanics
+    auth:
+      token: "${CRAPI_MECHANIC_TOKEN}"
+
+  # Regular User - Vehicle owner with standard privileges
+  - name: user
+    permissions:
+      - "read:users:own"
+      - "write:users:own"
+      - "read:vehicles:own"             # Can see own vehicles
+      - "write:vehicles:own"            # Can add/manage own vehicles
+      - "read:posts:public"             # Can read forum posts
+      - "write:posts:own"               # Can create own posts
+      - "read:comments:public"          # Can read comments
+      - "write:comments:own"            # Can add comments
+      - "read:videos:own"               # Can see own videos
+      - "write:videos:own"              # Can upload/manage own videos
+      - "delete:videos:own"             # Can delete own videos
+      - "read:orders:own"               # Can see own orders
+      - "write:orders:own"              # Can create/return orders
+      - "read:products:public"          # Can browse shop
+      - "read:coupons:own"              # Can validate coupons
+      - "write:coupons:own"             # Can apply coupons
+      - "read:mechanics:public"         # Can see available mechanics
+      - "write:reports:own"             # Can request mechanic service
+      - "read:reports:own"              # Can see own service reports
+    auth:
+      token: "${CRAPI_USER_TOKEN}"
+
+  # Secondary User - Lower privilege user for BOLA attack testing
+  # Fewer permissions to be classified as "lower" (attacker role)
+  - name: user2
+    permissions:
+      - "read:users:own"
+      - "read:products:public"
+    auth:
+      token: "${CRAPI_USER2_TOKEN}"
+
+  # Anonymous/Guest - Unauthenticated access (public endpoints only)
+  - name: anonymous
+    permissions:
+      - "read:products:public"          # QR code endpoint is public
+      - "write:users:public"            # Can signup/login (creates new user)
+      - "read:reports:public"           # receive_report is unauthenticated
+    auth:
+      token: ""  # No authentication
+
+# Endpoint to Object Mappings
+# Maps API paths to resource types for accurate permission checking
+endpoints:
+  # Identity Service - User Management
+  - path: "/identity/api/v2/user/dashboard"
+    object: users
+  - path: "/identity/api/v2/user/pictures"
+    object: users
+  - path: "/identity/api/v2/user/reset-password"
+    object: users
+  - path: "/identity/api/v2/user/change-email"
+    object: users
+  - path: "/identity/api/v2/user/verify-email-token"
+    object: users
+
+  # Identity Service - Videos
+  - path: "/identity/api/v2/user/videos"
+    object: videos
+  - path: "/identity/api/v2/user/videos/{video_id}"
+    object: videos
+  - path: "/identity/api/v2/user/videos/convert_video"
+    object: videos
+
+  # Identity Service - Admin
+  - path: "/identity/api/v2/admin/videos/{video_id}"
+    object: videos
+
+  # Identity Service - Vehicles
+  - path: "/identity/api/v2/vehicle/vehicles"
+    object: vehicles
+  - path: "/identity/api/v2/vehicle/add_vehicle"
+    object: vehicles
+  - path: "/identity/api/v2/vehicle/{vehicleId}/location"
+    object: vehicles
+  - path: "/identity/api/v2/vehicle/resend_email"
+    object: vehicles
+
+  # Community Service - Posts
+  - path: "/community/api/v2/community/posts"
+    object: posts
+  - path: "/community/api/v2/community/posts/{postId}"
+    object: posts
+  - path: "/community/api/v2/community/posts/recent"
+    object: posts
+
+  # Community Service - Comments
+  - path: "/community/api/v2/community/posts/{postId}/comment"
+    object: comments
+
+  # Community Service - Coupons
+  - path: "/community/api/v2/coupon/new-coupon"
+    object: coupons
+  - path: "/community/api/v2/coupon/validate-coupon"
+    object: coupons
+
+  # Workshop Service - Products
+  - path: "/workshop/api/shop/products"
+    object: products
+
+  # Workshop Service - Orders
+  - path: "/workshop/api/shop/orders"
+    object: orders
+  - path: "/workshop/api/shop/orders/{order_id}"
+    object: orders
+  - path: "/workshop/api/shop/orders/all"
+    object: orders
+  - path: "/workshop/api/shop/orders/return_order"
+    object: orders
+  - path: "/workshop/api/shop/return_qr_code"
+    object: orders
+  - path: "/workshop/api/shop/apply_coupon"
+    object: coupons
+
+  # Workshop Service - Admin
+  - path: "/workshop/api/management/users/all"
+    object: users
+
+  # Workshop Service - Mechanics
+  - path: "/workshop/api/mechanic/"
+    object: mechanics
+  - path: "/workshop/api/mechanic/signup"
+    object: mechanics
+  - path: "/workshop/api/mechanic/receive_report"
+    object: reports
+  - path: "/workshop/api/mechanic/mechanic_report"
+    object: reports
+  - path: "/workshop/api/mechanic/service_requests"
+    object: service_requests
+  - path: "/workshop/api/merchant/contact_mechanic"
+    object: reports

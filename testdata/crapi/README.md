@@ -1,0 +1,112 @@
+# crAPI Test Configuration for Hadrian
+
+Configuration files for testing [OWASP crAPI](https://github.com/OWASP/crAPI) with Hadrian.
+
+## Setup
+
+### 1. Start crAPI
+
+```bash
+# Clone crAPI
+git clone https://github.com/OWASP/crAPI.git
+cd crAPI
+
+# Start with Docker Compose
+docker-compose up -d
+```
+
+crAPI will be available at:
+- **Web UI**: http://localhost:8888
+- **Email (MailHog)**: http://localhost:8025
+
+### 2. Create Test Users
+
+Create accounts for each role:
+
+```bash
+# User 1 (regular user)
+curl -X POST http://localhost:8888/identity/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@test.com","name":"Test User 1","number":"1234567890","password":"Test123!"}'
+
+# User 2 (for BOLA testing)
+curl -X POST http://localhost:8888/identity/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user2@test.com","name":"Test User 2","number":"0987654321","password":"Test123!"}'
+
+# Mechanic
+curl -X POST http://localhost:8888/workshop/api/mechanic/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email":"mechanic@test.com","name":"Test Mechanic","number":"5555555555","password":"Test123!","mechanic_code":"MECH001"}'
+```
+
+### 3. Get JWT Tokens
+
+Login with each user to get JWT tokens:
+
+```bash
+# Get user token
+curl -X POST http://localhost:8888/identity/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user1@test.com","password":"Test123!"}' | jq -r '.token'
+
+# Get user2 token
+curl -X POST http://localhost:8888/identity/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user2@test.com","password":"Test123!"}' | jq -r '.token'
+
+# Get mechanic token
+curl -X POST http://localhost:8888/identity/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"mechanic@test.com","password":"Test123!"}' | jq -r '.token'
+```
+
+### 4. Set Environment Variables
+
+```bash
+export CRAPI_USER_TOKEN="eyJ..."
+export CRAPI_USER2_TOKEN="eyJ..."
+export CRAPI_MECHANIC_TOKEN="eyJ..."
+export CRAPI_ADMIN_TOKEN="eyJ..."  # If you have admin access
+```
+
+### 5. Download OpenAPI Spec
+
+```bash
+curl -o crapi-openapi-spec.json \
+  https://raw.githubusercontent.com/OWASP/crAPI/main/openapi-spec/crapi-openapi-spec.json
+```
+
+### 6. Run Hadrian
+
+```bash
+hadrian test \
+  --api crapi-openapi-spec.json \
+  --roles roles.yaml \
+  --auth auth.yaml \
+  --output json \
+  --output-file crapi-results.json
+```
+
+## Expected Vulnerabilities
+
+crAPI is intentionally vulnerable. Hadrian should detect:
+
+| OWASP Category | Vulnerability | Endpoint Example |
+|----------------|---------------|------------------|
+| API1:2023 | BOLA - Access other user's vehicle | `GET /identity/api/v2/vehicle/{vehicleId}/location` |
+| API1:2023 | BOLA - Access other user's video | `GET /identity/api/v2/user/videos/{video_id}` |
+| API1:2023 | BOLA - Access other user's order | `GET /workshop/api/shop/orders/{order_id}` |
+| API2:2023 | Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` |
+| API2:2023 | Broken Auth - Weak JWT | Various endpoints |
+| API5:2023 | BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` |
+
+## Roles Overview
+
+| Role | Description | Token Env Var |
+|------|-------------|---------------|
+| `admin` | Full system access | `CRAPI_ADMIN_TOKEN` |
+| `mechanic` | Service provider | `CRAPI_MECHANIC_TOKEN` |
+| `user` | Regular vehicle owner | `CRAPI_USER_TOKEN` |
+| `user2` | Second user for BOLA tests | `CRAPI_USER2_TOKEN` |
+| `anonymous` | Unauthenticated | (none) |

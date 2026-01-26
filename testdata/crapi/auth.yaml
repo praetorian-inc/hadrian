@@ -1,0 +1,30 @@
+# crAPI Authentication Configuration
+# Generate tokens by logging in via POST /identity/api/auth/login
+
+method: bearer
+location: header
+
+roles:
+  admin:
+    # Login as admin user, copy JWT token here
+    # Or set CRAPI_ADMIN_TOKEN environment variable
+    token: "${CRAPI_ADMIN_TOKEN}"
+
+  mechanic:
+    # Register mechanic via POST /workshop/api/mechanic/signup
+    # Then login and copy JWT token here
+    token: "${CRAPI_MECHANIC_TOKEN}"
+
+  user:
+    # Register via POST /identity/api/auth/signup
+    # Then login and copy JWT token here
+    token: "${CRAPI_USER_TOKEN}"
+
+  user2:
+    # Second user account for BOLA testing
+    # Register a different user and login
+    token: "${CRAPI_USER2_TOKEN}"
+
+  anonymous:
+    # No authentication - empty token
+    token: ""
