@@ -49,6 +49,10 @@ hadrian test --api api.yaml --roles roles.yaml --verbose
 hadrian test --api api.yaml --roles roles.yaml --output json --output-file report.json
 ```
 
+## Tutorial
+
+You can find a tutorial that uses Hadrian to test crAPI at [testdata/crapi/README.md](testdata/crapi/README.md)
+
 ## Configuration Files
 
 ### API Specification (api.yaml)
