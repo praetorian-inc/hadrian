@@ -289,3 +289,158 @@ paths:
 	assert.Equal(t, 200, op.SuccessStatus)
 	assert.Equal(t, 403, op.UnauthorizedStatus)
 }
+
+func TestPathItemLevelParameters(t *testing.T) {
+	// Test that path-item level parameters are correctly inherited by operations
+	// This is the crAPI pattern where parameters are defined at path-item level
+	spec := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /vehicle/{vehicleId}/location:
+    get:
+      operationId: get_location
+      responses:
+        '200':
+          description: Success
+    parameters:
+      - name: vehicleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+`)
+
+	plugin, _ := plugins.Get(plugins.ProtocolREST)
+	result, err := plugin.Parse(spec)
+	require.NoError(t, err)
+	require.Len(t, result.Operations, 1, "Should have 1 operation")
+
+	op := result.Operations[0]
+	assert.Equal(t, "GET", op.Method)
+	assert.Equal(t, "/vehicle/{vehicleId}/location", op.Path)
+
+	// This is the critical assertion: path-item level parameters should be inherited
+	require.Len(t, op.PathParams, 1, "Should have 1 path param from path-item level")
+	assert.Equal(t, "vehicleId", op.PathParams[0].Name)
+	assert.True(t, op.PathParams[0].Required)
+}
+
+func TestPathItemAndOperationParametersMerge(t *testing.T) {
+	// Test that path-item level and operation-level parameters are merged correctly
+	// Operation-level parameters should override path-item level parameters with same name
+	spec := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /users/{userId}/posts/{postId}:
+    get:
+      parameters:
+        - name: postId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: includeComments
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Success
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: postId
+        in: path
+        required: true
+        schema:
+          type: string
+`)
+
+	plugin, _ := plugins.Get(plugins.ProtocolREST)
+	result, err := plugin.Parse(spec)
+	require.NoError(t, err)
+	require.Len(t, result.Operations, 1, "Should have 1 operation")
+
+	op := result.Operations[0]
+
+	// Should have 2 path params: userId from path-item level, postId from operation level (overrides path-item)
+	require.Len(t, op.PathParams, 2, "Should have 2 path params (userId from path-item, postId from operation)")
+
+	// Find userId param (from path-item level)
+	var userIdParam *model.Parameter
+	var postIdParam *model.Parameter
+	for i := range op.PathParams {
+		if op.PathParams[i].Name == "userId" {
+			userIdParam = &op.PathParams[i]
+		}
+		if op.PathParams[i].Name == "postId" {
+			postIdParam = &op.PathParams[i]
+		}
+	}
+
+	require.NotNil(t, userIdParam, "Should have userId param from path-item level")
+	assert.True(t, userIdParam.Required)
+
+	// postId should come from operation level (which overrides path-item level)
+	require.NotNil(t, postIdParam, "Should have postId param")
+	assert.True(t, postIdParam.Required, "postId should be required (from operation level, which overrides path-item)")
+	// Verify the type came from operation level (integer) not path-item level (string)
+	assert.Contains(t, postIdParam.Type, "integer", "postId type should be integer from operation level override")
+
+	// Should have 1 query param from operation level
+	require.Len(t, op.QueryParams, 1, "Should have 1 query param from operation level")
+	assert.Equal(t, "includeComments", op.QueryParams[0].Name)
+}
+
+func TestMultipleOperationsInheritPathItemParams(t *testing.T) {
+	// Test that multiple operations on the same path all inherit path-item parameters
+	spec := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /orders/{orderId}:
+    get:
+      responses:
+        '200':
+          description: Get order
+    put:
+      responses:
+        '200':
+          description: Update order
+    delete:
+      responses:
+        '200':
+          description: Delete order
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema:
+          type: string
+`)
+
+	plugin, _ := plugins.Get(plugins.ProtocolREST)
+	result, err := plugin.Parse(spec)
+	require.NoError(t, err)
+	require.Len(t, result.Operations, 3, "Should have 3 operations")
+
+	// All operations should inherit the orderId path param
+	for _, op := range result.Operations {
+		require.Len(t, op.PathParams, 1, "Operation %s should have 1 path param", op.Method)
+		assert.Equal(t, "orderId", op.PathParams[0].Name, "Operation %s should have orderId param", op.Method)
+		assert.True(t, op.PathParams[0].Required, "orderId should be required for operation %s", op.Method)
+	}
+}

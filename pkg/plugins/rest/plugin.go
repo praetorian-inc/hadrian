@@ -67,7 +67,7 @@ func (p *RESTPlugin) Parse(input []byte) (*model.APISpec, error) {
 	// Convert paths to operations
 	for path, pathItem := range doc.Paths.Map() {
 		for method, operation := range pathItem.Operations() {
-			op := convertOperation(path, method, operation, spec.BaseURL)
+			op := convertOperation(path, method, operation, pathItem.Parameters, spec.BaseURL)
 			spec.Operations = append(spec.Operations, op)
 		}
 	}
@@ -84,13 +84,17 @@ func extractBaseURL(doc *openapi3.T) string {
 	return ""
 }
 
-func convertOperation(path, method string, operation *openapi3.Operation, baseURL string) *model.Operation {
+func convertOperation(path, method string, operation *openapi3.Operation, pathItemParams openapi3.Parameters, baseURL string) *model.Operation {
+	// Merge path-item level parameters with operation-level parameters
+	// Operation-level parameters override path-item level parameters with the same name
+	mergedParams := mergeParameters(pathItemParams, operation.Parameters)
+
 	op := &model.Operation{
 		Method:             strings.ToUpper(method),
 		Path:               path,
-		PathParams:         extractParameters(operation.Parameters, "path"),
-		QueryParams:        extractParameters(operation.Parameters, "query"),
-		HeaderParams:       extractParameters(operation.Parameters, "header"),
+		PathParams:         extractParameters(mergedParams, "path"),
+		QueryParams:        extractParameters(mergedParams, "query"),
+		HeaderParams:       extractParameters(mergedParams, "header"),
 		RequiresAuth:       hasSecurityRequirement(operation.Security),
 		ResourceType:       extractResourceType(path),
 		OwnerField:         guessOwnerField(path),
@@ -126,6 +130,42 @@ func convertOperation(path, method string, operation *openapi3.Operation, baseUR
 	}
 
 	return op
+}
+
+// mergeParameters merges path-item level parameters with operation-level parameters.
+// Operation-level parameters override path-item level parameters with the same name and location.
+func mergeParameters(pathItemParams, operationParams openapi3.Parameters) openapi3.Parameters {
+	if len(pathItemParams) == 0 {
+		return operationParams
+	}
+	if len(operationParams) == 0 {
+		return pathItemParams
+	}
+
+	// Build a map of operation-level params by name+in for quick lookup
+	operationParamSet := make(map[string]bool)
+	for _, param := range operationParams {
+		if param.Value != nil {
+			key := param.Value.Name + ":" + param.Value.In
+			operationParamSet[key] = true
+		}
+	}
+
+	// Start with operation params, then add path-item params that aren't overridden
+	merged := make(openapi3.Parameters, 0, len(operationParams)+len(pathItemParams))
+	merged = append(merged, operationParams...)
+
+	for _, param := range pathItemParams {
+		if param.Value != nil {
+			key := param.Value.Name + ":" + param.Value.In
+			if !operationParamSet[key] {
+				// Path-item param not overridden, add it
+				merged = append(merged, param)
+			}
+		}
+	}
+
+	return merged
 }
 
 func extractParameters(params openapi3.Parameters, in string) []model.Parameter {

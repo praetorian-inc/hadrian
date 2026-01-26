@@ -198,6 +198,77 @@ func TestBuildRequest_VariableSubstitution(t *testing.T) {
 	}
 }
 
+// TestBuildRequest_OpenAPIPathParameters tests that OpenAPI-style path parameters
+// with single curly braces (e.g., {vehicleId}) are correctly substituted.
+// This is a regression test for the bug where only {{key}} format was supported.
+func TestBuildRequest_OpenAPIPathParameters(t *testing.T) {
+	tests := []struct {
+		name         string
+		testPath     string
+		variables    map[string]string
+		expectedPath string
+	}{
+		{
+			name:     "single OpenAPI path parameter",
+			testPath: "/identity/api/v2/vehicle/{vehicleId}/location",
+			variables: map[string]string{
+				"vehicleId": "abc123",
+			},
+			expectedPath: "/identity/api/v2/vehicle/abc123/location",
+		},
+		{
+			name:     "multiple OpenAPI path parameters",
+			testPath: "/api/v1/users/{userId}/orders/{orderId}",
+			variables: map[string]string{
+				"userId":  "user456",
+				"orderId": "order789",
+			},
+			expectedPath: "/api/v1/users/user456/orders/order789",
+		},
+		{
+			name:     "mixed double and single brace parameters",
+			testPath: "/api/{{version}}/users/{userId}",
+			variables: map[string]string{
+				"version": "v2",
+				"userId":  "user123",
+			},
+			expectedPath: "/api/v2/users/user123",
+		},
+		{
+			name:     "OpenAPI parameter at end of path",
+			testPath: "/api/resources/{resourceId}",
+			variables: map[string]string{
+				"resourceId": "res-001",
+			},
+			expectedPath: "/api/resources/res-001",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			test := HTTPTest{
+				Method: "GET",
+				Path:   tc.testPath,
+			}
+
+			operation := &model.Operation{
+				Method: "GET",
+				Path:   tc.testPath, // Use the same path for operation
+			}
+
+			req, err := buildRequest(context.Background(), test, operation, "", tc.variables)
+			if err != nil {
+				t.Fatalf("buildRequest failed: %v", err)
+			}
+
+			// Verify path was substituted correctly
+			if req.URL.Path != tc.expectedPath {
+				t.Errorf("URL path = %q, want %q", req.URL.Path, tc.expectedPath)
+			}
+		})
+	}
+}
+
 func TestBuildRequest_OperationPath(t *testing.T) {
 	test := HTTPTest{
 		Method: "{{operation.method}}",

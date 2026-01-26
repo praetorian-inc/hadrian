@@ -298,9 +298,11 @@ func buildRequest(
 	}
 
 	// Substitute path parameters
+	// Replace both {{key}} (template variables) and {key} (OpenAPI path params)
 	if variables != nil {
 		for key, value := range variables {
 			path = strings.ReplaceAll(path, "{{"+key+"}}", value)
+			path = strings.ReplaceAll(path, "{"+key+"}", value)
 		}
 	}
 
