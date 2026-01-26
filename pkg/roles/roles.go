@@ -163,6 +163,16 @@ func (c *RoleConfig) GetRolesByPermissionLevel(level string) []*Role {
 			if counts[role.Name] >= median {
 				result = append(result, role)
 			}
+		case "same":
+			// Return roles within ±25% of median (peers at same permission level)
+			// Used for horizontal privilege escalation testing between same-level users
+			tolerance := float64(median) * 0.25
+			lowerBound := float64(median) - tolerance
+			upperBound := float64(median) + tolerance
+			count := float64(counts[role.Name])
+			if count >= lowerBound && count <= upperBound {
+				result = append(result, role)
+			}
 		case "all":
 			result = append(result, role)
 		}

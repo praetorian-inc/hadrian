@@ -399,6 +399,86 @@ func TestGetRolesByPermissionLevel_All(t *testing.T) {
 	assert.Len(t, all, 3)
 }
 
+func TestGetRolesByPermissionLevel_Same(t *testing.T) {
+	tests := []struct {
+		name     string
+		roles    []*Role
+		expected []string
+	}{
+		{
+			name: "returns roles within 25% of median",
+			roles: []*Role{
+				{Name: "limited", Permissions: []Permission{{}, {}}},          // 2 perms
+				{Name: "moderate", Permissions: []Permission{{}, {}, {}}},     // 3 perms (median)
+				{Name: "powerful", Permissions: []Permission{{}, {}, {}, {}}}, // 4 perms
+			},
+			// Median = 3, tolerance = 0.75, range = [2.25, 3.75]
+			// Only "moderate" (3) is in range
+			expected: []string{"moderate"},
+		},
+		{
+			name: "all roles same permissions returns all",
+			roles: []*Role{
+				{Name: "user1", Permissions: []Permission{{}, {}}},
+				{Name: "user2", Permissions: []Permission{{}, {}}},
+				{Name: "user3", Permissions: []Permission{{}, {}}},
+			},
+			// All have 2 perms, median = 2, all within ±25%
+			expected: []string{"user1", "user2", "user3"},
+		},
+		{
+			name: "single role returns that role",
+			roles: []*Role{
+				{Name: "solo", Permissions: []Permission{{}}},
+			},
+			expected: []string{"solo"},
+		},
+		{
+			name: "empty roles returns empty",
+			roles:    []*Role{},
+			expected: []string{},
+		},
+		{
+			name: "wide spread excludes outliers",
+			roles: []*Role{
+				{Name: "admin", Permissions: make([]Permission, 100)},  // Far above median
+				{Name: "user", Permissions: make([]Permission, 10)},    // Near median
+				{Name: "guest", Permissions: make([]Permission, 1)},    // Far below median
+			},
+			// Median = 10, tolerance = 2.5, range = [7.5, 12.5]
+			// Only "user" (10) is in range
+			expected: []string{"user"},
+		},
+		{
+			name: "close permissions all included",
+			roles: []*Role{
+				{Name: "role1", Permissions: make([]Permission, 8)},
+				{Name: "role2", Permissions: make([]Permission, 9)},
+				{Name: "role3", Permissions: make([]Permission, 10)},
+				{Name: "role4", Permissions: make([]Permission, 11)},
+				{Name: "role5", Permissions: make([]Permission, 12)},
+			},
+			// Median = 10, tolerance = 2.5, range = [7.5, 12.5]
+			// All roles (8, 9, 10, 11, 12) are within range
+			expected: []string{"role1", "role2", "role3", "role4", "role5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &RoleConfig{Roles: tt.roles}
+			result := config.GetRolesByPermissionLevel("same")
+
+			got := make([]string, len(result))
+			for i, r := range result {
+				got[i] = r.Name
+			}
+
+			assert.ElementsMatch(t, tt.expected, got)
+		})
+	}
+}
+
 // Helper function
 func findRole(roles []*Role, name string) *Role {
 	for _, r := range roles {
