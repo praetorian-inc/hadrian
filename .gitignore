@@ -1,2 +1,12 @@
 # binary
 hadrian
+
+# environment files with secrets
+.env
+*.env
+
+# Claude Code local settings (user-specific)
+.claude/settings.local.json
+
+# Git worktrees directory
+.worktrees/
