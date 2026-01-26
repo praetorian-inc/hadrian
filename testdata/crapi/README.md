@@ -77,15 +77,18 @@ curl -o crapi-openapi-spec.json \
   https://raw.githubusercontent.com/OWASP/crAPI/main/openapi-spec/crapi-openapi-spec.json
 ```
 
-### 6. Run Hadrian
+### 6. Start Burp Suite
+
+### 7. Run Hadrian
 
 ```bash
 hadrian test \
+  --allow-internal\
   --api crapi-openapi-spec.json \
   --roles roles.yaml \
   --auth auth.yaml \
-  --output json \
-  --output-file crapi-results.json
+  --proxy http://127.0.0.1:8080 \ # Burp Proxy Address and Port
+  --verbose
 ```
 
 ## Expected Vulnerabilities
@@ -98,8 +101,7 @@ crAPI is intentionally vulnerable. Hadrian should detect:
 | API1:2023 | BOLA - Access other user's video | `GET /identity/api/v2/user/videos/{video_id}` |
 | API1:2023 | BOLA - Access other user's order | `GET /workshop/api/shop/orders/{order_id}` |
 | API2:2023 | Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` |
-| API2:2023 | Broken Auth - Weak JWT | Various endpoints |
-| API5:2023 | BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` |
+| API5:2023 | TBI: BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` |
 
 ## Roles Overview
 
