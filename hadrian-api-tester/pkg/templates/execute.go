@@ -186,7 +186,7 @@ func (e *Executor) Execute(
 
 				if serverOverwhelmed && retry < maxRetries {
 					// Server overwhelmed - backoff and retry
-					log.Info("Backoff triggered (attempt %d/%d), waiting %d seconds...", retry+1, maxRetries, backoffSecs)
+					log.Debug("Backoff triggered (attempt %d/%d), waiting %d seconds...", retry+1, maxRetries, backoffSecs)
 					time.Sleep(time.Duration(backoffSecs) * time.Second)
 					continue
 				}
@@ -197,7 +197,7 @@ func (e *Executor) Execute(
 
 			// If backoff limit was exhausted (still overwhelmed after all retries), stop the repeat loop
 			if serverOverwhelmed {
-				log.Info("Backoff limit reached (%d retries exhausted). Stopping requests for this test.", maxRetries)
+				log.Debug("Backoff limit reached (%d retries exhausted). Stopping requests for this test.", maxRetries)
 				backoffExhausted = true
 				// Store last response for result reporting
 				lastResp = resp
@@ -234,7 +234,7 @@ func (e *Executor) Execute(
 
 			// Early termination if rate limit threshold reached
 			if rateLimitCount >= rateLimitThreshold {
-				log.Info("Rate limit detected after %d requests. Endpoint is protected.", i+1)
+				log.Debug("Rate limit detected after %d requests. Endpoint is protected.", i+1)
 				// Store response before breaking for result reporting
 				lastResp = resp
 				lastBody = bodyStr
@@ -256,7 +256,7 @@ func (e *Executor) Execute(
 		if test.Repeat > 0 {
 			// Skip vulnerability marking if backoff was exhausted (test inconclusive)
 			if backoffExhausted {
-				log.Info("Test inconclusive due to server overwhelm. Not marking as vulnerable.")
+				log.Debug("Test inconclusive due to server overwhelm. Not marking as vulnerable.")
 				continue
 			}
 			// Vulnerable if we didn't hit rate limiting after N requests

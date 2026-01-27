@@ -130,6 +130,9 @@ func newVersionCmd() *cobra.Command {
 func runTest(ctx context.Context, config Config) error {
 	startTime := time.Now()
 
+	// Enable verbose logging if requested
+	log.SetVerbose(config.Verbose)
+
 	// 1. Validate configuration
 	if err := config.Validate(); err != nil {
 		return fmt.Errorf("configuration error: %w", err)
@@ -187,11 +190,11 @@ func runTest(ctx context.Context, config Config) error {
 	// Filter by OWASP categories if specified
 	if len(config.OWASPCategories) > 0 {
 		tmplFiles = filterTemplatesByOWASP(tmplFiles, config.OWASPCategories)
-		log.Info("Filtered to %d templates matching OWASP categories: %v", len(tmplFiles), config.OWASPCategories)
+		log.Debug("Filtered to %d templates matching OWASP categories: %v", len(tmplFiles), config.OWASPCategories)
 	}
 
-	log.Info("Loaded %d templates from %s", len(tmplFiles), templateDir)
-	log.Info("Testing %d operations against %d roles", len(spec.Operations), len(rolesCfg.Roles))
+	log.Debug("Loaded %d templates from %s", len(tmplFiles), templateDir)
+	log.Debug("Testing %d operations against %d roles", len(spec.Operations), len(rolesCfg.Roles))
 
 	// 9. Create template executor
 	executor := templates.NewExecutor(httpClient)
