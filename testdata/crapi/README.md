@@ -105,8 +105,8 @@ crAPI is intentionally vulnerable. Hadrian should detect:
 ## Expected Failed Templates
 crAPI is does not have the following vulnerability. Hadrian should not detect:
 
-| OWASP Category | Vulnerability | Endpoint Example |
-|----------------|---------------|------------------|
+| OWASP Category | Vulnerability | Endpoint Example | Template |
+|----------------|---------------|------------------| -------- |
 | API1:2023 | BOLA - Access other user's video | `GET /identity/api/v2/user/videos/{video_id}` |  `api1-bola-video-mutation.yaml` |
 
 ## Roles Overview
