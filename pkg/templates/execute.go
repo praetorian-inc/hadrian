@@ -10,8 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/google/uuid"
 	"github.com/praetorian-inc/hadrian/pkg/log"
+	"github.com/praetorian-inc/hadrian/pkg/model"
 )
 
 // hasUnresolvedPlaceholders checks if a path contains unresolved {placeholder} patterns.
@@ -35,14 +36,16 @@ type HTTPClient interface {
 
 // Executor runs compiled templates against operations
 type Executor struct {
-	httpClient HTTPClient
-	cache      *Cache
+	httpClient       HTTPClient
+	cache            *Cache
+	requestIDEnabled bool
 }
 
-func NewExecutor(client HTTPClient) *Executor {
+func NewExecutor(client HTTPClient, requestIDEnabled bool) *Executor {
 	return &Executor{
-		httpClient: client,
-		cache:      NewCache(1000), // Cache 1000 compiled templates
+		httpClient:       client,
+		cache:            NewCache(1000), // Cache 1000 compiled templates
+		requestIDEnabled: requestIDEnabled,
 	}
 }
 
@@ -76,6 +79,7 @@ func (e *Executor) Execute(
 		var lastBody string
 		var lastBodyHash string
 		var lastBodyBytes []byte
+		var lastRequestID string // Track request ID from the last request
 
 		// Get backoff settings from new Backoff struct
 		backoffSecs := 5 // Default 5 second backoff
@@ -131,6 +135,12 @@ func (e *Executor) Execute(
 				req, err := buildRequest(ctx, test, operation, authHeader, variables)
 				if err != nil {
 					return nil, fmt.Errorf("failed to build request: %w", err)
+				}
+
+				// Generate request ID if tracking enabled
+				if e.requestIDEnabled {
+					lastRequestID = uuid.New().String()
+					req.Header.Set("X-Hadrian-Request-ID", lastRequestID)
 				}
 
 				// Execute HTTP request
@@ -275,6 +285,7 @@ func (e *Executor) Execute(
 					RateLimitCount: rateLimitCount,
 					Threshold:      rateLimitThreshold,
 				}
+				result.RequestID = lastRequestID
 			}
 		} else {
 			// Standard matching for non-rate-limit tests
@@ -290,6 +301,7 @@ func (e *Executor) Execute(
 					Size:       len(lastBodyBytes),
 					Truncated:  false,
 				}
+				result.RequestID = lastRequestID
 			}
 		}
 	}
@@ -483,6 +495,7 @@ type ExecutionResult struct {
 	Response      model.HTTPResponse
 	Findings      []model.Finding
 	RateLimitInfo *RateLimitInfo
+	RequestID     string // X-Hadrian-Request-ID if tracking enabled
 }
 
 // RateLimitInfo contains results from rate limit testing

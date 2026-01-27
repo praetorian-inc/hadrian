@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
@@ -33,25 +34,28 @@ type HTTPClient interface {
 
 // MutationExecutor runs three-phase mutation tests
 type MutationExecutor struct {
-	httpClient HTTPClient
-	tracker    *Tracker
+	httpClient       HTTPClient
+	tracker          *Tracker
+	requestIDEnabled bool
 }
 
 // MutationResult contains results from a three-phase mutation test
 type MutationResult struct {
-	TemplateID    string
-	Matched       bool // true if vulnerability found (attack succeeded)
-	SetupResponse *model.HTTPResponse
+	TemplateID     string
+	Matched        bool // true if vulnerability found (attack succeeded)
+	SetupResponse  *model.HTTPResponse
 	AttackResponse *model.HTTPResponse
 	VerifyResponse *model.HTTPResponse
-	ResourceID    string
+	ResourceID     string
+	RequestID      string // From the attack phase request
 }
 
 // NewMutationExecutor creates a new mutation executor
-func NewMutationExecutor(client HTTPClient) *MutationExecutor {
+func NewMutationExecutor(client HTTPClient, requestIDEnabled bool) *MutationExecutor {
 	return &MutationExecutor{
-		httpClient: client,
-		tracker:    NewTracker(),
+		httpClient:       client,
+		tracker:          NewTracker(),
+		requestIDEnabled: requestIDEnabled,
 	}
 }
 
@@ -75,7 +79,7 @@ func (e *MutationExecutor) ExecuteMutation(
 
 	// Phase 1: Setup (create resource)
 	if tmpl.TestPhases.Setup != nil {
-		setupResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Setup, tmpl.TestPhases.Setup.Auth, authTokens)
+		setupResp, _, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Setup, tmpl.TestPhases.Setup.Auth, authTokens)
 		if err != nil {
 			return result, fmt.Errorf("setup phase failed: %w", err)
 		}
@@ -93,11 +97,12 @@ func (e *MutationExecutor) ExecuteMutation(
 
 	// Phase 2: Attack (try to access with different role)
 	if tmpl.TestPhases.Attack != nil {
-		attackResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Attack, tmpl.TestPhases.Attack.Auth, authTokens)
+		attackResp, attackRequestID, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Attack, tmpl.TestPhases.Attack.Auth, authTokens)
 		if err != nil {
 			return result, fmt.Errorf("attack phase failed: %w", err)
 		}
 		result.AttackResponse = attackResp
+		result.RequestID = attackRequestID // Capture request ID from attack phase
 
 		// Check if attack succeeded (vulnerability found)
 		if matchesDetectionConditions(tmpl.TestPhases.Attack, attackResp.StatusCode, attackResp.Body) {
@@ -107,7 +112,7 @@ func (e *MutationExecutor) ExecuteMutation(
 
 	// Phase 3: Verify (confirm resource still accessible by victim)
 	if tmpl.TestPhases.Verify != nil {
-		verifyResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Verify, tmpl.TestPhases.Verify.Auth, authTokens)
+		verifyResp, _, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Verify, tmpl.TestPhases.Verify.Auth, authTokens)
 		if err != nil {
 			return result, fmt.Errorf("verify phase failed: %w", err)
 		}
@@ -131,16 +136,16 @@ func operationToMethod(op string) string {
 	}
 }
 
-// executePhase executes a single phase and returns the HTTP response
+// executePhase executes a single phase and returns the HTTP response and request ID
 func (e *MutationExecutor) executePhase(
 	ctx context.Context,
 	baseURL string,
 	phase *templates.Phase,
 	authUser string,
 	authTokens map[string]string,
-) (*model.HTTPResponse, error) {
+) (*model.HTTPResponse, string, error) {
 	if phase == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 
 	// Determine HTTP method from operation
@@ -149,7 +154,7 @@ func (e *MutationExecutor) executePhase(
 	// Build path
 	path := phase.Path
 	if path == "" {
-		return nil, fmt.Errorf("phase path is required")
+		return nil, "", fmt.Errorf("phase path is required")
 	}
 
 	// Substitute stored values into path
@@ -163,7 +168,7 @@ func (e *MutationExecutor) executePhase(
 
 	// Check for unresolved placeholders - error if any remain
 	if placeholder := hasUnresolvedPlaceholders(path); placeholder != "" {
-		return nil, fmt.Errorf("unresolved placeholder {%s} in path %q - required value not stored from setup phase", placeholder, phase.Path)
+		return nil, "", fmt.Errorf("unresolved placeholder {%s} in path %q - required value not stored from setup phase", placeholder, phase.Path)
 	}
 
 	// Build full URL
@@ -172,7 +177,14 @@ func (e *MutationExecutor) executePhase(
 	// Build request
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
+	}
+
+	// Generate request ID if tracking enabled
+	var requestID string
+	if e.requestIDEnabled {
+		requestID = uuid.New().String()
+		req.Header.Set("X-Hadrian-Request-ID", requestID)
 	}
 
 	// Add auth header for the correct user
@@ -185,14 +197,14 @@ func (e *MutationExecutor) executePhase(
 	// Execute request
 	resp, err := e.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	return &model.HTTPResponse{
@@ -200,7 +212,7 @@ func (e *MutationExecutor) executePhase(
 		Headers:    headerMapFromResponse(resp),
 		Body:       string(body),
 		Size:       len(body),
-	}, nil
+	}, requestID, nil
 }
 
 // extractField extracts a field from JSON response body

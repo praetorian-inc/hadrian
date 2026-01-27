@@ -41,6 +41,7 @@ type Config struct {
 	OWASPCategories  []string
 	Verbose          bool
 	DryRun           bool
+	RequestID        bool     // Add X-Hadrian-Request-ID header to each request
 }
 
 // Run is the main entry point for the Hadrian CLI
@@ -96,6 +97,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "Enable verbose logging output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Show what would be tested without making requests")
+	cmd.Flags().BoolVar(&config.RequestID, "request-id", false, "Add X-Hadrian-Request-ID header with unique UUID to each request")
 
 	return cmd
 }
@@ -211,10 +213,10 @@ func runTest(ctx context.Context, config Config) error {
 	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
 
 	// 9. Create template executor
-	executor := templates.NewExecutor(httpClient)
+	executor := templates.NewExecutor(httpClient, config.RequestID)
 
 	// 10. Create mutation executor for mutation templates
-	mutationExecutor := owasp.NewMutationExecutor(httpClient)
+	mutationExecutor := owasp.NewMutationExecutor(httpClient, config.RequestID)
 
 	// 11. Run tests for each operation
 	var allFindings []*model.Finding
@@ -440,6 +442,7 @@ func executeTemplate(
 					Response: result.Response,
 				},
 				Timestamp: time.Now(),
+				RequestID: result.RequestID,
 			}
 			findings = append(findings, finding)
 		}
@@ -508,6 +511,7 @@ func executeTemplate(
 						Response: result.Response,
 					},
 					Timestamp: time.Now(),
+					RequestID: result.RequestID,
 				}
 
 				if victimRole != nil {
@@ -584,6 +588,7 @@ func executeMutationTemplate(
 					VictimRole:      victimRole.Name,
 					IsVulnerability: true,
 					Timestamp:       time.Now(),
+					RequestID:       result.RequestID,
 				}
 				if result.AttackResponse != nil {
 					finding.Evidence = model.Evidence{

@@ -26,7 +26,7 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 func TestNewExecutor(t *testing.T) {
 	client := &mockHTTPClient{}
-	executor := NewExecutor(client)
+	executor := NewExecutor(client, false)
 
 	if executor == nil {
 		t.Fatal("NewExecutor returned nil")
@@ -53,7 +53,7 @@ func TestExecute_MatchedResponse(t *testing.T) {
 	}
 
 	client := &mockHTTPClient{response: mockResp}
-	executor := NewExecutor(client)
+	executor := NewExecutor(client, false)
 
 	// Create compiled template
 	tmpl := &CompiledTemplate{
@@ -125,7 +125,7 @@ func TestExecute_NoMatch(t *testing.T) {
 	}
 
 	client := &mockHTTPClient{response: mockResp}
-	executor := NewExecutor(client)
+	executor := NewExecutor(client, false)
 
 	tmpl := &CompiledTemplate{
 		Template: &Template{
@@ -445,7 +445,7 @@ func TestExecute_Integration_WithHTTPTest(t *testing.T) {
 	defer server.Close()
 
 	// Use real HTTP client
-	executor := NewExecutor(&http.Client{})
+	executor := NewExecutor(&http.Client{}, false)
 
 	// For integration test, template path should use the full server URL
 	tmpl := &CompiledTemplate{
@@ -490,5 +490,135 @@ func TestExecute_Integration_WithHTTPTest(t *testing.T) {
 
 	if result.Response.StatusCode != 200 {
 		t.Errorf("StatusCode = %d, want 200", result.Response.StatusCode)
+	}
+}
+
+// mockHTTPClientWithCapture captures requests for verification
+type mockHTTPClientWithCapture struct {
+	doFunc func(req *http.Request) (*http.Response, error)
+}
+
+func (m *mockHTTPClientWithCapture) Do(req *http.Request) (*http.Response, error) {
+	return m.doFunc(req)
+}
+
+func TestExecutor_Execute_RequestIDEnabled(t *testing.T) {
+	// Create mock HTTP client that captures the request
+	var capturedReq *http.Request
+	mockClient := &mockHTTPClientWithCapture{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			capturedReq = req
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader(`{"status": "ok"}`)),
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+			}, nil
+		},
+	}
+
+	// Create executor with requestIDEnabled = true
+	executor := NewExecutor(mockClient, true)
+
+	// Create minimal template and operation for test
+	tmpl := &CompiledTemplate{
+		Template: &Template{
+			ID:   "test-template",
+			Info: TemplateInfo{Name: "Test"},
+			HTTP: []HTTPTest{{
+				Method: "GET",
+				Path:   "/test",
+				Matchers: []Matcher{{
+					Type:   "status",
+					Status: []int{200},
+				}},
+			}},
+		},
+		CompiledMatchers: []*CompiledMatcher{{
+			Type:   "status",
+			Status: []int{200},
+		}},
+	}
+	op := &model.Operation{
+		Method: "GET",
+		Path:   "/test",
+	}
+
+	result, err := executor.Execute(context.Background(), tmpl, op, "", map[string]string{"baseURL": "http://localhost"})
+
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if result.RequestID == "" {
+		t.Error("RequestID should be set when enabled")
+	}
+
+	if len(result.RequestID) != 36 {
+		t.Errorf("RequestID should be a valid UUID (36 characters), got %d", len(result.RequestID))
+	}
+
+	// Verify header was set on request
+	if capturedReq == nil {
+		t.Fatal("Request was not captured")
+	}
+
+	if capturedReq.Header.Get("X-Hadrian-Request-ID") != result.RequestID {
+		t.Errorf("X-Hadrian-Request-ID header = %q, want %q",
+			capturedReq.Header.Get("X-Hadrian-Request-ID"), result.RequestID)
+	}
+}
+
+func TestExecutor_Execute_RequestIDDisabled(t *testing.T) {
+	var capturedReq *http.Request
+	mockClient := &mockHTTPClientWithCapture{
+		doFunc: func(req *http.Request) (*http.Response, error) {
+			capturedReq = req
+			return &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(strings.NewReader(`{}`)),
+				Header:     http.Header{},
+			}, nil
+		},
+	}
+
+	executor := NewExecutor(mockClient, false) // disabled
+
+	tmpl := &CompiledTemplate{
+		Template: &Template{
+			ID: "test",
+			HTTP: []HTTPTest{{
+				Method: "GET",
+				Path:   "/test",
+				Matchers: []Matcher{{
+					Type:   "status",
+					Status: []int{200},
+				}},
+			}},
+		},
+		CompiledMatchers: []*CompiledMatcher{{
+			Type:   "status",
+			Status: []int{200},
+		}},
+	}
+	op := &model.Operation{Method: "GET", Path: "/test"}
+
+	result, err := executor.Execute(context.Background(), tmpl, op, "", map[string]string{"baseURL": "http://localhost"})
+
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	if result.RequestID != "" {
+		t.Errorf("RequestID should be empty when disabled, got %q", result.RequestID)
+	}
+
+	// Verify no X-Hadrian-Request-ID header when disabled
+	if capturedReq == nil {
+		t.Fatal("Request was not captured")
+	}
+
+	if capturedReq.Header.Get("X-Hadrian-Request-ID") != "" {
+		t.Errorf("X-Hadrian-Request-ID header should be empty when disabled, got %q",
+			capturedReq.Header.Get("X-Hadrian-Request-ID"))
 	}
 }

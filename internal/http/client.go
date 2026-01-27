@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 )
 
@@ -24,6 +25,23 @@ type Config struct {
 	CACert      string        // Path to CA certificate (Burp)
 	Insecure    bool          // Skip TLS verification
 	Timeout     time.Duration // Request timeout
+	RequestID   bool          // Add X-Hadrian-Request-ID header to each request
+}
+
+// requestIDTransport wraps an http.RoundTripper and adds a unique
+// X-Hadrian-Request-ID header to every outgoing request.
+type requestIDTransport struct {
+	base http.RoundTripper
+}
+
+func (t *requestIDTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Clone the request to avoid modifying the original
+	clone := req.Clone(req.Context())
+	// Only add if not already set (executor may have set it)
+	if clone.Header.Get("X-Hadrian-Request-ID") == "" {
+		clone.Header.Set("X-Hadrian-Request-ID", uuid.New().String())
+	}
+	return t.base.RoundTrip(clone)
 }
 
 func New(config *Config) (*Client, error) {
@@ -85,9 +103,16 @@ func New(config *Config) (*Client, error) {
 		log.Warn("TLS verification disabled (--insecure). Use only with trusted proxies.")
 	}
 
+	// Wrap transport with request ID header if enabled
+	var finalTransport http.RoundTripper = transport
+	if config.RequestID {
+		finalTransport = &requestIDTransport{base: transport}
+		log.Debug("Request ID tracking enabled: X-Hadrian-Request-ID header will be added to all requests")
+	}
+
 	return &Client{
 		httpClient: &http.Client{
-			Transport: transport,
+			Transport: finalTransport,
 			Timeout:   config.Timeout,
 		},
 		config: config,

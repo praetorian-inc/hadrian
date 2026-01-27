@@ -79,7 +79,14 @@ curl -o crapi-openapi-spec.json \
 
 ### 6. Start Burp Suite
 
-### 7. Run Hadrian
+### 7. Add Video in User 1 Profile
+The following steps are required to fully test "BOLA - Access other user's video" (`api1-bola-video-mutation.yaml`)
+
+1. Log in as user1user1@test.com
+2. At the top right, hover on Test User 1, and select My Profile
+3. Upload a personal video
+
+### 8. Run Hadrian
 
 ```bash
 hadrian test \

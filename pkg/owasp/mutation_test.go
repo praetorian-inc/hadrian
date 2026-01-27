@@ -40,7 +40,7 @@ func newMockResponse(statusCode int, body string) *http.Response {
 
 func TestNewMutationExecutor(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	assert.NotNil(t, executor)
 	assert.Equal(t, client, executor.httpClient)
@@ -59,7 +59,7 @@ func TestExecuteMutation_Success(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola",
@@ -117,7 +117,7 @@ func TestExecuteMutation_Secure(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola",
@@ -272,7 +272,7 @@ func TestMatchesDetectionConditions(t *testing.T) {
 
 func TestClearTracker(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	// Store a resource
 	executor.tracker.StoreResource("key1", "value1")
@@ -294,7 +294,7 @@ func TestExecuteMutation_StoresResourceID(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola",
@@ -369,7 +369,7 @@ func TestExecutePhase_UsesCustomPath(t *testing.T) {
 		responses: []*http.Response{resp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	phase := &templates.Phase{
 		Path:      "/api/v1/orders",
@@ -377,7 +377,7 @@ func TestExecutePhase_UsesCustomPath(t *testing.T) {
 		Auth:      "victim",
 	}
 
-	_, err := executor.executePhase(
+	_, _, err := executor.executePhase(
 		context.Background(),
 		"http://localhost:8080",
 		phase,
@@ -399,7 +399,7 @@ func TestExecutePhase_SubstitutesStoredValues(t *testing.T) {
 		responses: []*http.Response{resp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	// Store a resource ID first
 	executor.tracker.StoreResource("id", "resource123")
@@ -411,7 +411,7 @@ func TestExecutePhase_SubstitutesStoredValues(t *testing.T) {
 		UseStoredField: "id",
 	}
 
-	_, err := executor.executePhase(
+	_, _, err := executor.executePhase(
 		context.Background(),
 		"http://localhost:8080",
 		phase,
@@ -444,7 +444,7 @@ func TestExecutePhase_MapsOperationToHTTPMethod(t *testing.T) {
 				responses: []*http.Response{resp},
 			}
 
-			executor := NewMutationExecutor(client)
+			executor := NewMutationExecutor(client, false)
 
 			phase := &templates.Phase{
 				Path:      "/api/v1/resources",
@@ -452,7 +452,7 @@ func TestExecutePhase_MapsOperationToHTTPMethod(t *testing.T) {
 				Auth:      "victim",
 			}
 
-			_, err := executor.executePhase(
+			_, _, err := executor.executePhase(
 				context.Background(),
 				"http://localhost:8080",
 				phase,
@@ -473,7 +473,7 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 		responses: []*http.Response{resp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	phase := &templates.Phase{
 		Path:      "/api/v1/resources",
@@ -486,7 +486,7 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 		"victim":   "victim-secret-token",
 	}
 
-	_, err := executor.executePhase(
+	_, _, err := executor.executePhase(
 		context.Background(),
 		"http://localhost:8080",
 		phase,
@@ -503,7 +503,7 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 
 func TestExecutePhase_ReturnsErrorForMissingPath(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	phase := &templates.Phase{
 		Operation: "read",
@@ -511,7 +511,7 @@ func TestExecutePhase_ReturnsErrorForMissingPath(t *testing.T) {
 		// Path is missing
 	}
 
-	_, err := executor.executePhase(
+	_, _, err := executor.executePhase(
 		context.Background(),
 		"http://localhost:8080",
 		phase,
@@ -576,7 +576,7 @@ func TestHasUnresolvedPlaceholders(t *testing.T) {
 
 func TestExecutePhase_ReturnsErrorForUnresolvedPlaceholder(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	// Do NOT store the "id" resource - this simulates setup phase failing to return an ID
 
@@ -587,7 +587,7 @@ func TestExecutePhase_ReturnsErrorForUnresolvedPlaceholder(t *testing.T) {
 		UseStoredField: "id", // This field was never stored
 	}
 
-	_, err := executor.executePhase(
+	_, _, err := executor.executePhase(
 		context.Background(),
 		"http://localhost:8080",
 		phase,
@@ -602,7 +602,7 @@ func TestExecutePhase_ReturnsErrorForUnresolvedPlaceholder(t *testing.T) {
 
 func TestExecutePhase_ReturnsErrorForUnresolvedVideoID(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	// Simulate the specific bug: video_id placeholder never stored
 
@@ -613,7 +613,7 @@ func TestExecutePhase_ReturnsErrorForUnresolvedVideoID(t *testing.T) {
 		UseStoredField: "video_id", // This field was never stored
 	}
 
-	_, err := executor.executePhase(
+	_, _, err := executor.executePhase(
 		context.Background(),
 		"http://localhost:8080",
 		phase,
@@ -636,7 +636,7 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, false)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola-orders",
@@ -702,4 +702,199 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 	assert.Equal(t, http.MethodGet, client.requests[2].Method)
 	assert.Equal(t, "http://localhost:8080/api/v1/orders/order-456", client.requests[2].URL.String())
 	assert.Equal(t, "Bearer victim-token", client.requests[2].Header.Get("Authorization"))
+}
+
+func TestMutationExecutor_RequestIDEnabled(t *testing.T) {
+	// Test that MutationExecutor sets and returns RequestID when enabled
+	var attackRequestID string
+	setupResp := newMockResponse(201, `{"id": "resource123"}`)
+	attackResp := newMockResponse(200, `{"data": "accessed"}`)
+	verifyResp := newMockResponse(200, `{"data": "accessed"}`)
+
+	client := &MockHTTPClient{
+		responses: []*http.Response{setupResp, attackResp, verifyResp},
+	}
+
+	// Create executor with requestIDEnabled = true
+	executor := NewMutationExecutor(client, true)
+
+	tmpl := &templates.Template{
+		ID: "api1-bola",
+		TestPhases: &templates.TestPhases{
+			Setup: &templates.Phase{
+				Path:               "/api/v1/resources",
+				Operation:          "create",
+				Auth:               "victim",
+				StoreResponseField: "id",
+			},
+			Attack: &templates.Phase{
+				Path:           "/api/v1/resources/{id}",
+				Operation:      "read",
+				Auth:           "attacker",
+				UseStoredField: "id",
+				ExpectedStatus: 200,
+			},
+			Verify: &templates.Phase{
+				Path:           "/api/v1/resources/{id}",
+				Operation:      "read",
+				Auth:           "victim",
+				UseStoredField: "id",
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	result, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"create",
+		"attacker@example.com",
+		"victim@example.com",
+		map[string]string{"attacker": "attacker-token", "victim": "victim-token"},
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify RequestID is populated from attack phase
+	assert.NotEmpty(t, result.RequestID, "RequestID should be set when enabled")
+	assert.Len(t, result.RequestID, 36, "RequestID should be a valid UUID (36 characters)")
+
+	// Verify the attack request had the X-Hadrian-Request-ID header set
+	require.Len(t, client.requests, 3, "Should have 3 requests (setup, attack, verify)")
+
+	// Capture attack request ID from the header
+	attackRequestID = client.requests[1].Header.Get("X-Hadrian-Request-ID")
+	assert.NotEmpty(t, attackRequestID, "Attack request should have X-Hadrian-Request-ID header")
+	assert.Equal(t, attackRequestID, result.RequestID,
+		"Result RequestID should match attack phase request header")
+}
+
+func TestMutationExecutor_RequestIDDisabled(t *testing.T) {
+	// Test that MutationExecutor does not set RequestID when disabled
+	setupResp := newMockResponse(201, `{"id": "resource123"}`)
+	attackResp := newMockResponse(200, `{"data": "accessed"}`)
+	verifyResp := newMockResponse(200, `{"data": "accessed"}`)
+
+	client := &MockHTTPClient{
+		responses: []*http.Response{setupResp, attackResp, verifyResp},
+	}
+
+	// Create executor with requestIDEnabled = false
+	executor := NewMutationExecutor(client, false)
+
+	tmpl := &templates.Template{
+		ID: "api1-bola",
+		TestPhases: &templates.TestPhases{
+			Setup: &templates.Phase{
+				Path:               "/api/v1/resources",
+				Operation:          "create",
+				Auth:               "victim",
+				StoreResponseField: "id",
+			},
+			Attack: &templates.Phase{
+				Path:           "/api/v1/resources/{id}",
+				Operation:      "read",
+				Auth:           "attacker",
+				UseStoredField: "id",
+				ExpectedStatus: 200,
+			},
+			Verify: &templates.Phase{
+				Path:           "/api/v1/resources/{id}",
+				Operation:      "read",
+				Auth:           "victim",
+				UseStoredField: "id",
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	result, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"create",
+		"attacker@example.com",
+		"victim@example.com",
+		map[string]string{"attacker": "attacker-token", "victim": "victim-token"},
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify RequestID is empty when disabled
+	assert.Empty(t, result.RequestID, "RequestID should be empty when disabled")
+
+	// Verify the attack request did NOT have the X-Hadrian-Request-ID header
+	require.Len(t, client.requests, 3, "Should have 3 requests (setup, attack, verify)")
+	assert.Empty(t, client.requests[1].Header.Get("X-Hadrian-Request-ID"),
+		"Attack request should NOT have X-Hadrian-Request-ID header when disabled")
+}
+
+func TestExecutePhase_RequestIDEnabled(t *testing.T) {
+	// Test that executePhase returns the requestID when enabled
+	resp := newMockResponse(200, `{"data": "test"}`)
+	client := &MockHTTPClient{
+		responses: []*http.Response{resp},
+	}
+
+	executor := NewMutationExecutor(client, true)
+
+	phase := &templates.Phase{
+		Path:      "/api/v1/resources",
+		Operation: "read",
+		Auth:      "victim",
+	}
+
+	httpResp, requestID, err := executor.executePhase(
+		context.Background(),
+		"http://localhost:8080",
+		phase,
+		"victim",
+		map[string]string{"victim": "victim-token"},
+	)
+
+	require.NoError(t, err)
+	assert.NotNil(t, httpResp)
+	assert.NotEmpty(t, requestID, "RequestID should be returned when enabled")
+	assert.Len(t, requestID, 36, "RequestID should be a valid UUID (36 characters)")
+
+	// Verify the request had the header set
+	require.Len(t, client.requests, 1)
+	assert.Equal(t, requestID, client.requests[0].Header.Get("X-Hadrian-Request-ID"),
+		"Request header should match returned requestID")
+}
+
+func TestExecutePhase_RequestIDDisabled(t *testing.T) {
+	// Test that executePhase returns empty requestID when disabled
+	resp := newMockResponse(200, `{"data": "test"}`)
+	client := &MockHTTPClient{
+		responses: []*http.Response{resp},
+	}
+
+	executor := NewMutationExecutor(client, false)
+
+	phase := &templates.Phase{
+		Path:      "/api/v1/resources",
+		Operation: "read",
+		Auth:      "victim",
+	}
+
+	httpResp, requestID, err := executor.executePhase(
+		context.Background(),
+		"http://localhost:8080",
+		phase,
+		"victim",
+		map[string]string{"victim": "victim-token"},
+	)
+
+	require.NoError(t, err)
+	assert.NotNil(t, httpResp)
+	assert.Empty(t, requestID, "RequestID should be empty when disabled")
+
+	// Verify the request did NOT have the header
+	require.Len(t, client.requests, 1)
+	assert.Empty(t, client.requests[0].Header.Get("X-Hadrian-Request-ID"),
+		"Request should NOT have X-Hadrian-Request-ID header when disabled")
 }

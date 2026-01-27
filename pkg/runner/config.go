@@ -52,9 +52,10 @@ func (c *Config) Validate() error {
 // ToHTTPClientConfig converts to HTTP client configuration
 func (c *Config) ToHTTPClientConfig() *http.Config {
 	return &http.Config{
-		Proxy:    c.Proxy,
-		CACert:   c.CACert,
-		Insecure: c.Insecure,
-		Timeout:  time.Duration(c.Timeout) * time.Second,
+		Proxy:     c.Proxy,
+		CACert:    c.CACert,
+		Insecure:  c.Insecure,
+		Timeout:   time.Duration(c.Timeout) * time.Second,
+		RequestID: c.RequestID,
 	}
 }

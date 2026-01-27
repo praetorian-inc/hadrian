@@ -22,6 +22,7 @@ type Finding struct {
 	LLMAnalysis *LLMTriage `json:"llm_analysis,omitempty"`
 
 	Timestamp   time.Time `json:"timestamp"`
+	RequestID   string    `json:"request_id,omitempty"` // X-Hadrian-Request-ID for request correlation
 }
 
 type Severity string

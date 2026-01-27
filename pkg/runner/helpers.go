@@ -204,6 +204,11 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 		fmt.Fprintf(r.writer, "  Role: %s\n", finding.AttackerRole)
 	}
 
+	// Show request ID for correlation
+	if finding.RequestID != "" {
+		fmt.Fprintf(r.writer, "  Request ID: %s\n", finding.RequestID)
+	}
+
 	if finding.IsVulnerability {
 		fmt.Fprintf(r.writer, "  Vulnerability confirmed (confidence: %.0f%%)\n", finding.Confidence*100)
 	}
@@ -348,6 +353,9 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 		}
 		if f.VictimRole != "" {
 			fmt.Fprintf(output, "**Victim Role:** %s\n\n", f.VictimRole)
+		}
+		if f.RequestID != "" {
+			fmt.Fprintf(output, "**Request ID:** `%s`\n\n", f.RequestID)
 		}
 
 		if f.LLMAnalysis != nil {
