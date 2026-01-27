@@ -1,0 +1,48 @@
+# Test data for API5 Method Override template validation
+
+test_name: "API5 Method Override Template Validation"
+
+test_cases:
+  - name: "X-HTTP-Method-Override header variant 1"
+    description: "Tests X-HTTP-Method-Override with PUT"
+    expected_header: "X-HTTP-Method-Override"
+    expected_value: "PUT"
+    should_match: true
+
+  - name: "X-HTTP-Method-Override header variant 2"
+    description: "Tests X-HTTP-Method-Override with DELETE"
+    expected_header: "X-HTTP-Method-Override"
+    expected_value: "DELETE"
+    should_match: true
+
+  - name: "X-Method-Override header variant"
+    description: "Tests X-Method-Override alternative header"
+    expected_header: "X-Method-Override"
+    expected_value: "PUT"
+    should_match: true
+
+  - name: "X-HTTP-Method header variant"
+    description: "Tests X-HTTP-Method alternative header"
+    expected_header: "X-HTTP-Method"
+    expected_value: "DELETE"
+    should_match: true
+
+  - name: "Query parameter _method"
+    description: "Tests query parameter method override"
+    expected_query: "_method=PUT"
+    should_match: true
+
+  - name: "Body parameter _method"
+    description: "Tests body parameter method override"
+    expected_body_field: "_method"
+    expected_body_value: "PUT"
+    should_match: true
+
+validation_rules:
+  - rule: "Template must have id 'api5-method-override'"
+  - rule: "Template must be category 'API5:2023'"
+  - rule: "Template must have severity 'HIGH'"
+  - rule: "Template must use 'simple' test pattern"
+  - rule: "Template must have at least 10 HTTP tests"
+  - rule: "Template must test all three override mechanisms (header, query, body)"
+  - rule: "Template must match status codes [200, 201, 204]"

