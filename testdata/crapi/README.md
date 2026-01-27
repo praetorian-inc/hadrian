@@ -98,10 +98,16 @@ crAPI is intentionally vulnerable. Hadrian should detect:
 | OWASP Category | Vulnerability | Endpoint Example |
 |----------------|---------------|------------------|
 | API1:2023 | ✅ BOLA - Access other user's vehicle | `GET /identity/api/v2/vehicle/{vehicleId}/location` |
-| API1:2023 | ⏳ TBI: BOLA - Access other user's video | `GET /identity/api/v2/user/videos/{video_id}` |
 | API1:2023 | ✅ BOLA - Access other user's order | `GET /workshop/api/shop/orders/{order_id}` |
 | API2:2023 | ✅ Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` |
 | API5:2023 | ⏳ TBI: BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` |
+
+## Expected Failed Templates
+crAPI is does not have the following vulnerability. Hadrian should not detect:
+
+| OWASP Category | Vulnerability | Endpoint Example |
+|----------------|---------------|------------------|
+| API1:2023 | BOLA - Access other user's video | `GET /identity/api/v2/user/videos/{video_id}` |
 
 ## Roles Overview
 
