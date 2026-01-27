@@ -9,6 +9,7 @@ import (
 type CompiledTemplate struct {
 	*Template
 	CompiledMatchers []*CompiledMatcher
+	FilePath         string // Path to the template file (for --template filtering)
 }
 
 // CompiledMatcher holds pre-compiled regex patterns

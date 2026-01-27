@@ -123,6 +123,6 @@ func ConfirmProductionTesting(baseURL string, allowProd bool) error {
 		return fmt.Errorf("production testing not confirmed")
 	}
 
-	log.Info("Production testing confirmed by user")
+	log.Debug("Production testing confirmed by user")
 	return nil
 }

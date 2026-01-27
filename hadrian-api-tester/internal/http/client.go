@@ -49,7 +49,7 @@ func New(config *Config) (*Client, error) {
 
 		// Log CA cert fingerprint for audit (HR-3)
 		fingerprint := sha256.Sum256(caCert)
-		log.Info("CA cert fingerprint (SHA-256): %x", fingerprint[:16])
+		log.Debug("CA cert fingerprint (SHA-256): %x", fingerprint[:16])
 	}
 
 	// Configure transport with proxy support
