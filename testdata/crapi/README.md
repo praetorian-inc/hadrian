@@ -96,7 +96,7 @@ hadrian test \
 crAPI is intentionally vulnerable. Hadrian should detect:
 
 | OWASP Category | Vulnerability | Endpoint Example | Template |
-|----------------|---------------|------------------| -------- \
+|----------------|---------------|------------------| -------- |
 | API1:2023 | ✅ BOLA - Access other user's vehicle | `GET /identity/api/v2/vehicle/{vehicleId}/location` | `api1-bola-read.yaml` |
 | API1:2023 | ✅ BOLA - Access other user's order | `GET /workshop/api/shop/orders/{order_id}` |  `api1-bola-read.yaml` |
 | API2:2023 | ✅ Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` | `api2-otp-bruteforce` |
