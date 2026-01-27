@@ -102,7 +102,7 @@ crAPI is intentionally vulnerable. Hadrian should detect:
 | API2:2023 | ✅ Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` | `api2-otp-bruteforce` |
 | API5:2023 | ⏳ TBI: BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` |
 
-## Expected Failed Templates
+## Expected No Vulnerabilities
 crAPI is does not have the following vulnerability. Hadrian should not detect:
 
 | OWASP Category | Vulnerability | Endpoint Example | Template |
