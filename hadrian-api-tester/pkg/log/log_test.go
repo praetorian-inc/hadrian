@@ -11,6 +11,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// setupVerbose enables verbose mode for testing and returns a cleanup function
+func setupVerbose(t *testing.T) {
+	t.Helper()
+	SetVerbose(true)
+	t.Cleanup(func() {
+		SetVerbose(false)
+	})
+}
+
 // captureStdout captures stdout during function execution and returns the output
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
@@ -40,26 +49,9 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
-func TestInfo_ProducesGreenInfoPrefix(t *testing.T) {
-	output := captureStdout(t, func() {
-		Info("test message")
-	})
-
-	// Verify [INFO] prefix is present
-	assert.Contains(t, output, "[INFO]")
-
-	// Verify green color code is applied to [INFO]
-	// Green color code is \033[32m
-	assert.Contains(t, output, ColorGreen+"[INFO]"+ColorReset)
-
-	// Verify message content
-	assert.Contains(t, output, "test message")
-
-	// Verify ends with newline
-	assert.True(t, strings.HasSuffix(output, "\n"))
-}
-
 func TestWarn_ProducesMagentaWarnPrefix(t *testing.T) {
+	setupVerbose(t)
+
 	output := captureStdout(t, func() {
 		Warn("warning message")
 	})
@@ -76,50 +68,6 @@ func TestWarn_ProducesMagentaWarnPrefix(t *testing.T) {
 
 	// Verify ends with newline
 	assert.True(t, strings.HasSuffix(output, "\n"))
-}
-
-func TestInfo_FormatStringSubstitution(t *testing.T) {
-	tests := []struct {
-		name     string
-		format   string
-		args     []interface{}
-		expected string
-	}{
-		{
-			name:     "single string substitution",
-			format:   "Hello %s",
-			args:     []interface{}{"World"},
-			expected: "Hello World",
-		},
-		{
-			name:     "integer substitution",
-			format:   "Count: %d",
-			args:     []interface{}{42},
-			expected: "Count: 42",
-		},
-		{
-			name:     "multiple substitutions",
-			format:   "%s has %d items",
-			args:     []interface{}{"List", 5},
-			expected: "List has 5 items",
-		},
-		{
-			name:     "no substitution",
-			format:   "Plain message",
-			args:     []interface{}{},
-			expected: "Plain message",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			output := captureStdout(t, func() {
-				Info(tt.format, tt.args...)
-			})
-
-			assert.Contains(t, output, tt.expected)
-		})
-	}
 }
 
 func TestWarn_FormatStringSubstitution(t *testing.T) {
@@ -151,6 +99,8 @@ func TestWarn_FormatStringSubstitution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			setupVerbose(t)
+
 			output := captureStdout(t, func() {
 				Warn(tt.format, tt.args...)
 			})
@@ -168,5 +118,46 @@ func TestColorConstants_AreExported(t *testing.T) {
 	assert.Equal(t, "\033[32m", ColorGreen)
 	assert.Equal(t, "\033[34m", ColorBlue)
 	assert.Equal(t, "\033[35m", ColorMagenta)
+	assert.Equal(t, "\033[36m", ColorCyan)
 	assert.Equal(t, "\033[1m", ColorBold)
+}
+
+func TestSetVerbose_ControlsOutput(t *testing.T) {
+	// Test that Debug/Warn produce no output when verbose=false
+	SetVerbose(false)
+	output := captureStdout(t, func() {
+		Warn("should not appear")
+	})
+	assert.Empty(t, output)
+
+	// Test that Warn produces output when verbose=true
+	SetVerbose(true)
+	output = captureStdout(t, func() {
+		Warn("should appear")
+	})
+	assert.Contains(t, output, "should appear")
+
+	SetVerbose(false) // cleanup
+}
+
+func TestIsVerbose_ReturnsCurrentState(t *testing.T) {
+	SetVerbose(false)
+	assert.False(t, IsVerbose())
+
+	SetVerbose(true)
+	assert.True(t, IsVerbose())
+
+	SetVerbose(false) // cleanup
+}
+
+func TestDebug_ProducesCyanDebugPrefix(t *testing.T) {
+	setupVerbose(t)
+
+	output := captureStdout(t, func() {
+		Debug("debug message")
+	})
+
+	assert.Contains(t, output, "[DEBUG]")
+	assert.Contains(t, output, ColorCyan+"[DEBUG]"+ColorReset)
+	assert.Contains(t, output, "debug message")
 }

@@ -14,6 +14,20 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/log"
 )
 
+// hasUnresolvedPlaceholders checks if a path contains unresolved {placeholder} patterns.
+// Returns the first unresolved placeholder name if found, or empty string if all resolved.
+func hasUnresolvedPlaceholders(path string) string {
+	start := strings.Index(path, "{")
+	if start == -1 {
+		return ""
+	}
+	end := strings.Index(path[start:], "}")
+	if end == -1 {
+		return ""
+	}
+	return path[start+1 : start+end]
+}
+
 // HTTPClient interface for dependency injection
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -172,7 +186,7 @@ func (e *Executor) Execute(
 
 				if serverOverwhelmed && retry < maxRetries {
 					// Server overwhelmed - backoff and retry
-					log.Info("Backoff triggered (attempt %d/%d), waiting %d seconds...", retry+1, maxRetries, backoffSecs)
+					log.Debug("Backoff triggered (attempt %d/%d), waiting %d seconds...", retry+1, maxRetries, backoffSecs)
 					time.Sleep(time.Duration(backoffSecs) * time.Second)
 					continue
 				}
@@ -183,7 +197,7 @@ func (e *Executor) Execute(
 
 			// If backoff limit was exhausted (still overwhelmed after all retries), stop the repeat loop
 			if serverOverwhelmed {
-				log.Info("Backoff limit reached (%d retries exhausted). Stopping requests for this test.", maxRetries)
+				log.Debug("Backoff limit reached (%d retries exhausted). Stopping requests for this test.", maxRetries)
 				backoffExhausted = true
 				// Store last response for result reporting
 				lastResp = resp
@@ -220,7 +234,7 @@ func (e *Executor) Execute(
 
 			// Early termination if rate limit threshold reached
 			if rateLimitCount >= rateLimitThreshold {
-				log.Info("Rate limit detected after %d requests. Endpoint is protected.", i+1)
+				log.Debug("Rate limit detected after %d requests. Endpoint is protected.", i+1)
 				// Store response before breaking for result reporting
 				lastResp = resp
 				lastBody = bodyStr
@@ -242,7 +256,7 @@ func (e *Executor) Execute(
 		if test.Repeat > 0 {
 			// Skip vulnerability marking if backoff was exhausted (test inconclusive)
 			if backoffExhausted {
-				log.Info("Test inconclusive due to server overwhelm. Not marking as vulnerable.")
+				log.Debug("Test inconclusive due to server overwhelm. Not marking as vulnerable.")
 				continue
 			}
 			// Vulnerable if we didn't hit rate limiting after N requests
@@ -304,6 +318,11 @@ func buildRequest(
 			path = strings.ReplaceAll(path, "{{"+key+"}}", value)
 			path = strings.ReplaceAll(path, "{"+key+"}", value)
 		}
+	}
+
+	// Check for unresolved placeholders - error if any remain
+	if placeholder := hasUnresolvedPlaceholders(path); placeholder != "" {
+		return nil, fmt.Errorf("unresolved placeholder {%s} in path %q - no variable provided", placeholder, test.Path)
 	}
 
 	// Build full URL - prepend baseURL if available

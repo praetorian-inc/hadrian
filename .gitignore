@@ -1,9 +1,40 @@
-# binary
+# Binary
 hadrian
 
-# environment files with secrets
+# Environment files with secrets
 .env
 *.env
 
-# Claude Code local settings (user-specific)
+# Claude Code
 .claude/settings.local.json
+.claude/memory/
+
+# Git worktrees
+.worktrees/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+__debug_bin*
+*.test
+*.prof
+*.pprof
+
+# Go coverage
+coverage.out
+coverage.html
+*.coverprofile
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -554,6 +554,19 @@ func TestNewTestCmd_DryRunFlag(t *testing.T) {
 	assert.Equal(t, "false", flag.DefValue)
 }
 
+// =============================================================================
+// template-dir flag tests
+// =============================================================================
+
+func TestNewTestCmd_TemplateDirFlag(t *testing.T) {
+	cmd := newTestCmd()
+
+	// Find the template-dir flag
+	flag := cmd.Flags().Lookup("template-dir")
+	require.NotNil(t, flag, "template-dir flag should exist")
+	assert.Equal(t, "", flag.DefValue, "default should be empty string")
+}
+
 func TestDryRunLog_Enabled(t *testing.T) {
 	var buf bytes.Buffer
 	dryRunLog(&buf, true, "Would execute: %s %s", "GET", "/api/users")
@@ -564,4 +577,173 @@ func TestDryRunLog_Disabled(t *testing.T) {
 	var buf bytes.Buffer
 	dryRunLog(&buf, false, "Would execute: %s %s", "GET", "/api/users")
 	assert.Empty(t, buf.String(), "should not write when dry-run is disabled")
+}
+
+// =============================================================================
+// filterByTemplates tests
+// =============================================================================
+
+func TestFilterByTemplates_MatchByID(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "bola-idor-basic"}},
+		{Template: &templates.Template{ID: "bola-idor-predictable"}},
+		{Template: &templates.Template{ID: "rate-limiting-bypass"}},
+	}
+
+	result := filterByTemplates(tmpls, []string{"bola-idor-basic"})
+	require.Len(t, result, 1)
+	assert.Equal(t, "bola-idor-basic", result[0].ID)
+}
+
+func TestFilterByTemplates_MatchByFilename(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/templates/owasp/bola-idor-basic.yaml"},
+		{Template: &templates.Template{ID: "rate-limiting"}, FilePath: "/templates/owasp/rate-limiting.yaml"},
+	}
+
+	// Match with extension
+	result := filterByTemplates(tmpls, []string{"bola-idor-basic.yaml"})
+	require.Len(t, result, 1)
+	assert.Equal(t, "bola-idor-basic", result[0].ID)
+
+	// Match without extension
+	result = filterByTemplates(tmpls, []string{"rate-limiting"})
+	require.Len(t, result, 1)
+	assert.Equal(t, "rate-limiting", result[0].ID)
+}
+
+func TestFilterByTemplates_MatchByPathSuffix(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/path/to/templates/owasp/bola-idor-basic.yaml"},
+		{Template: &templates.Template{ID: "other-template"}, FilePath: "/path/to/templates/custom/other.yaml"},
+	}
+
+	// Match by partial path
+	result := filterByTemplates(tmpls, []string{"templates/owasp/bola-idor-basic.yaml"})
+	require.Len(t, result, 1)
+	assert.Equal(t, "bola-idor-basic", result[0].ID)
+
+	// Match by shorter path suffix
+	result = filterByTemplates(tmpls, []string{"owasp/bola-idor-basic.yaml"})
+	require.Len(t, result, 1)
+	assert.Equal(t, "bola-idor-basic", result[0].ID)
+}
+
+func TestFilterByTemplates_CaseInsensitive(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "BOLA-IDOR-Basic"}, FilePath: "/templates/BOLA-IDOR-Basic.yaml"},
+	}
+
+	// Lowercase filter should match uppercase ID
+	result := filterByTemplates(tmpls, []string{"bola-idor-basic"})
+	require.Len(t, result, 1)
+	assert.Equal(t, "BOLA-IDOR-Basic", result[0].ID)
+}
+
+func TestFilterByTemplates_MultipleFilters(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "bola-idor-basic"}},
+		{Template: &templates.Template{ID: "bola-idor-predictable"}},
+		{Template: &templates.Template{ID: "rate-limiting-bypass"}},
+	}
+
+	result := filterByTemplates(tmpls, []string{"bola-idor-basic", "rate-limiting-bypass"})
+	require.Len(t, result, 2)
+
+	ids := []string{result[0].ID, result[1].ID}
+	assert.Contains(t, ids, "bola-idor-basic")
+	assert.Contains(t, ids, "rate-limiting-bypass")
+}
+
+func TestFilterByTemplates_EmptyFilter(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "bola-idor-basic"}},
+		{Template: &templates.Template{ID: "rate-limiting"}},
+	}
+
+	// Empty filter should return all templates
+	result := filterByTemplates(tmpls, []string{})
+	assert.Len(t, result, 2)
+}
+
+func TestFilterByTemplates_NoMatch(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "bola-idor-basic"}},
+	}
+
+	result := filterByTemplates(tmpls, []string{"nonexistent-template"})
+	assert.Len(t, result, 0)
+}
+
+func TestFilterByTemplates_EmptyTemplateList(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{}
+
+	result := filterByTemplates(tmpls, []string{"some-filter"})
+	assert.Len(t, result, 0)
+}
+
+func TestFilterByTemplates_MixedMatchTypes(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/templates/owasp/bola-idor-basic.yaml"},
+		{Template: &templates.Template{ID: "rate-limiting"}, FilePath: "/templates/owasp/rate-limiting.yaml"},
+		{Template: &templates.Template{ID: "custom-test"}, FilePath: "/templates/custom/custom-test.yaml"},
+	}
+
+	// Mix of ID match and filename match
+	result := filterByTemplates(tmpls, []string{"bola-idor-basic", "custom-test.yaml"})
+	require.Len(t, result, 2)
+
+	ids := []string{result[0].ID, result[1].ID}
+	assert.Contains(t, ids, "bola-idor-basic")
+	assert.Contains(t, ids, "custom-test")
+}
+
+func TestFilterByTemplates_YmlExtension(t *testing.T) {
+	tmpls := []*templates.CompiledTemplate{
+		{
+			Template: &templates.Template{ID: "bola-test"},
+			FilePath: "/templates/bola.yml",
+		},
+	}
+
+	// Match by filename without .yml extension
+	result := filterByTemplates(tmpls, []string{"bola"})
+	assert.Len(t, result, 1, "should match filename without .yml extension")
+}
+
+// =============================================================================
+// templateMatchesFilter tests
+// =============================================================================
+
+func TestTemplateMatchesFilter_ByID(t *testing.T) {
+	tmpl := &templates.CompiledTemplate{
+		Template: &templates.Template{ID: "bola-detection"},
+		FilePath: "/templates/test.yaml",
+	}
+
+	assert.True(t, templateMatchesFilter(tmpl, "bola-detection"))
+	assert.True(t, templateMatchesFilter(tmpl, "BOLA-Detection")) // case insensitive
+	assert.False(t, templateMatchesFilter(tmpl, "other-id"))
+}
+
+func TestTemplateMatchesFilter_ByFilename(t *testing.T) {
+	tmpl := &templates.CompiledTemplate{
+		Template: &templates.Template{ID: "other-id"},
+		FilePath: "/templates/bola-detection.yaml",
+	}
+
+	assert.True(t, templateMatchesFilter(tmpl, "bola-detection.yaml"))
+	assert.True(t, templateMatchesFilter(tmpl, "bola-detection"))
+	assert.True(t, templateMatchesFilter(tmpl, "BOLA-DETECTION.YAML")) // case insensitive
+}
+
+func TestTemplateMatchesFilter_ByPathSuffix(t *testing.T) {
+	tmpl := &templates.CompiledTemplate{
+		Template: &templates.Template{ID: "other-id"},
+		FilePath: "/templates/owasp/api1/bola.yaml",
+	}
+
+	assert.True(t, templateMatchesFilter(tmpl, "owasp/api1/bola.yaml"))
+	assert.True(t, templateMatchesFilter(tmpl, "api1/bola.yaml"))
+	assert.False(t, templateMatchesFilter(tmpl, "api2/bola.yaml"))
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/owasp"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -34,7 +35,8 @@ type Config struct {
 	Output           string
 	OutputFile       string
 	Categories       []string
-	Templates        []string
+	TemplateDir      string   // Directory containing templates
+	Templates        []string // Filter templates by ID or name
 	AuditLog         string
 	OWASPCategories  []string
 	Verbose          bool
@@ -88,7 +90,8 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
 	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Test categories (owasp, custom)")
-	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Specific template files to run")
+	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/owasp)")
+	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 	cmd.Flags().StringVar(&config.AuditLog, "audit-log", ".hadrian/audit.log", "Audit log file")
 	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "Enable verbose logging output")
@@ -128,6 +131,9 @@ func newVersionCmd() *cobra.Command {
 // runTest executes security tests against an API (Batch 18 implementation)
 func runTest(ctx context.Context, config Config) error {
 	startTime := time.Now()
+
+	// Enable verbose logging if requested
+	log.SetVerbose(config.Verbose)
 
 	// 1. Validate configuration
 	if err := config.Validate(); err != nil {
@@ -177,25 +183,40 @@ func runTest(ctx context.Context, config Config) error {
 	defer rep.Close()
 
 	// 8. Load templates
-	templateDir := getTemplateDir()
+	templateDir := config.TemplateDir
+	if templateDir == "" {
+		templateDir = getTemplateDir()
+	}
+
 	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
 	if err != nil {
-		return fmt.Errorf("failed to load templates: %w", err)
+		return fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
+	}
+
+	// Apply template filters if specified
+	if len(config.Templates) > 0 {
+		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
+		if len(tmplFiles) == 0 {
+			return fmt.Errorf("no templates matched the specified filters: %v", config.Templates)
+		}
 	}
 
 	// Filter by OWASP categories if specified
 	if len(config.OWASPCategories) > 0 {
 		tmplFiles = filterTemplatesByOWASP(tmplFiles, config.OWASPCategories)
-		log.Info("Filtered to %d templates matching OWASP categories: %v", len(tmplFiles), config.OWASPCategories)
+		fmt.Printf("[INFO] Filtered to %d templates matching OWASP categories: %v\n", len(tmplFiles), config.OWASPCategories)
 	}
 
-	log.Info("Loaded %d templates from %s", len(tmplFiles), templateDir)
-	log.Info("Testing %d operations against %d roles", len(spec.Operations), len(rolesCfg.Roles))
+	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
+	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
 
 	// 9. Create template executor
 	executor := templates.NewExecutor(httpClient)
 
-	// 10. Run tests for each operation
+	// 10. Create mutation executor for mutation templates
+	mutationExecutor := owasp.NewMutationExecutor(httpClient)
+
+	// 11. Run tests for each operation
 	var allFindings []*model.Finding
 	for _, op := range spec.Operations {
 		for _, tmpl := range tmplFiles {
@@ -205,7 +226,7 @@ func runTest(ctx context.Context, config Config) error {
 			}
 
 			// Execute template for each role combination
-			findings, err := executeTemplate(ctx, executor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
+			findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
 			if err != nil {
 				log.Warn("Template %s failed on %s %s: %v", tmpl.ID, op.Method, op.Path, err)
 				continue
@@ -314,6 +335,7 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 					return nil
 				}
 
+				compiled.FilePath = path
 				result = append(result, compiled)
 				break
 			}
@@ -372,12 +394,18 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 func executeTemplate(
 	ctx context.Context,
 	executor *templates.Executor,
+	mutationExecutor *owasp.MutationExecutor,
 	tmpl *templates.CompiledTemplate,
 	op *model.Operation,
 	rolesCfg *roles.RoleConfig,
 	authCfg *auth.AuthConfig,
 	baseURL string,
 ) ([]*model.Finding, error) {
+	// Check if this is a mutation template - route to MutationExecutor
+	if tmpl.Template != nil && tmpl.Template.Info.TestPattern == "mutation" {
+		return executeMutationTemplate(ctx, mutationExecutor, tmpl, op, rolesCfg, authCfg, baseURL)
+	}
+
 	var findings []*model.Finding
 
 	// For unauthenticated endpoints, run test only once without roles
@@ -494,12 +522,110 @@ func executeTemplate(
 	return findings, nil
 }
 
+// executeMutationTemplate runs a three-phase mutation test
+func executeMutationTemplate(
+	ctx context.Context,
+	executor *owasp.MutationExecutor,
+	tmpl *templates.CompiledTemplate,
+	op *model.Operation,
+	rolesCfg *roles.RoleConfig,
+	authCfg *auth.AuthConfig,
+	baseURL string,
+) ([]*model.Finding, error) {
+	var findings []*model.Finding
+
+	attackerRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.AttackerPermissionLevel)
+	victimRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.VictimPermissionLevel)
+
+	for _, attackerRole := range attackerRoles {
+		for _, victimRole := range victimRoles {
+			if victimRole == nil || attackerRole.Name == victimRole.Name {
+				continue
+			}
+
+			// Build auth tokens map for both roles
+			authTokens := make(map[string]string)
+			if authCfg != nil {
+				if token, err := authCfg.GetAuth(attackerRole.Name); err == nil {
+					authTokens["attacker"] = token
+				}
+				if token, err := authCfg.GetAuth(victimRole.Name); err == nil {
+					authTokens["victim"] = token
+				}
+			}
+
+			// Clear tracker between tests
+			executor.ClearTracker()
+
+			// Execute three-phase mutation test
+			result, err := executor.ExecuteMutation(
+				ctx,
+				tmpl.Template,
+				op.Method,
+				attackerRole.Name,
+				victimRole.Name,
+				authTokens,
+				baseURL,
+			)
+			if err != nil {
+				log.Warn("Mutation test failed: %v", err)
+				continue
+			}
+
+			if result.Matched {
+				finding := &model.Finding{
+					ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+					Category:        tmpl.Info.Category,
+					Name:            tmpl.Info.Name,
+					Severity:        model.Severity(tmpl.Info.Severity),
+					Endpoint:        op.Path,
+					Method:          op.Method,
+					AttackerRole:    attackerRole.Name,
+					VictimRole:      victimRole.Name,
+					IsVulnerability: true,
+					Timestamp:       time.Now(),
+				}
+				if result.AttackResponse != nil {
+					finding.Evidence = model.Evidence{
+						Response: *result.AttackResponse,
+					}
+				}
+				findings = append(findings, finding)
+			}
+		}
+	}
+
+	return findings, nil
+}
+
 // hasLLMConfig checks if LLM provider is configured
 func hasLLMConfig() bool {
 	return os.Getenv("ANTHROPIC_API_KEY") != "" ||
 		os.Getenv("OPENAI_API_KEY") != "" ||
 		os.Getenv("OLLAMA_HOST") != ""
 }
+
+// filterByTemplates filters templates by ID, filename, or path suffix.
+// Matching is case-insensitive. Supports:
+//   - Template ID (e.g., "bola-idor-basic")
+//   - Filename with or without extension (e.g., "bola-idor-basic.yaml" or "bola-idor-basic")
+//   - Path suffix (e.g., "templates/owasp/bola-idor-basic.yaml")
+//
+// If templateFilters is empty, returns all templates unchanged.
+func filterByTemplates(tmpls []*templates.CompiledTemplate, templateFilters []string) []*templates.CompiledTemplate {
+	if len(templateFilters) == 0 {
+		return tmpls
+	}
+
+	var result []*templates.CompiledTemplate
+	for _, tmpl := range tmpls {
+		if templateMatchesAnyFilter(tmpl, templateFilters) {
+			result = append(result, tmpl)
+		}
+	}
+	return result
+}
+
 
 // filterTemplatesByOWASP filters templates by OWASP category prefix.
 // If owaspCategories is empty, returns all templates unchanged.

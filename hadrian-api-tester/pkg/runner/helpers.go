@@ -210,7 +210,7 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 }
 
 func (r *TerminalReporter) GenerateReport(findings []*model.Finding, stats *Stats) error {
-	fmt.Fprintf(r.writer, "\n%s=== Hadrian Security Test Results ===%s\n\n", colorBold, colorReset)
+	fmt.Fprintf(r.writer, "\n=== Hadrian Security Test Results ===\n\n")
 
 	fmt.Fprintf(r.writer, "Duration: %s\n", stats.Duration.Round(time.Second))
 	fmt.Fprintf(r.writer, "Operations tested: %d\n", stats.OperationCount)
@@ -219,19 +219,19 @@ func (r *TerminalReporter) GenerateReport(findings []*model.Finding, stats *Stat
 
 	fmt.Fprintf(r.writer, "Findings Summary:\n")
 	if stats.Critical > 0 {
-		fmt.Fprintf(r.writer, "  %s%sCRITICAL: %d%s\n", colorRed, colorBold, stats.Critical, colorReset)
+		fmt.Fprintf(r.writer, "  %sCRITICAL: %d%s\n", colorRed, stats.Critical, colorReset)
 	}
 	if stats.High > 0 {
-		fmt.Fprintf(r.writer, "  %s%sHIGH: %d%s\n", colorRed, colorBold, stats.High, colorReset)
+		fmt.Fprintf(r.writer, "  %sHIGH: %d%s\n", colorOrange, stats.High, colorReset)
 	}
 	if stats.Medium > 0 {
-		fmt.Fprintf(r.writer, "  %s%sMEDIUM: %d%s\n", colorYellow, colorBold, stats.Medium, colorReset)
+		fmt.Fprintf(r.writer, "  %sMEDIUM: %d%s\n", colorYellow, stats.Medium, colorReset)
 	}
 	if stats.Low > 0 {
-		fmt.Fprintf(r.writer, "  %s%sLOW: %d%s\n", colorBlue, colorBold, stats.Low, colorReset)
+		fmt.Fprintf(r.writer, "  %sLOW: %d%s\n", colorBlue, stats.Low, colorReset)
 	}
 	if stats.Info > 0 {
-		fmt.Fprintf(r.writer, "  %s%sINFO: %d%s\n", colorGreen, colorBold, stats.Info, colorReset)
+		fmt.Fprintf(r.writer, "  %sINFO: %d%s\n", colorGreen, stats.Info, colorReset)
 	}
 
 	fmt.Fprintf(r.writer, "\nTotal findings: %d\n", stats.Findings)
@@ -379,14 +379,15 @@ const (
 	colorBlue    = log.ColorBlue
 	colorMagenta = log.ColorMagenta
 	colorBold    = log.ColorBold
+	colorOrange  = "\033[38;5;208m" // 256-color orange
 )
 
 func getSeverityColor(severity model.Severity) string {
 	switch severity {
 	case model.SeverityCritical:
-		return colorRed + colorBold
+		return colorRed
 	case model.SeverityHigh:
-		return colorRed + colorBold // HIGH is also bold red, consistent with summary output
+		return colorOrange
 	case model.SeverityMedium:
 		return colorYellow
 	case model.SeverityLow:

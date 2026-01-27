@@ -52,6 +52,7 @@ type TestPhases struct {
 }
 
 type Phase struct {
+	Path               string            `yaml:"path,omitempty"`                 // Endpoint path for this phase
 	Operation          string            `yaml:"operation"`                      // create, read, update, delete
 	Auth               string            `yaml:"auth"`                           // attacker, victim
 	Data               map[string]string `yaml:"data,omitempty"`                 // Request body data
