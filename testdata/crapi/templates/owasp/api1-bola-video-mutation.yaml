@@ -1,0 +1,53 @@
+id: api1-bola-video-mutation
+
+info:
+  name: "BOLA - Access Other User's Profile Video (Mutation)"
+  category: "API1:2023"
+  severity: "HIGH"
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+  path_pattern: ".*/user/videos/.*"
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+test_phases:
+  setup:
+    path: "/identity/api/v2/user/dashboard"
+    operation: "read"
+    auth: "victim"
+    store_response_field: "video_id"
+    expected_status: 200
+
+  attack:
+    path: "/identity/api/v2/user/videos/{video_id}"
+    operation: "read"
+    auth: "attacker"
+    use_stored_field: "video_id"
+    check_field: "video_name"
+    expected_status: 200
+
+  verify:
+    path: "/identity/api/v2/user/videos/{video_id}"
+    operation: "read"
+    auth: "victim"
+    use_stored_field: "video_id"
+    expected_status: 200
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      status_code: 200
+    - type: "body_field"
+      body_field: "video_name"
+      exists: true
+  vulnerability_pattern: "Attacker can access victim's profile video"
+  conditions:
+    - attack_phase_status:
+        - 200

@@ -13,6 +13,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/owasp"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -195,7 +196,10 @@ func runTest(ctx context.Context, config Config) error {
 	// 9. Create template executor
 	executor := templates.NewExecutor(httpClient)
 
-	// 10. Run tests for each operation
+	// 10. Create mutation executor for mutation templates
+	mutationExecutor := owasp.NewMutationExecutor(httpClient)
+
+	// 11. Run tests for each operation
 	var allFindings []*model.Finding
 	for _, op := range spec.Operations {
 		for _, tmpl := range tmplFiles {
@@ -205,7 +209,7 @@ func runTest(ctx context.Context, config Config) error {
 			}
 
 			// Execute template for each role combination
-			findings, err := executeTemplate(ctx, executor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
+			findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
 			if err != nil {
 				log.Warn("Template %s failed on %s %s: %v", tmpl.ID, op.Method, op.Path, err)
 				continue
@@ -372,12 +376,18 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 func executeTemplate(
 	ctx context.Context,
 	executor *templates.Executor,
+	mutationExecutor *owasp.MutationExecutor,
 	tmpl *templates.CompiledTemplate,
 	op *model.Operation,
 	rolesCfg *roles.RoleConfig,
 	authCfg *auth.AuthConfig,
 	baseURL string,
 ) ([]*model.Finding, error) {
+	// Check if this is a mutation template - route to MutationExecutor
+	if tmpl.Template != nil && tmpl.Template.Info.TestPattern == "mutation" {
+		return executeMutationTemplate(ctx, mutationExecutor, tmpl, op, rolesCfg, authCfg, baseURL)
+	}
+
 	var findings []*model.Finding
 
 	// For unauthenticated endpoints, run test only once without roles
@@ -486,6 +496,82 @@ func executeTemplate(
 					finding.VictimRole = victimRole.Name
 				}
 
+				findings = append(findings, finding)
+			}
+		}
+	}
+
+	return findings, nil
+}
+
+// executeMutationTemplate runs a three-phase mutation test
+func executeMutationTemplate(
+	ctx context.Context,
+	executor *owasp.MutationExecutor,
+	tmpl *templates.CompiledTemplate,
+	op *model.Operation,
+	rolesCfg *roles.RoleConfig,
+	authCfg *auth.AuthConfig,
+	baseURL string,
+) ([]*model.Finding, error) {
+	var findings []*model.Finding
+
+	attackerRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.AttackerPermissionLevel)
+	victimRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.VictimPermissionLevel)
+
+	for _, attackerRole := range attackerRoles {
+		for _, victimRole := range victimRoles {
+			if victimRole == nil || attackerRole.Name == victimRole.Name {
+				continue
+			}
+
+			// Build auth tokens map for both roles
+			authTokens := make(map[string]string)
+			if authCfg != nil {
+				if token, err := authCfg.GetAuth(attackerRole.Name); err == nil {
+					authTokens["attacker"] = token
+				}
+				if token, err := authCfg.GetAuth(victimRole.Name); err == nil {
+					authTokens["victim"] = token
+				}
+			}
+
+			// Clear tracker between tests
+			executor.ClearTracker()
+
+			// Execute three-phase mutation test
+			result, err := executor.ExecuteMutation(
+				ctx,
+				tmpl.Template,
+				op.Method,
+				attackerRole.Name,
+				victimRole.Name,
+				authTokens,
+				baseURL,
+			)
+			if err != nil {
+				log.Warn("Mutation test failed: %v", err)
+				continue
+			}
+
+			if result.Matched {
+				finding := &model.Finding{
+					ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+					Category:        tmpl.Info.Category,
+					Name:            tmpl.Info.Name,
+					Severity:        model.Severity(tmpl.Info.Severity),
+					Endpoint:        op.Path,
+					Method:          op.Method,
+					AttackerRole:    attackerRole.Name,
+					VictimRole:      victimRole.Name,
+					IsVulnerability: true,
+					Timestamp:       time.Now(),
+				}
+				if result.AttackResponse != nil {
+					finding.Evidence = model.Evidence{
+						Response: *result.AttackResponse,
+					}
+				}
 				findings = append(findings, finding)
 			}
 		}
