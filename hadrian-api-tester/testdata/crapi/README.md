@@ -9,11 +9,13 @@ Configuration files for testing [OWASP crAPI](https://github.com/OWASP/crAPI) wi
 ```bash
 # Clone crAPI
 git clone https://github.com/OWASP/crAPI.git
-cd crAPI
 
-# Start with Docker Compose
+# Start with Docker Compose (note: compose file is in deploy/docker/)
+cd crAPI/deploy/docker
 docker-compose up -d
 ```
+
+**Troubleshooting**: If containers fail with "No space left on device" errors, run `docker system prune -a` to free up disk space, then retry.
 
 crAPI will be available at:
 - **Web UI**: http://localhost:8888
@@ -27,17 +29,17 @@ Create accounts for each role:
 # User 1 (regular user)
 curl -X POST http://localhost:8888/identity/api/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"user1@test.com","name":"Test User 1","number":"1234567890","password":"Test123!"}'
+  -d '{"email":"user1@test.com","name":"Test User 1","number":"1234567890","password":"TestPass123"}'
 
 # User 2 (for BOLA testing)
 curl -X POST http://localhost:8888/identity/api/auth/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"user2@test.com","name":"Test User 2","number":"0987654321","password":"Test123!"}'
+  -d '{"email":"user2@test.com","name":"Test User 2","number":"0987654321","password":"TestPass123"}'
 
 # Mechanic
 curl -X POST http://localhost:8888/workshop/api/mechanic/signup \
   -H "Content-Type: application/json" \
-  -d '{"email":"mechanic@test.com","name":"Test Mechanic","number":"5555555555","password":"Test123!","mechanic_code":"MECH001"}'
+  -d '{"email":"mechanic@test.com","name":"Test Mechanic","number":"5555555555","password":"TestPass123","mechanic_code":"MECH001"}'
 ```
 
 ### 3. Get JWT Tokens
@@ -48,47 +50,52 @@ Login with each user to get JWT tokens:
 # Get user token
 curl -X POST http://localhost:8888/identity/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"user1@test.com","password":"Test123!"}' | jq -r '.token'
+  -d '{"email":"user1@test.com","password":"TestPass123"}' | jq -r '.token'
 
 # Get user2 token
 curl -X POST http://localhost:8888/identity/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"user2@test.com","password":"Test123!"}' | jq -r '.token'
+  -d '{"email":"user2@test.com","password":"TestPass123"}' | jq -r '.token'
 
 # Get mechanic token
 curl -X POST http://localhost:8888/identity/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"mechanic@test.com","password":"Test123!"}' | jq -r '.token'
+  -d '{"email":"mechanic@test.com","password":"TestPass123"}' | jq -r '.token'
 ```
 
 ### 4. Set Environment Variables
 
+Create a `.env` file in this directory with your tokens:
+
 ```bash
-export CRAPI_USER_TOKEN="eyJ..."
-export CRAPI_USER2_TOKEN="eyJ..."
-export CRAPI_MECHANIC_TOKEN="eyJ..."
-export CRAPI_ADMIN_TOKEN="eyJ..."  # If you have admin access
+# testdata/crapi/.env
+CRAPI_USER_TOKEN=eyJ...
+CRAPI_USER2_TOKEN=eyJ...
+CRAPI_MECHANIC_TOKEN=eyJ...
+CRAPI_ADMIN_TOKEN=eyJ...
 ```
 
-### 5. Download OpenAPI Spec
+Note: The `.env` file is gitignored to prevent committing secrets.
+
+### 5. (Optional) Start Burp Suite
+
+If you want to inspect requests in Burp Suite, start it and configure the proxy listener on `127.0.0.1:8080`.
+
+### 6. Run Hadrian
+
+From the repository root:
 
 ```bash
-curl -o crapi-openapi-spec.json \
-  https://raw.githubusercontent.com/OWASP/crAPI/main/openapi-spec/crapi-openapi-spec.json
-```
+# Load environment variables and run tests
+set -a && source testdata/crapi/.env && set +a && \
+HADRIAN_TEMPLATES=testdata/crapi/templates/owasp ./hadrian test \
+  --api testdata/crapi/crapi-openapi-spec.json \
+  --roles testdata/crapi/roles.yaml \
+  --auth testdata/crapi/auth.yaml \
+  --allow-internal
 
-### 6. Start Burp Suite
-
-### 7. Run Hadrian
-
-```bash
-hadrian test \
-  --allow-internal\
-  --api crapi-openapi-spec.json \
-  --roles roles.yaml \
-  --auth auth.yaml \
-  --proxy http://127.0.0.1:8080 \ # Burp Proxy Address and Port
-  --verbose
+# Optional: add --verbose for detailed output
+# Optional: add --proxy http://127.0.0.1:8080 to route through Burp Suite
 ```
 
 ## Expected Vulnerabilities
