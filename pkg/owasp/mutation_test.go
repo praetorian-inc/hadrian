@@ -482,8 +482,8 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 	}
 
 	authTokens := map[string]string{
-		"attacker": "attacker-secret-token",
-		"victim":   "victim-secret-token",
+		"attacker": "Bearer attacker-secret-token",
+		"victim":   "Bearer victim-secret-token",
 	}
 
 	_, err := executor.executePhase(
@@ -666,8 +666,8 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 	}
 
 	authTokens := map[string]string{
-		"attacker": "attacker-token",
-		"victim":   "victim-token",
+		"attacker": "Bearer attacker-token",
+		"victim":   "Bearer victim-token",
 	}
 
 	result, err := executor.ExecuteMutation(
