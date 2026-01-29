@@ -76,14 +76,14 @@ type Stats struct {
 }
 
 // createReporter creates appropriate reporter based on output format
-func createReporter(format, outputFile string) (Reporter, error) {
+func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, error) {
 	switch format {
 	case "terminal":
-		return NewTerminalReporter(os.Stdout), nil
+		return NewTerminalReporter(os.Stdout, requestIDsLimit), nil
 	case "json":
-		return NewJSONReporter(outputFile)
+		return NewJSONReporter(outputFile, requestIDsLimit)
 	case "markdown":
-		return NewMarkdownReporter(outputFile)
+		return NewMarkdownReporter(outputFile, requestIDsLimit)
 	default:
 		return nil, fmt.Errorf("unsupported output format: %s", format)
 	}
@@ -180,14 +180,16 @@ func calculateStats(findings []*model.Finding, startTime time.Time) *Stats {
 
 // TerminalReporter outputs findings to terminal with colors
 type TerminalReporter struct {
-	writer   *os.File
-	redactor *reporter.Redactor
+	writer          *os.File
+	redactor        *reporter.Redactor
+	requestIDsLimit int
 }
 
-func NewTerminalReporter(w *os.File) *TerminalReporter {
+func NewTerminalReporter(w *os.File, requestIDsLimit int) *TerminalReporter {
 	return &TerminalReporter{
-		writer:   w,
-		redactor: reporter.NewRedactor(),
+		writer:          w,
+		redactor:        reporter.NewRedactor(),
+		requestIDsLimit: requestIDsLimit,
 	}
 }
 
@@ -209,9 +211,14 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 		fmt.Fprintf(r.writer, "  Vulnerability confirmed (confidence: %.0f%%)\n", finding.Confidence*100)
 	}
 
-	// Show request IDs if available
+	// Show request IDs if available (limited by requestIDsLimit)
 	if len(finding.RequestIDs) > 0 {
-		fmt.Fprintf(r.writer, "  Request IDs: %s\n", strings.Join(finding.RequestIDs, ", "))
+		requestIDs := finding.RequestIDs
+		// Apply limit: 0 or negative = show all, positive = limit to last N
+		if r.requestIDsLimit > 0 && len(requestIDs) > r.requestIDsLimit {
+			requestIDs = requestIDs[len(requestIDs)-r.requestIDsLimit:]
+		}
+		fmt.Fprintf(r.writer, "  Request IDs: %s\n", strings.Join(requestIDs, ", "))
 	}
 }
 
@@ -250,16 +257,18 @@ func (r *TerminalReporter) Close() error {
 
 // JSONReporter outputs findings to JSON file
 type JSONReporter struct {
-	outputFile string
-	findings   []*model.Finding
-	redactor   *reporter.Redactor
+	outputFile      string
+	findings        []*model.Finding
+	redactor        *reporter.Redactor
+	requestIDsLimit int
 }
 
-func NewJSONReporter(outputFile string) (*JSONReporter, error) {
+func NewJSONReporter(outputFile string, requestIDsLimit int) (*JSONReporter, error) {
 	return &JSONReporter{
-		outputFile: outputFile,
-		findings:   make([]*model.Finding, 0),
-		redactor:   reporter.NewRedactor(),
+		outputFile:      outputFile,
+		findings:        make([]*model.Finding, 0),
+		redactor:        reporter.NewRedactor(),
+		requestIDsLimit: requestIDsLimit,
 	}, nil
 }
 
@@ -268,9 +277,19 @@ func (r *JSONReporter) ReportFinding(finding *model.Finding) {
 }
 
 func (r *JSONReporter) GenerateReport(findings []*model.Finding, stats *Stats) error {
+	// Limit request IDs in findings
+	limitedFindings := make([]*model.Finding, len(findings))
+	for i, f := range findings {
+		limited := *f // Copy finding
+		if len(limited.RequestIDs) > 0 && r.requestIDsLimit > 0 && len(limited.RequestIDs) > r.requestIDsLimit {
+			limited.RequestIDs = limited.RequestIDs[len(limited.RequestIDs)-r.requestIDsLimit:]
+		}
+		limitedFindings[i] = &limited
+	}
+
 	report := map[string]interface{}{
 		"stats":    stats,
-		"findings": findings,
+		"findings": limitedFindings,
 	}
 
 	var output *os.File
@@ -296,16 +315,18 @@ func (r *JSONReporter) Close() error {
 
 // MarkdownReporter outputs findings to Markdown file
 type MarkdownReporter struct {
-	outputFile string
-	findings   []*model.Finding
-	redactor   *reporter.Redactor
+	outputFile      string
+	findings        []*model.Finding
+	redactor        *reporter.Redactor
+	requestIDsLimit int
 }
 
-func NewMarkdownReporter(outputFile string) (*MarkdownReporter, error) {
+func NewMarkdownReporter(outputFile string, requestIDsLimit int) (*MarkdownReporter, error) {
 	return &MarkdownReporter{
-		outputFile: outputFile,
-		findings:   make([]*model.Finding, 0),
-		redactor:   reporter.NewRedactor(),
+		outputFile:      outputFile,
+		findings:        make([]*model.Finding, 0),
+		redactor:        reporter.NewRedactor(),
+		requestIDsLimit: requestIDsLimit,
 	}, nil
 }
 
@@ -354,6 +375,15 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 		}
 		if f.VictimRole != "" {
 			fmt.Fprintf(output, "**Victim Role:** %s\n\n", f.VictimRole)
+		}
+
+		// Show limited request IDs if available
+		if len(f.RequestIDs) > 0 {
+			requestIDs := f.RequestIDs
+			if r.requestIDsLimit > 0 && len(requestIDs) > r.requestIDsLimit {
+				requestIDs = requestIDs[len(requestIDs)-r.requestIDsLimit:]
+			}
+			fmt.Fprintf(output, "**Request IDs:** %s\n\n", strings.Join(requestIDs, ", "))
 		}
 
 		if f.LLMAnalysis != nil {

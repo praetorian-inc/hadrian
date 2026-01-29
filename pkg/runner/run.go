@@ -41,6 +41,7 @@ type Config struct {
 	OWASPCategories  []string
 	Verbose          bool
 	DryRun           bool
+	RequestIDsLimit  int      // Number of request IDs to display per finding (0 = all)
 }
 
 // Run is the main entry point for the Hadrian CLI
@@ -96,6 +97,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "Enable verbose logging output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Show what would be tested without making requests")
+	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids", 1, "Number of request IDs to display per finding (0 = all)")
 
 	return cmd
 }
@@ -176,7 +178,7 @@ func runTest(ctx context.Context, config Config) error {
 	}
 
 	// 7. Create reporter based on output format
-	rep, err := createReporter(config.Output, config.OutputFile)
+	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
