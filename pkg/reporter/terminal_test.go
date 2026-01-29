@@ -233,3 +233,37 @@ func TestTerminalReporter_GenerateReport_ShowsOperationsAndTemplates(t *testing.
 	assert.True(t, strings.Contains(output, "30") || strings.Contains(output, "Templates"),
 		"Should mention templates count")
 }
+
+// TestTerminalReporter_ReportFinding_WithRequestIDs verifies that request IDs
+// are displayed in terminal output when present
+func TestTerminalReporter_ReportFinding_WithRequestIDs(t *testing.T) {
+	var buf bytes.Buffer
+	reporter := NewTerminalReporter(&buf, false)
+	
+	finding := createTestFinding(model.SeverityHigh, "API1")
+	finding.RequestIDs = []string{"req-abc123", "req-def456"}
+
+	err := reporter.ReportFinding(finding)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.Contains(t, output, "Request IDs:", "Should label request IDs section")
+	assert.Contains(t, output, "req-abc123", "Should include first request ID")
+	assert.Contains(t, output, "req-def456", "Should include second request ID")
+}
+
+// TestTerminalReporter_ReportFinding_NoRequestIDs verifies that request ID section
+// is omitted when there are no request IDs
+func TestTerminalReporter_ReportFinding_NoRequestIDs(t *testing.T) {
+	var buf bytes.Buffer
+	reporter := NewTerminalReporter(&buf, false)
+	
+	finding := createTestFinding(model.SeverityHigh, "API1")
+	finding.RequestIDs = []string{} // Empty
+
+	err := reporter.ReportFinding(finding)
+
+	require.NoError(t, err)
+	output := buf.String()
+	assert.NotContains(t, output, "Request IDs:", "Should not show request IDs section when empty")
+}

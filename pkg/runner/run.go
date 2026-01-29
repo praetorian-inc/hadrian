@@ -439,7 +439,8 @@ func executeTemplate(
 				Evidence: model.Evidence{
 					Response: result.Response,
 				},
-				Timestamp: time.Now(),
+				RequestIDs: result.RequestIDs,
+				Timestamp:  time.Now(),
 			}
 			findings = append(findings, finding)
 		}
@@ -507,7 +508,8 @@ func executeTemplate(
 					Evidence: model.Evidence{
 						Response: result.Response,
 					},
-					Timestamp: time.Now(),
+					RequestIDs: result.RequestIDs,
+					Timestamp:  time.Now(),
 				}
 
 				if victimRole != nil {
@@ -590,6 +592,16 @@ func executeMutationTemplate(
 						Response: *result.AttackResponse,
 					}
 				}
+
+				// Collect all request IDs from all phases
+				if result.RequestIDs != nil {
+					var allRequestIDs []string
+					allRequestIDs = append(allRequestIDs, result.RequestIDs.Setup...)
+					allRequestIDs = append(allRequestIDs, result.RequestIDs.Attack...)
+					allRequestIDs = append(allRequestIDs, result.RequestIDs.Verify...)
+					finding.RequestIDs = allRequestIDs
+				}
+
 				findings = append(findings, finding)
 			}
 		}

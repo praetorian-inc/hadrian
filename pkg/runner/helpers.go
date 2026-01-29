@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	http "github.com/praetorian-inc/hadrian/internal/http"
@@ -206,6 +207,11 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 
 	if finding.IsVulnerability {
 		fmt.Fprintf(r.writer, "  Vulnerability confirmed (confidence: %.0f%%)\n", finding.Confidence*100)
+	}
+
+	// Show request IDs if available
+	if len(finding.RequestIDs) > 0 {
+		fmt.Fprintf(r.writer, "  Request IDs: %s\n", strings.Join(finding.RequestIDs, ", "))
 	}
 }
 
