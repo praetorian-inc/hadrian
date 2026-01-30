@@ -6,6 +6,7 @@ package owasp
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -22,6 +23,9 @@ func LoadTemplates(pattern string) ([]*templates.CompiledTemplate, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid glob pattern: %w", err)
 	}
+
+	// Sort files alphabetically for deterministic execution order
+	sort.Strings(files)
 
 	result := make([]*templates.CompiledTemplate, 0, len(files))
 	for _, file := range files {

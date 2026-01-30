@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
@@ -36,6 +37,24 @@ func newMockResponse(statusCode int, body string) *http.Response {
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Header:     make(http.Header),
 	}
+}
+
+// Helper function to create bearer token auth infos for tests
+func makeAuthInfos(attackerToken, victimToken string) map[string]*auth.AuthInfo {
+	infos := make(map[string]*auth.AuthInfo)
+	if attackerToken != "" {
+		infos["attacker"] = &auth.AuthInfo{
+			Method: "bearer",
+			Value:  "Bearer " + attackerToken,
+		}
+	}
+	if victimToken != "" {
+		infos["victim"] = &auth.AuthInfo{
+			Method: "bearer",
+			Value:  "Bearer " + victimToken,
+		}
+	}
+	return infos
 }
 
 func TestNewMutationExecutor(t *testing.T) {
@@ -94,7 +113,7 @@ func TestExecuteMutation_Success(t *testing.T) {
 		"create",
 		"attacker@example.com",
 		"victim@example.com",
-		map[string]string{"attacker": "attacker-token", "victim": "victim-token"},
+		makeAuthInfos("attacker-token", "victim-token"),
 		"http://localhost:8080",
 	)
 
@@ -152,7 +171,7 @@ func TestExecuteMutation_Secure(t *testing.T) {
 		"create",
 		"attacker@example.com",
 		"victim@example.com",
-		map[string]string{"attacker": "attacker-token", "victim": "victim-token"},
+		makeAuthInfos("attacker-token", "victim-token"),
 		"http://localhost:8080",
 	)
 
@@ -328,7 +347,7 @@ func TestExecuteMutation_StoresResourceID(t *testing.T) {
 		"create",
 		"attacker@example.com",
 		"victim@example.com",
-		map[string]string{"attacker": "attacker-token", "victim": "victim-token"},
+		makeAuthInfos("attacker-token", "victim-token"),
 		"http://localhost:8080",
 	)
 
@@ -382,7 +401,7 @@ func TestExecutePhase_UsesCustomPath(t *testing.T) {
 		"http://localhost:8080",
 		phase,
 		"victim",
-		map[string]string{"victim": "victim-token"},
+		makeAuthInfos("", "victim-token"),
 	)
 
 	require.NoError(t, err)
@@ -416,7 +435,7 @@ func TestExecutePhase_SubstitutesStoredValues(t *testing.T) {
 		"http://localhost:8080",
 		phase,
 		"attacker",
-		map[string]string{"attacker": "attacker-token"},
+		makeAuthInfos("attacker-token", ""),
 	)
 
 	require.NoError(t, err)
@@ -457,7 +476,7 @@ func TestExecutePhase_MapsOperationToHTTPMethod(t *testing.T) {
 				"http://localhost:8080",
 				phase,
 				"victim",
-				map[string]string{"victim": "token"},
+				makeAuthInfos("", "token"),
 			)
 
 			require.NoError(t, err)
@@ -481,9 +500,15 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 		Auth:      "attacker",
 	}
 
-	authTokens := map[string]string{
-		"attacker": "Bearer attacker-secret-token",
-		"victim":   "Bearer victim-secret-token",
+	authInfos := map[string]*auth.AuthInfo{
+		"attacker": {
+			Method: "bearer",
+			Value:  "Bearer attacker-secret-token",
+		},
+		"victim": {
+			Method: "bearer",
+			Value:  "Bearer victim-secret-token",
+		},
 	}
 
 	_, err := executor.executePhase(
@@ -491,7 +516,7 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 		"http://localhost:8080",
 		phase,
 		"attacker", // This is the authUser parameter
-		authTokens,
+		authInfos,
 	)
 
 	require.NoError(t, err)
@@ -516,7 +541,7 @@ func TestExecutePhase_ReturnsErrorForMissingPath(t *testing.T) {
 		"http://localhost:8080",
 		phase,
 		"victim",
-		map[string]string{"victim": "token"},
+		makeAuthInfos("", "token"),
 	)
 
 	require.Error(t, err)
@@ -592,7 +617,7 @@ func TestExecutePhase_ReturnsErrorForUnresolvedPlaceholder(t *testing.T) {
 		"http://localhost:8080",
 		phase,
 		"attacker",
-		map[string]string{"attacker": "token"},
+		makeAuthInfos("token", ""),
 	)
 
 	require.Error(t, err)
@@ -618,7 +643,7 @@ func TestExecutePhase_ReturnsErrorForUnresolvedVideoID(t *testing.T) {
 		"http://localhost:8080",
 		phase,
 		"attacker",
-		map[string]string{"attacker": "token"},
+		makeAuthInfos("token", ""),
 	)
 
 	require.Error(t, err)
@@ -665,9 +690,15 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 		},
 	}
 
-	authTokens := map[string]string{
-		"attacker": "Bearer attacker-token",
-		"victim":   "Bearer victim-token",
+	authInfos := map[string]*auth.AuthInfo{
+		"attacker": {
+			Method: "bearer",
+			Value:  "Bearer attacker-token",
+		},
+		"victim": {
+			Method: "bearer",
+			Value:  "Bearer victim-token",
+		},
 	}
 
 	result, err := executor.ExecuteMutation(
@@ -676,7 +707,7 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 		"create",
 		"attacker@example.com",
 		"victim@example.com",
-		authTokens,
+		authInfos,
 		"http://localhost:8080",
 	)
 

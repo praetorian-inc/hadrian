@@ -86,7 +86,7 @@ func TestExecute_MatchedResponse(t *testing.T) {
 	}
 
 	// Execute template
-	result, err := executor.Execute(context.Background(), tmpl, operation, "", nil)
+	result, err := executor.Execute(context.Background(), tmpl, operation, nil, nil)
 
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -156,7 +156,7 @@ func TestExecute_NoMatch(t *testing.T) {
 		Path:   "/api/users/1",
 	}
 
-	result, err := executor.Execute(context.Background(), tmpl, operation, "", nil)
+	result, err := executor.Execute(context.Background(), tmpl, operation, nil, nil)
 
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -185,7 +185,7 @@ func TestBuildRequest_VariableSubstitution(t *testing.T) {
 		"userId": "999",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, "", variables)
+	req, err := buildRequest(context.Background(), test, operation, nil, variables)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
@@ -256,7 +256,7 @@ func TestBuildRequest_OpenAPIPathParameters(t *testing.T) {
 				Path:   tc.testPath, // Use the same path for operation
 			}
 
-			req, err := buildRequest(context.Background(), test, operation, "", tc.variables)
+			req, err := buildRequest(context.Background(), test, operation, nil, tc.variables)
 			if err != nil {
 				t.Fatalf("buildRequest failed: %v", err)
 			}
@@ -280,7 +280,7 @@ func TestBuildRequest_OperationPath(t *testing.T) {
 		Path:   "/api/users",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, "", nil)
+	req, err := buildRequest(context.Background(), test, operation, nil, nil)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
@@ -306,7 +306,7 @@ func TestBuildRequest_OperationMethod(t *testing.T) {
 		Path:   "/api/users/1",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, "", nil)
+	req, err := buildRequest(context.Background(), test, operation, nil, nil)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
@@ -331,16 +331,21 @@ func TestBuildRequest_AuthHeader(t *testing.T) {
 		Path:   "/api/users",
 	}
 
-	authHeader := "Bearer token123"
+	authInfo := &AuthInfo{
+		Method:   "bearer",
+		Location: "header",
+		KeyName:  "Authorization",
+		Value:    "Bearer token123",
+	}
 
-	req, err := buildRequest(context.Background(), test, operation, authHeader, nil)
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
 	}
 
-	if req.Header.Get("Authorization") != authHeader {
-		t.Errorf("Authorization header = %q, want %q", req.Header.Get("Authorization"), authHeader)
+	if req.Header.Get("Authorization") != "Bearer token123" {
+		t.Errorf("Authorization header = %q, want %q", req.Header.Get("Authorization"), "Bearer token123")
 	}
 }
 
@@ -478,7 +483,7 @@ func TestExecute_Integration_WithHTTPTest(t *testing.T) {
 		Path:   "/api/test",
 	}
 
-	result, err := executor.Execute(context.Background(), tmpl, operation, "", nil)
+	result, err := executor.Execute(context.Background(), tmpl, operation, nil, nil)
 
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
@@ -537,7 +542,7 @@ func TestExecute_RequestIDsTracked(t *testing.T) {
 		Path:   "/api/test",
 	}
 
-	result, err := executor.Execute(context.Background(), tmpl, operation, "", nil)
+	result, err := executor.Execute(context.Background(), tmpl, operation, nil, nil)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -559,5 +564,158 @@ func TestExecute_RequestIDsTracked(t *testing.T) {
 	// Verify request ID format (should be UUID-like)
 	if len(capturedRequestID) < 32 {
 		t.Errorf("Request ID %q seems too short for a UUID", capturedRequestID)
+	}
+}
+
+// TestBuildRequest_APIKeyAuth_Header tests API key authentication with custom header
+// This test demonstrates the bug: currently it would set Authorization header instead of X-API-Key
+func TestBuildRequest_APIKeyAuth_Header(t *testing.T) {
+	test := HTTPTest{
+		Method: "GET",
+		Path:   "/api/resource",
+		Headers: map[string]string{
+			"Authorization": "Bearer {{attacker_token}}",
+		},
+	}
+
+	operation := &model.Operation{
+		Method: "GET",
+		Path:   "/api/resource",
+	}
+
+	// Create auth info for API key in header
+	authInfo := &AuthInfo{
+		Method:   "api_key",
+		Location: "header",
+		KeyName:  "X-API-Key",
+		Value:    "admin-api-key-12345",
+	}
+
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
+	if err != nil {
+		t.Fatalf("buildRequest failed: %v", err)
+	}
+
+	// Verify API key is set in correct header (X-API-Key, NOT Authorization)
+	if req.Header.Get("X-API-Key") != "admin-api-key-12345" {
+		t.Errorf("X-API-Key header = %q, want %q", req.Header.Get("X-API-Key"), "admin-api-key-12345")
+	}
+
+	if req.Header.Get("Authorization") != "" {
+		t.Errorf("Authorization header should not be set for API key auth, but got %q", req.Header.Get("Authorization"))
+	}
+}
+
+// TestBuildRequest_APIKeyAuth_Query tests API key authentication with query parameter
+func TestBuildRequest_APIKeyAuth_Query(t *testing.T) {
+	test := HTTPTest{
+		Method: "GET",
+		Path:   "/api/resource",
+		Headers: map[string]string{
+			"Authorization": "Bearer {{attacker_token}}",
+		},
+	}
+
+	operation := &model.Operation{
+		Method: "GET",
+		Path:   "/api/resource",
+	}
+
+	// Create auth info for API key in query parameter
+	authInfo := &AuthInfo{
+		Method:   "api_key",
+		Location: "query",
+		KeyName:  "api_key",
+		Value:    "admin-api-key-12345",
+	}
+
+	variables := map[string]string{
+		"baseURL": "http://localhost:8080",
+	}
+
+	req, err := buildRequest(context.Background(), test, operation, authInfo, variables)
+	if err != nil {
+		t.Fatalf("buildRequest failed: %v", err)
+	}
+
+	// Verify API key is set as query parameter
+	if req.URL.Query().Get("api_key") != "admin-api-key-12345" {
+		t.Errorf("api_key query param = %q, want %q", req.URL.Query().Get("api_key"), "admin-api-key-12345")
+	}
+
+	if req.Header.Get("Authorization") != "" {
+		t.Errorf("Authorization header should not be set for query-based API key auth, but got %q", req.Header.Get("Authorization"))
+	}
+
+	if req.Header.Get("X-API-Key") != "" {
+		t.Errorf("X-API-Key header should not be set for query-based auth, but got %q", req.Header.Get("X-API-Key"))
+	}
+}
+
+// TestBuildRequest_BearerAuthPreserved tests that bearer auth still works correctly
+func TestBuildRequest_BearerAuthPreserved(t *testing.T) {
+	test := HTTPTest{
+		Method: "GET",
+		Path:   "/api/resource",
+		Headers: map[string]string{
+			"Authorization": "Bearer {{attacker_token}}",
+		},
+	}
+
+	operation := &model.Operation{
+		Method: "GET",
+		Path:   "/api/resource",
+	}
+
+	// Create auth info for bearer token
+	authInfo := &AuthInfo{
+		Method:   "bearer",
+		Location: "header",
+		KeyName:  "Authorization",
+		Value:    "Bearer test-bearer-token-12345",
+	}
+
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
+	if err != nil {
+		t.Fatalf("buildRequest failed: %v", err)
+	}
+
+	// Verify Authorization header is set correctly for bearer
+	if req.Header.Get("Authorization") != "Bearer test-bearer-token-12345" {
+		t.Errorf("Authorization header = %q, want %q", req.Header.Get("Authorization"), "Bearer test-bearer-token-12345")
+	}
+}
+
+// TestBuildRequest_BasicAuthPreserved tests that basic auth still works correctly
+func TestBuildRequest_BasicAuthPreserved(t *testing.T) {
+	test := HTTPTest{
+		Method: "GET",
+		Path:   "/api/resource",
+		Headers: map[string]string{
+			"Authorization": "Bearer {{attacker_token}}",
+		},
+	}
+
+	operation := &model.Operation{
+		Method: "GET",
+		Path:   "/api/resource",
+	}
+
+	// Create auth info for basic auth
+	authInfo := &AuthInfo{
+		Method:   "basic",
+		Location: "header",
+		KeyName:  "Authorization",
+		Value:    "Basic dGVzdDpwYXNzd29yZA==", // test:password encoded
+	}
+
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
+	if err != nil {
+		t.Fatalf("buildRequest failed: %v", err)
+	}
+
+	// Verify Authorization header is set correctly for basic auth
+	if req.Header.Get("Authorization") != "Basic dGVzdDpwYXNzd29yZA==" {
+		t.Errorf("Authorization header = %q, want %q", req.Header.Get("Authorization"), "Basic dGVzdDpwYXNzd29yZA==")
 	}
 }

@@ -18,6 +18,7 @@ objects:
 roles:
   # Admin - Full system access, can manage all users and content
   - name: admin
+    level: 100           # Highest privilege
     permissions:
       - "*:*:*"
     auth:
@@ -25,6 +26,7 @@ roles:
 
   # Mechanic - Service provider role with access to service requests
   - name: mechanic
+    level: 30            # Service provider privilege
     permissions:
       - "read:users:own"
       - "write:users:own"
@@ -38,6 +40,7 @@ roles:
 
   # Regular User - Vehicle owner with standard privileges
   - name: user
+    level: 20            # Regular user privilege
     permissions:
       - "read:users:own"
       - "write:users:own"
@@ -64,6 +67,7 @@ roles:
   # Secondary User - Lower privilege user for BOLA attack testing
   # Fewer permissions to be classified as "lower" (attacker role)
   - name: user2
+    level: 10            # Lower user privilege for BOLA testing
     permissions:
       - "read:users:own"
       - "read:products:public"
@@ -72,6 +76,7 @@ roles:
 
   # Anonymous/Guest - Unauthenticated access (public endpoints only)
   - name: anonymous
+    level: 0             # Lowest privilege (unauthenticated)
     permissions:
       - "read:products:public"          # QR code endpoint is public
       - "write:users:public"            # Can signup/login (creates new user)

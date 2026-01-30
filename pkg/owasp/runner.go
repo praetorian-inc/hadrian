@@ -124,11 +124,16 @@ func (r *Runner) executeTest(
 		variables[param.Name] = fmt.Sprintf("test_%s", param.Name)
 	}
 
-	// Generate auth header for attacker (placeholder - in real impl would get actual token)
-	authHeader := fmt.Sprintf("Bearer token_%s", attacker.Name)
+	// Generate auth info for attacker (placeholder - in real impl would get actual token)
+	authInfo := &templates.AuthInfo{
+		Method:   "bearer",
+		Location: "header",
+		KeyName:  "Authorization",
+		Value:    fmt.Sprintf("Bearer token_%s", attacker.Name),
+	}
 
 	// Execute the template
-	result, err := r.executor.Execute(ctx, tmpl, operation, authHeader, variables)
+	result, err := r.executor.Execute(ctx, tmpl, operation, authInfo, variables)
 	if err != nil {
 		return nil, fmt.Errorf("template execution failed: %w", err)
 	}

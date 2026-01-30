@@ -1,0 +1,18 @@
+# Hadrian auth configuration for Basic HTTP authentication
+# Usage: --auth auth-basic.yaml
+#
+# Start the API with: AUTH_METHOD=basic ./vulnerable-api
+
+method: basic
+
+roles:
+  admin:
+    username: "admin"
+    password: "admin123"
+  user1:
+    username: "user1"
+    password: "user1pass"
+  user2:
+    username: "user2"
+    password: "user2pass"
+  # anonymous role has no credentials - tests unauthenticated access

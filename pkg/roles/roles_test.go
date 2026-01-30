@@ -355,15 +355,15 @@ func TestMatches_AllCombinations(t *testing.T) {
 func TestGetRolesByPermissionLevel_Lower(t *testing.T) {
 	config := &RoleConfig{
 		Roles: []*Role{
-			{Name: "limited", Permissions: []Permission{{}, {}}},          // 2 perms
-			{Name: "moderate", Permissions: []Permission{{}, {}, {}}},     // 3 perms
-			{Name: "powerful", Permissions: []Permission{{}, {}, {}, {}}}, // 4 perms
+			{Name: "limited", Level: 10, Permissions: []Permission{{}, {}}},          // Low privilege
+			{Name: "moderate", Level: 50, Permissions: []Permission{{}, {}, {}}},     // Medium privilege
+			{Name: "powerful", Level: 100, Permissions: []Permission{{}, {}, {}, {}}}, // High privilege
 		},
 	}
 
 	lower := config.GetRolesByPermissionLevel("lower")
-	// Median of [2,3,4] = 3
-	// Lower means < 3
+	// Median of [10,50,100] = 50
+	// Lower means < 50
 	assert.Len(t, lower, 1)
 	assert.Equal(t, "limited", lower[0].Name)
 }
@@ -371,15 +371,15 @@ func TestGetRolesByPermissionLevel_Lower(t *testing.T) {
 func TestGetRolesByPermissionLevel_Higher(t *testing.T) {
 	config := &RoleConfig{
 		Roles: []*Role{
-			{Name: "limited", Permissions: []Permission{{}, {}}},          // 2 perms
-			{Name: "moderate", Permissions: []Permission{{}, {}, {}}},     // 3 perms
-			{Name: "powerful", Permissions: []Permission{{}, {}, {}, {}}}, // 4 perms
+			{Name: "limited", Level: 10, Permissions: []Permission{{}, {}}},          // Low privilege
+			{Name: "moderate", Level: 50, Permissions: []Permission{{}, {}, {}}},     // Medium privilege
+			{Name: "powerful", Level: 100, Permissions: []Permission{{}, {}, {}, {}}}, // High privilege
 		},
 	}
 
 	higher := config.GetRolesByPermissionLevel("higher")
-	// Median of [2,3,4] = 3
-	// Higher means >= 3
+	// Median of [10,50,100] = 50
+	// Higher means >= 50
 	assert.Len(t, higher, 2)
 	names := []string{higher[0].Name, higher[1].Name}
 	assert.Contains(t, names, "moderate")
@@ -389,14 +389,75 @@ func TestGetRolesByPermissionLevel_Higher(t *testing.T) {
 func TestGetRolesByPermissionLevel_All(t *testing.T) {
 	config := &RoleConfig{
 		Roles: []*Role{
-			{Name: "limited", Permissions: []Permission{{}}},
-			{Name: "moderate", Permissions: []Permission{{}, {}}},
-			{Name: "powerful", Permissions: []Permission{{}, {}, {}}},
+			{Name: "limited", Level: 10, Permissions: []Permission{{}}},
+			{Name: "moderate", Level: 50, Permissions: []Permission{{}, {}}},
+			{Name: "powerful", Level: 100, Permissions: []Permission{{}, {}, {}}},
 		},
 	}
 
 	all := config.GetRolesByPermissionLevel("all")
 	assert.Len(t, all, 3)
+}
+
+func TestGetRolesByPermissionLevel_BOLAScenario(t *testing.T) {
+	// Real scenario: admin has 1 permission (*:*:all) but is highest privilege
+	// users have 11 permissions but are lower privilege
+	config := &RoleConfig{
+		Roles: []*Role{
+			{Name: "admin", Level: 100, Permissions: []Permission{{}}},          // 1 perm, level 100
+			{Name: "user1", Level: 10, Permissions: make([]Permission, 11)},      // 11 perms, level 10
+			{Name: "user2", Level: 10, Permissions: make([]Permission, 11)},      // 11 perms, level 10
+			{Name: "anonymous", Level: 0, Permissions: []Permission{{}}},         // 1 perm, level 0
+		},
+	}
+
+	// Median of [0, 10, 10, 100] = (10 + 10) / 2 = 10
+	// Higher: >= 10 → admin (100), user1 (10), user2 (10)
+	// Lower: < 10 → anonymous (0)
+
+	higher := config.GetRolesByPermissionLevel("higher")
+	assert.Len(t, higher, 3)
+	names := []string{higher[0].Name, higher[1].Name, higher[2].Name}
+	assert.Contains(t, names, "admin")
+	assert.Contains(t, names, "user1")
+	assert.Contains(t, names, "user2")
+
+	lower := config.GetRolesByPermissionLevel("lower")
+	assert.Len(t, lower, 1)
+	assert.Equal(t, "anonymous", lower[0].Name)
+}
+
+func TestLoad_VulnerableAPIRoles(t *testing.T) {
+	// Test loading the vulnerable-api roles.yaml with level field
+	config, err := Load("../../testdata/vulnerable-api/roles.yaml")
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	// Verify roles loaded with correct levels
+	admin := findRole(config.Roles, "admin")
+	require.NotNil(t, admin)
+	assert.Equal(t, 100, admin.Level)
+
+	user1 := findRole(config.Roles, "user1")
+	require.NotNil(t, user1)
+	assert.Equal(t, 10, user1.Level)
+
+	user2 := findRole(config.Roles, "user2")
+	require.NotNil(t, user2)
+	assert.Equal(t, 10, user2.Level)
+
+	anonymous := findRole(config.Roles, "anonymous")
+	require.NotNil(t, anonymous)
+	assert.Equal(t, 0, anonymous.Level)
+
+	// Verify GetRolesByPermissionLevel behavior
+	// Median of [0, 10, 10, 100] = 10
+	higher := config.GetRolesByPermissionLevel("higher")
+	assert.Len(t, higher, 3) // admin, user1, user2
+
+	lower := config.GetRolesByPermissionLevel("lower")
+	assert.Len(t, lower, 1) // anonymous
+	assert.Equal(t, "anonymous", lower[0].Name)
 }
 
 // Helper function

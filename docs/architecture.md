@@ -146,7 +146,7 @@ Hadrian is a security testing framework designed to identify OWASP API Top 10 vu
 | File | Purpose |
 |------|---------|
 | **api.yaml** | OpenAPI 3.0 specification defining endpoints, parameters, and auth requirements |
-| **roles.yaml** | Role definitions with permission strings (`action:object:scope`) |
+| **roles.yaml** | Role definitions with permission strings (`action:object:scope`) and explicit `level` values for privilege ordering |
 | **auth.yaml** | Authentication credentials (Bearer tokens, API keys) for each role |
 | **templates/*.yaml** | Security test templates with endpoint selectors, matchers, and attack patterns |
 
@@ -171,6 +171,17 @@ hadrian-api-tester/
 ```
 
 ## How Testing Works
+
+### Template Execution Order
+
+Templates are loaded and executed in **alphabetical order by filename**. The template loader (`pkg/owasp/loader.go` and `pkg/runner/run.go`) explicitly sorts files to ensure deterministic, reproducible test execution across all platforms.
+
+**Best Practice**: Prefix template filenames with numbers to control execution order:
+- `01-*` to `05-*`: Non-destructive read tests
+- `06-*` to `07-*`: Write/modification tests
+- `08-*` to `09-*`: Destructive delete tests
+
+This ensures read-only tests run before tests that modify or delete data.
 
 ### Template Structure
 

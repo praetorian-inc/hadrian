@@ -99,6 +99,14 @@ func detectHardcodedSecret(value string) bool {
 	return false
 }
 
+// AuthInfo contains full authentication details for a role
+type AuthInfo struct {
+	Method   string // bearer, api_key, basic
+	Location string // header, query (for api_key)
+	KeyName  string // Header name (e.g., X-API-Key) or query parameter name
+	Value    string // The actual auth value
+}
+
 // GetAuth builds HTTP authorization header for role
 func (c *AuthConfig) GetAuth(roleName string) (string, error) {
 	roleAuth, ok := c.Roles[roleName]
@@ -131,4 +139,41 @@ func (c *AuthConfig) GetAuth(roleName string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported auth method: %s", c.Method)
 	}
+}
+
+// GetAuthInfo returns full authentication info for role (method, location, key name, value)
+func (c *AuthConfig) GetAuthInfo(roleName string) (*AuthInfo, error) {
+	role, ok := c.Roles[roleName]
+	if !ok {
+		return nil, fmt.Errorf("role '%s' not found in auth config", roleName)
+	}
+
+	info := &AuthInfo{
+		Method:   c.Method,
+		Location: c.Location,
+		KeyName:  c.KeyName,
+	}
+
+	switch c.Method {
+	case "bearer":
+		if role.Token == "" {
+			return nil, fmt.Errorf("role '%s' has no bearer token", roleName)
+		}
+		info.Value = "Bearer " + role.Token
+	case "api_key":
+		if role.APIKey == "" {
+			return nil, fmt.Errorf("role '%s' has no API key", roleName)
+		}
+		info.Value = role.APIKey
+	case "basic":
+		if role.Username == "" || role.Password == "" {
+			return nil, fmt.Errorf("role '%s' missing basic auth credentials", roleName)
+		}
+		creds := base64.StdEncoding.EncodeToString([]byte(role.Username + ":" + role.Password))
+		info.Value = "Basic " + creds
+	default:
+		return nil, fmt.Errorf("unsupported auth method: %s", c.Method)
+	}
+
+	return info, nil
 }

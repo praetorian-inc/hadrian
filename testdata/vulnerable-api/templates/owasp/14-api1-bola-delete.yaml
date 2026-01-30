@@ -1,0 +1,42 @@
+# Template: BOLA (Broken Object Level Authorization) Delete Test
+# Tests DELETE endpoints for unauthorized cross-user resource deletion
+# This is the most severe form of BOLA - attacker deleting victim's data
+id: 14-api1-bola-delete
+
+info:
+  name: "BOLA - Cross-User Resource Deletion"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "delete"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select DELETE endpoints with path parameters that require auth
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["DELETE"]
+
+# Attacker tries to delete victim's resources
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to delete victim's resource using attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+
+# Detection: If DELETE succeeds, attacker can delete victim's resources
+# This is critical as it could lead to data loss
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_deleted_victim_resource"

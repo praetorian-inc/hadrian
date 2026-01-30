@@ -1,0 +1,72 @@
+# Template: BOLA Profile Mutation Test
+# Multi-phase test that verifies an attacker can modify another user's profile
+# Phase 1 (setup): Victim reads their profile to get current value
+# Phase 2 (attack): Attacker modifies victim's profile
+# Phase 3 (verify): Victim reads profile again to confirm the change
+id: 07-api1-bola-profile-mutation
+
+info:
+  name: "BOLA - Profile Modification (Mutation Test)"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "mutation"]
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+# Target profile endpoints that support modification
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["PUT", "PATCH"]
+  path_pattern: ".*/profiles/.*"
+
+# Attacker tries to modify victim's profile
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Three-phase mutation test to prove the vulnerability
+# NOTE: Mutation templates require hardcoded paths (cannot use {{operation.path}})
+# This targets the admin's profile (ID 1) with a known-vulnerable endpoint
+test_phases:
+  # Phase 1: Victim reads their own profile to establish baseline
+  setup:
+    path: "/api/profiles/1"
+    operation: "read"
+    auth: "victim"
+    store_response_field: "full_name"
+    expected_status: 200
+
+  # Phase 2: Attacker attempts to modify victim's profile
+  attack:
+    path: "/api/profiles/1"
+    operation: "update"
+    auth: "attacker"
+    data:
+      full_name: "attacker_modified_this"
+    expected_status: 200
+
+  # Phase 3: Victim reads their profile again to verify the unauthorized change
+  verify:
+    path: "/api/profiles/1"
+    operation: "read"
+    auth: "victim"
+    check_field: "full_name"
+    expected_value: "attacker_modified_this"
+    expected_status: 200
+
+# Detection: Confirm attacker successfully modified victim's data
+# All three phases must succeed and the value must change
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "full_name"
+      exists: true
+  vulnerability_pattern: "attacker_modified_victim_profile"
+  conditions:
+    - attack_phase_status: [200]
+      verify_phase_status: [200]
+      verify_field_changed: true

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -350,6 +351,11 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 		return nil, err
 	}
 
+	// Sort templates by file path for deterministic execution order
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].FilePath < result[j].FilePath
+	})
+
 	return result, nil
 }
 
@@ -423,7 +429,7 @@ func executeTemplate(
 			}
 		}
 
-		result, err := executor.Execute(ctx, tmpl, op, "", variables)
+		result, err := executor.Execute(ctx, tmpl, op, nil, variables)
 		if err != nil {
 			return nil, err
 		}
@@ -465,14 +471,21 @@ func executeTemplate(
 				continue
 			}
 
-			// Get auth header for attacker
-			var authHeader string
+			// Build auth info for attacker
+			var authInfo *templates.AuthInfo
 			if authCfg != nil {
-				var err error
-				authHeader, err = authCfg.GetAuth(attackerRole.Name)
+				authValue, err := authCfg.GetAuth(attackerRole.Name)
 				if err != nil {
 					// Role may not have auth configured
 					continue
+				}
+
+				// Create AuthInfo from auth config
+				authInfo = &templates.AuthInfo{
+					Method:   authCfg.Method,
+					Location: authCfg.Location,
+					KeyName:  authCfg.KeyName,
+					Value:    authValue,
 				}
 			}
 
@@ -491,7 +504,7 @@ func executeTemplate(
 			}
 
 			// Execute template
-			result, err := executor.Execute(ctx, tmpl, op, authHeader, variables)
+			result, err := executor.Execute(ctx, tmpl, op, authInfo, variables)
 			if err != nil {
 				return nil, err
 			}
@@ -547,14 +560,14 @@ func executeMutationTemplate(
 				continue
 			}
 
-			// Build auth tokens map for both roles
-			authTokens := make(map[string]string)
+			// Build auth info map for both roles
+			authInfos := make(map[string]*auth.AuthInfo)
 			if authCfg != nil {
-				if token, err := authCfg.GetAuth(attackerRole.Name); err == nil {
-					authTokens["attacker"] = token
+				if info, err := authCfg.GetAuthInfo(attackerRole.Name); err == nil {
+					authInfos["attacker"] = info
 				}
-				if token, err := authCfg.GetAuth(victimRole.Name); err == nil {
-					authTokens["victim"] = token
+				if info, err := authCfg.GetAuthInfo(victimRole.Name); err == nil {
+					authInfos["victim"] = info
 				}
 			}
 
@@ -568,7 +581,7 @@ func executeMutationTemplate(
 				op.Method,
 				attackerRole.Name,
 				victimRole.Name,
-				authTokens,
+				authInfos,
 				baseURL,
 			)
 			if err != nil {

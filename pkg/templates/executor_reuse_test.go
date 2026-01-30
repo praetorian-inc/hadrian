@@ -69,7 +69,7 @@ func TestExecutor_ReuseDoesNotClearRequestIDs(t *testing.T) {
 	}
 
 	// Execute first template
-	result1, err := executor.Execute(context.Background(), tmpl1, operation, "", nil)
+	result1, err := executor.Execute(context.Background(), tmpl1, operation, nil, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, result1.RequestIDs, "first execution should have request IDs")
 
@@ -79,7 +79,7 @@ func TestExecutor_ReuseDoesNotClearRequestIDs(t *testing.T) {
 	t.Logf("First execution request IDs: %v (ptr: %p)", result1.RequestIDs, &result1.RequestIDs[0])
 
 	// Execute second template with SAME executor
-	result2, err := executor.Execute(context.Background(), tmpl2, operation, "", nil)
+	result2, err := executor.Execute(context.Background(), tmpl2, operation, nil, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, result2.RequestIDs, "second execution should have request IDs")
 	t.Logf("Second execution request IDs: %v (ptr: %p)", result2.RequestIDs, &result2.RequestIDs[0])

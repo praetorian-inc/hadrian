@@ -1,0 +1,69 @@
+# Hadrian roles configuration for vulnerable-api
+# Defines permissions for each role using <action>:<object>:<scope> format
+
+roles:
+  - name: admin
+    level: 100          # Highest privilege
+    permissions:
+      - "*:*:all"           # Full access to everything
+
+  - name: user1
+    level: 10           # Normal user privilege
+    permissions:
+      - "read:users:own"      # Can read own user
+      - "write:users:own"     # Can update own user
+      - "read:profiles:own"   # Can read own profile
+      - "write:profiles:own"  # Can update own profile
+      - "read:orders:own"     # Can read own orders
+      - "write:orders:own"    # Can create/update own orders
+      - "delete:orders:own"   # Can delete own orders
+      - "read:documents:own"  # Can read own documents
+      - "write:documents:own" # Can create/update own documents
+      - "delete:documents:own" # Can delete own documents
+      - "read:documents:public" # Can read public documents
+
+  - name: user2
+    level: 10           # Normal user privilege
+    permissions:
+      - "read:users:own"
+      - "write:users:own"
+      - "read:profiles:own"
+      - "write:profiles:own"
+      - "read:orders:own"
+      - "write:orders:own"
+      - "delete:orders:own"
+      - "read:documents:own"
+      - "write:documents:own"
+      - "delete:documents:own"
+      - "read:documents:public"
+
+  - name: anonymous
+    level: 0            # Lowest privilege (unauthenticated)
+    permissions:
+      - "read:documents:public" # Can only read public documents
+
+# Valid objects in this API
+objects:
+  - users
+  - profiles
+  - orders
+  - documents
+  - admin
+
+# Endpoint to object mapping for BOLA detection
+endpoints:
+  - path: /api/users/{id}
+    object: users
+    owner_field: id
+
+  - path: /api/profiles/{id}
+    object: profiles
+    owner_field: user_id
+
+  - path: /api/orders/{id}
+    object: orders
+    owner_field: user_id
+
+  - path: /api/documents/{id}
+    object: documents
+    owner_field: user_id

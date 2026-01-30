@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
@@ -73,7 +74,7 @@ func (e *MutationExecutor) ExecuteMutation(
 	operation string,
 	attacker string,
 	victim string,
-	authTokens map[string]string,
+	authInfos map[string]*auth.AuthInfo,
 	baseURL string,
 ) (*MutationResult, error) {
 	result := &MutationResult{
@@ -88,7 +89,7 @@ func (e *MutationExecutor) ExecuteMutation(
 	// Phase 1: Setup (create resource)
 	if tmpl.TestPhases.Setup != nil {
 		e.trackedHTTPClient.ClearRequestIDs()
-		setupResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Setup, tmpl.TestPhases.Setup.Auth, authTokens)
+		setupResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Setup, tmpl.TestPhases.Setup.Auth, authInfos)
 		if err != nil {
 			return result, fmt.Errorf("setup phase failed: %w", err)
 		}
@@ -108,7 +109,7 @@ func (e *MutationExecutor) ExecuteMutation(
 	// Phase 2: Attack (try to access with different role)
 	if tmpl.TestPhases.Attack != nil {
 		e.trackedHTTPClient.ClearRequestIDs()
-		attackResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Attack, tmpl.TestPhases.Attack.Auth, authTokens)
+		attackResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Attack, tmpl.TestPhases.Attack.Auth, authInfos)
 		if err != nil {
 			return result, fmt.Errorf("attack phase failed: %w", err)
 		}
@@ -124,7 +125,7 @@ func (e *MutationExecutor) ExecuteMutation(
 	// Phase 3: Verify (confirm resource still accessible by victim)
 	if tmpl.TestPhases.Verify != nil {
 		e.trackedHTTPClient.ClearRequestIDs()
-		verifyResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Verify, tmpl.TestPhases.Verify.Auth, authTokens)
+		verifyResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Verify, tmpl.TestPhases.Verify.Auth, authInfos)
 		if err != nil {
 			return result, fmt.Errorf("verify phase failed: %w", err)
 		}
@@ -155,7 +156,7 @@ func (e *MutationExecutor) executePhase(
 	baseURL string,
 	phase *templates.Phase,
 	authUser string,
-	authTokens map[string]string,
+	authInfos map[string]*auth.AuthInfo,
 ) (*model.HTTPResponse, error) {
 	if phase == nil {
 		return nil, nil
@@ -193,11 +194,20 @@ func (e *MutationExecutor) executePhase(
 		return nil, err
 	}
 
-	// Add auth header for the correct user
-	// Note: authTokens values already include the scheme prefix (e.g., "Bearer " or "Basic ")
-	// from auth.AuthConfig.GetAuth(), so we don't add it here
-	if token, ok := authTokens[authUser]; ok && token != "" {
-		req.Header.Set("Authorization", token)
+	// Add auth based on method
+	if authInfo, ok := authInfos[authUser]; ok && authInfo != nil {
+		switch authInfo.Method {
+		case "bearer", "basic":
+			req.Header.Set("Authorization", authInfo.Value)
+		case "api_key":
+			if authInfo.Location == "header" {
+				req.Header.Set(authInfo.KeyName, authInfo.Value)
+			} else if authInfo.Location == "query" {
+				q := req.URL.Query()
+				q.Set(authInfo.KeyName, authInfo.Value)
+				req.URL.RawQuery = q.Encode()
+			}
+		}
 	}
 
 	// Execute request with tracked client

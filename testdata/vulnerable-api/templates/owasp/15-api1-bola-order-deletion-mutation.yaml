@@ -1,0 +1,65 @@
+# Template: BOLA Order Deletion Mutation Test
+# Multi-phase test that verifies an attacker can delete another user's orders
+# Phase 1 (setup): Verify victim's order exists
+# Phase 2 (attack): Attacker deletes victim's order
+# Phase 3 (verify): Confirm order is deleted (404 response)
+id: 15-api1-bola-order-deletion-mutation
+
+info:
+  name: "BOLA - Order Deletion (Mutation Test)"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "mutation", "delete"]
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+# Target order endpoints that support deletion
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["DELETE"]
+  path_pattern: ".*/orders/.*"
+
+# Attacker tries to delete victim's order
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Three-phase mutation test to prove deletion vulnerability
+# NOTE: Mutation templates require hardcoded paths (cannot use {{operation.path}})
+# This targets the admin's order (ID 1) with a known-vulnerable endpoint
+test_phases:
+  # Phase 1: Verify victim's order exists before deletion
+  setup:
+    path: "/api/orders/1"
+    operation: "read"
+    auth: "victim"
+    store_response_field: "id"
+    expected_status: 200
+
+  # Phase 2: Attacker attempts to delete victim's order
+  attack:
+    path: "/api/orders/1"
+    operation: "delete"
+    auth: "attacker"
+    expected_status: 204
+
+  # Phase 3: Verify order is actually deleted (should return 404)
+  verify:
+    path: "/api/orders/1"
+    operation: "read"
+    auth: "victim"
+    expected_status: 404
+
+# Detection: Confirm attacker successfully deleted victim's order
+# Attack phase succeeds (200) and verify phase confirms deletion (404)
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_deleted_victim_order"
+  resource_deleted: true
+  conditions:
+    - attack_phase_status: [200, 204]
+      verify_phase_status: [404]

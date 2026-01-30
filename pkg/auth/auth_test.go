@@ -284,6 +284,129 @@ func TestGetAuth_UnsupportedMethod(t *testing.T) {
 	}
 }
 
+// NEW TEST: GetAuthInfo returns full authentication details
+func TestGetAuthInfo_Bearer(t *testing.T) {
+	config := &AuthConfig{
+		Method: "bearer",
+		Roles: map[string]*RoleAuth{
+			"admin": {Token: "test-token-123"},
+		},
+	}
+
+	info, err := config.GetAuthInfo("admin")
+	if err != nil {
+		t.Fatalf("GetAuthInfo failed: %v", err)
+	}
+
+	if info.Method != "bearer" {
+		t.Errorf("Expected method 'bearer', got '%s'", info.Method)
+	}
+	if info.Value != "Bearer test-token-123" {
+		t.Errorf("Expected 'Bearer test-token-123', got '%s'", info.Value)
+	}
+	if info.Location != "" {
+		t.Errorf("Expected empty location for bearer, got '%s'", info.Location)
+	}
+	if info.KeyName != "" {
+		t.Errorf("Expected empty key name for bearer, got '%s'", info.KeyName)
+	}
+}
+
+func TestGetAuthInfo_APIKey_Header(t *testing.T) {
+	config := &AuthConfig{
+		Method:   "api_key",
+		Location: "header",
+		KeyName:  "X-API-Key",
+		Roles: map[string]*RoleAuth{
+			"service": {APIKey: "api-key-456"},
+		},
+	}
+
+	info, err := config.GetAuthInfo("service")
+	if err != nil {
+		t.Fatalf("GetAuthInfo failed: %v", err)
+	}
+
+	if info.Method != "api_key" {
+		t.Errorf("Expected method 'api_key', got '%s'", info.Method)
+	}
+	if info.Location != "header" {
+		t.Errorf("Expected location 'header', got '%s'", info.Location)
+	}
+	if info.KeyName != "X-API-Key" {
+		t.Errorf("Expected key name 'X-API-Key', got '%s'", info.KeyName)
+	}
+	if info.Value != "api-key-456" {
+		t.Errorf("Expected 'api-key-456', got '%s'", info.Value)
+	}
+}
+
+func TestGetAuthInfo_APIKey_Query(t *testing.T) {
+	config := &AuthConfig{
+		Method:   "api_key",
+		Location: "query",
+		KeyName:  "api_key",
+		Roles: map[string]*RoleAuth{
+			"service": {APIKey: "query-key-789"},
+		},
+	}
+
+	info, err := config.GetAuthInfo("service")
+	if err != nil {
+		t.Fatalf("GetAuthInfo failed: %v", err)
+	}
+
+	if info.Method != "api_key" {
+		t.Errorf("Expected method 'api_key', got '%s'", info.Method)
+	}
+	if info.Location != "query" {
+		t.Errorf("Expected location 'query', got '%s'", info.Location)
+	}
+	if info.KeyName != "api_key" {
+		t.Errorf("Expected key name 'api_key', got '%s'", info.KeyName)
+	}
+	if info.Value != "query-key-789" {
+		t.Errorf("Expected 'query-key-789', got '%s'", info.Value)
+	}
+}
+
+func TestGetAuthInfo_Basic(t *testing.T) {
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"user": {
+				Username: "testuser",
+				Password: "testpass",
+			},
+		},
+	}
+
+	info, err := config.GetAuthInfo("user")
+	if err != nil {
+		t.Fatalf("GetAuthInfo failed: %v", err)
+	}
+
+	if info.Method != "basic" {
+		t.Errorf("Expected method 'basic', got '%s'", info.Method)
+	}
+	// Verify Basic auth format
+	if !isValidBasicAuth(info.Value, "testuser", "testpass") {
+		t.Errorf("Invalid Basic auth value: %s", info.Value)
+	}
+}
+
+func TestGetAuthInfo_RoleNotFound(t *testing.T) {
+	config := &AuthConfig{
+		Method: "bearer",
+		Roles:  map[string]*RoleAuth{},
+	}
+
+	_, err := config.GetAuthInfo("nonexistent")
+	if err == nil {
+		t.Fatal("Expected error for nonexistent role")
+	}
+}
+
 // Helper function to validate Basic auth header
 func isValidBasicAuth(header, username, password string) bool {
 	expectedCreds := username + ":" + password

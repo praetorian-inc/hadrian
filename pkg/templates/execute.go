@@ -52,6 +52,14 @@ type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// AuthInfo contains authentication configuration for template execution
+type AuthInfo struct {
+	Method   string // bearer, api_key, basic
+	Location string // header, query (for api_key)
+	KeyName  string // Header name (e.g., X-API-Key) or query parameter name
+	Value    string // The actual auth value (token, API key, or Basic credentials)
+}
+
 // Executor runs compiled templates against operations
 type Executor struct {
 	httpClient HTTPClient
@@ -72,7 +80,7 @@ func (e *Executor) Execute(
 	ctx context.Context,
 	tmpl *CompiledTemplate,
 	operation *model.Operation,
-	authHeader string,
+	authInfo *AuthInfo,
 	variables map[string]string,
 ) (*ExecutionResult, error) {
 	// Clear request IDs for this execution
@@ -152,7 +160,7 @@ func (e *Executor) Execute(
 
 			for retry := 0; retry <= maxRetries; retry++ {
 				// Build request (must rebuild for each attempt)
-				req, err := buildRequest(ctx, test, operation, authHeader, variables)
+				req, err := buildRequest(ctx, test, operation, authInfo, variables)
 				if err != nil {
 					return nil, fmt.Errorf("failed to build request: %w", err)
 				}
@@ -334,7 +342,7 @@ func buildRequest(
 	ctx context.Context,
 	test HTTPTest,
 	operation *model.Operation,
-	authHeader string,
+	authInfo *AuthInfo,
 	variables map[string]string,
 ) (*http.Request, error) {
 	// Substitute variables in path
@@ -382,8 +390,24 @@ func buildRequest(
 
 	// Add headers
 	for key, value := range test.Headers {
-		if value == "Bearer {{attacker_token}}" && authHeader != "" {
-			req.Header.Set("Authorization", authHeader)
+		if value == "Bearer {{attacker_token}}" && authInfo != nil && authInfo.Value != "" {
+			// Handle authentication based on method
+			switch authInfo.Method {
+			case "bearer", "basic":
+				// Bearer and Basic both use Authorization header
+				req.Header.Set("Authorization", authInfo.Value)
+			case "api_key":
+				// API key auth: check location
+				if authInfo.Location == "header" {
+					// Set custom header (e.g., X-API-Key)
+					req.Header.Set(authInfo.KeyName, authInfo.Value)
+				} else if authInfo.Location == "query" {
+					// Add as query parameter
+					q := req.URL.Query()
+					q.Set(authInfo.KeyName, authInfo.Value)
+					req.URL.RawQuery = q.Encode()
+				}
+			}
 		} else {
 			req.Header.Set(key, value)
 		}

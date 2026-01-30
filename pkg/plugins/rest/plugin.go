@@ -3,6 +3,7 @@ package rest
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -71,6 +72,16 @@ func (p *RESTPlugin) Parse(input []byte) (*model.APISpec, error) {
 			spec.Operations = append(spec.Operations, op)
 		}
 	}
+
+	// Sort operations by path (primary) and method (secondary) for deterministic ordering
+	// Path is primary sort - ensures operations for /api/documents come before /api/orders
+	// Method is secondary sort - ensures deterministic ordering within each path
+	sort.Slice(spec.Operations, func(i, j int) bool {
+		if spec.Operations[i].Path != spec.Operations[j].Path {
+			return spec.Operations[i].Path < spec.Operations[j].Path
+		}
+		return spec.Operations[i].Method < spec.Operations[j].Method
+	})
 
 	return spec, nil
 }
