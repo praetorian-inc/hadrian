@@ -1,0 +1,33 @@
+id: ratelimit-detect-no-limit
+
+info:
+  name: "Missing Rate Limit - Unprotected Endpoint"
+  category: "API4:2023"
+  severity: "MEDIUM"
+  requires_llm_triage: false
+  test_pattern: "rate_limit"
+
+endpoint_selector:
+  requires_auth: false
+  methods: ["GET"]
+  path_pattern: ".*/basic/.*"
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: ""
+
+http:
+  - method: "GET"
+    path: "{{operation.path}}"
+    repeat: 10
+    rate_limit:
+      threshold: 1
+      status_codes: [429, 503]
+    matchers:
+      - type: status
+        status: [200]
+
+detection:
+  success_indicators: []
+  vulnerability_pattern: "rate_limit"
+  conditions: []
