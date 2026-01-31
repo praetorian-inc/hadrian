@@ -4,7 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
+
+// validRateLimitDefaults returns valid rate limit configuration for tests
+func validRateLimitDefaults() (float64, string, time.Duration, int, []int) {
+	return 5.0, "exponential", 60 * time.Second, 5, []int{429, 503}
+}
 
 func TestValidate_Success(t *testing.T) {
 	// Create temporary test files
@@ -20,10 +26,15 @@ func TestValidate_Success(t *testing.T) {
 	}
 
 	config := &Config{
-		API:         apiSpec,
-		Roles:       rolesFile,
-		Concurrency: 5,
-		Output:      "terminal",
+		API:                  apiSpec,
+		Roles:                rolesFile,
+		Concurrency:          5,
+		Output:               "terminal",
+		RateLimit:            5.0,
+		RateLimitBackoff:     "exponential",
+		RateLimitMaxWait:     60 * time.Second,
+		RateLimitMaxRetries:  5,
+		RateLimitStatusCodes: []int{429, 503},
 	}
 
 	err := config.Validate()
@@ -80,11 +91,17 @@ func TestValidate_ConcurrencyTooLow(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rate, backoff, maxWait, maxRetries, statusCodes := validRateLimitDefaults()
 	config := &Config{
-		API:          apiSpec,
-		Roles:        rolesFile,
-		Concurrency:  0,
-		Output: "terminal",
+		API:                  apiSpec,
+		Roles:                rolesFile,
+		Concurrency:          0,
+		Output:               "terminal",
+		RateLimit:            rate,
+		RateLimitBackoff:     backoff,
+		RateLimitMaxWait:     maxWait,
+		RateLimitMaxRetries:  maxRetries,
+		RateLimitStatusCodes: statusCodes,
 	}
 
 	err := config.Validate()
@@ -106,11 +123,17 @@ func TestValidate_ConcurrencyTooHigh(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rate, backoff, maxWait, maxRetries, statusCodes := validRateLimitDefaults()
 	config := &Config{
-		API:          apiSpec,
-		Roles:        rolesFile,
-		Concurrency:  11, // DoS check: max is 10
-		Output: "terminal",
+		API:                  apiSpec,
+		Roles:                rolesFile,
+		Concurrency:          11, // DoS check: max is 10
+		Output:               "terminal",
+		RateLimit:            rate,
+		RateLimitBackoff:     backoff,
+		RateLimitMaxWait:     maxWait,
+		RateLimitMaxRetries:  maxRetries,
+		RateLimitStatusCodes: statusCodes,
 	}
 
 	err := config.Validate()
@@ -132,12 +155,18 @@ func TestValidate_InvalidProxy(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rate, backoff, maxWait, maxRetries, statusCodes := validRateLimitDefaults()
 	config := &Config{
-		API:          apiSpec,
-		Roles:        rolesFile,
-		Proxy:        "not-a-valid-url",
-		Concurrency:  5,
-		Output: "terminal",
+		API:                  apiSpec,
+		Roles:                rolesFile,
+		Proxy:                "not-a-valid-url",
+		Concurrency:          5,
+		Output:               "terminal",
+		RateLimit:            rate,
+		RateLimitBackoff:     backoff,
+		RateLimitMaxWait:     maxWait,
+		RateLimitMaxRetries:  maxRetries,
+		RateLimitStatusCodes: statusCodes,
 	}
 
 	err := config.Validate()
@@ -159,11 +188,17 @@ func TestValidate_InvalidOutputFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	rate, backoff, maxWait, maxRetries, statusCodes := validRateLimitDefaults()
 	config := &Config{
-		API:         apiSpec,
-		Roles:       rolesFile,
-		Concurrency: 5,
-		Output:      "xml", // Invalid format
+		API:                  apiSpec,
+		Roles:                rolesFile,
+		Concurrency:          5,
+		Output:               "xml", // Invalid format
+		RateLimit:            rate,
+		RateLimitBackoff:     backoff,
+		RateLimitMaxWait:     maxWait,
+		RateLimitMaxRetries:  maxRetries,
+		RateLimitStatusCodes: statusCodes,
 	}
 
 	err := config.Validate()
