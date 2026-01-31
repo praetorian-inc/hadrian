@@ -1,0 +1,391 @@
+openapi: 3.0.0
+info:
+  title: Rate Limit Demo API
+  description: Demonstrates various rate limiting patterns for Hadrian testing
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /api/v1/basic/resource:
+    get:
+      summary: Baseline endpoint (no rate limit)
+      operationId: getBasicResource
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /api/v1/status-429/resource:
+    get:
+      summary: Returns 429 after limit exceeded
+      operationId: getStatus429Resource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/status-503/resource:
+    get:
+      summary: Returns 503 after limit exceeded
+      operationId: getStatus503Resource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '503':
+          description: Service temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/retry-seconds/resource:
+    get:
+      summary: Returns 429 with Retry-After header (seconds)
+      operationId: getRetrySecondsResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                example: 5
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/retry-date/resource:
+    get:
+      summary: Returns 429 with Retry-After header (HTTP-date)
+      operationId: getRetryDateResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            Retry-After:
+              description: HTTP-date format (RFC 1123)
+              schema:
+                type: string
+                example: "Fri, 31 Jan 2026 12:00:05 GMT"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/ratelimit-headers/resource:
+    get:
+      summary: Returns X-RateLimit-* headers
+      operationId: getRateLimitHeadersResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              schema:
+                type: integer
+                format: int64
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/body-plain/resource:
+    get:
+      summary: Returns plain text error
+      operationId: getBodyPlainResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "Too Many Requests"
+
+  /api/v1/body-json/resource:
+    get:
+      summary: Returns JSON error body
+      operationId: getBodyJsonResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/body-json-retry/resource:
+    get:
+      summary: Returns JSON error with retry_after field
+      operationId: getBodyJsonRetryResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponseWithRetry'
+
+  /api/v1/global/resource:
+    get:
+      summary: Global shared counter
+      operationId: getGlobalResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/global/other:
+    get:
+      summary: Global shared counter (same as /global/resource)
+      operationId: getGlobalOther
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/per-endpoint/one:
+    get:
+      summary: Per-endpoint counter (independent)
+      operationId: getPerEndpointOne
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/per-endpoint/two:
+    get:
+      summary: Per-endpoint counter (independent)
+      operationId: getPerEndpointTwo
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/per-ip/resource:
+    get:
+      summary: Rate limit per client IP
+      operationId: getPerIpResource
+      parameters:
+        - $ref: '#/components/parameters/LimitParam'
+        - $ref: '#/components/parameters/WindowParam'
+      responses:
+        '200':
+          description: Success (within limit)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponseWithIP'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    LimitParam:
+      name: limit
+      in: query
+      description: Maximum requests allowed
+      schema:
+        type: integer
+        default: 5
+        minimum: 1
+    WindowParam:
+      name: window
+      in: query
+      description: Time window in seconds
+      schema:
+        type: integer
+        default: 60
+        minimum: 1
+
+  schemas:
+    SuccessResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        endpoint:
+          type: string
+          example: "/api/v1/status-429/resource"
+
+    SuccessResponseWithIP:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "ok"
+        endpoint:
+          type: string
+          example: "/api/v1/per-ip/resource"
+        client_ip:
+          type: string
+          example: "192.168.1.1"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "rate_limit_exceeded"
+
+    ErrorResponseWithRetry:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "rate_limit_exceeded"
+        retry_after:
+          type: integer
+          example: 5
+        message:
+          type: string
+          example: "Try again in 5 seconds"
