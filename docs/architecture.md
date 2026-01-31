@@ -156,7 +156,12 @@ Hadrian is a security testing framework designed to identify OWASP API Top 10 vu
 hadrian-api-tester/
 ├── cmd/hadrian/main.go      # CLI entry point
 ├── pkg/
-│   ├── runner/              # Orchestration & test execution loop
+│   ├── runner/              # Orchestration, rate limiting, test execution
+│   │   ├── run.go           # CLI commands and main loop
+│   │   ├── ratelimit.go     # Rate limiter configuration
+│   │   ├── ratelimit_client.go  # HTTP client with reactive backoff
+│   │   ├── execution.go     # Template execution logic
+│   │   └── ...
 │   ├── model/               # Data structures (Operation, Finding)
 │   ├── templates/           # Template parsing, compilation, execution
 │   ├── auth/                # Authentication handling
@@ -252,7 +257,14 @@ Hadrian includes templates for OWASP API Top 10 vulnerabilities:
 
 - **Production URL Blocking**: Requires `--allow-production` flag
 - **Internal IP Blocking**: Requires `--allow-internal` flag
-- **Rate Limiting**: Default 5 req/s, max 10 concurrent requests
+- **Adaptive Rate Limiting**:
+  - Proactive: Limits requests to configured rate (default 5 req/s)
+  - Reactive: Detects 429/503 responses and implements backoff
+  - Exponential backoff: 1s → 2s → 4s → 8s... (capped at max)
+  - Fixed backoff: Constant wait between retries
+  - Honors `Retry-After` header from server
+  - Max retries: 5 (configurable)
+- **Concurrency Control**: Maximum 10 concurrent requests
 - **YAML Bomb Protection**: 1MB size limit, 20-depth limit
 - **TLS 1.3 Enforcement**: No legacy TLS
 - **Credential Validation**: Warns on insecure configurations

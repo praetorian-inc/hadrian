@@ -11,6 +11,7 @@ Hadrian is a security testing framework for REST APIs that tests for OWASP API v
 - **Template-Driven**: YAML templates for customizable security tests
 - **Multiple Output Formats**: Terminal, JSON, and Markdown reports
 - **Production Safety**: Built-in safeguards against testing production systems
+- **Adaptive Rate Limiting**: Proactive request throttling with reactive backoff on 429/503 responses
 - **Proxy Support**: Route traffic through Burp Suite or other proxies
 - **LLM Triage**: Optional AI-powered finding analysis (Anthropic, OpenAI, Ollama)
 
@@ -194,6 +195,10 @@ hadrian test [flags]
 - `--insecure` - Skip TLS verification (use with proxies)
 - `--concurrency <n>` - Concurrent requests (default: 1, max: 10)
 - `--rate-limit <n>` - Global rate limit in req/s (default: 5.0)
+- `--rate-limit-backoff <type>` - Backoff type for rate limit retries: exponential, fixed (default: exponential)
+- `--rate-limit-max-wait <duration>` - Maximum backoff wait time (default: 60s)
+- `--rate-limit-max-retries <n>` - Maximum retry attempts on rate limit response (default: 5)
+- `--rate-limit-status-codes <codes>` - Status codes that trigger rate limit retry (default: 429,503)
 - `--timeout <n>` - Request timeout in seconds (default: 30)
 - `--allow-production` - Allow testing production URLs
 - `--allow-internal` - Allow testing internal/private IP addresses
@@ -364,9 +369,53 @@ go test ./pkg/runner/...
 ## Security Considerations
 
 - **Production Safety**: By default, Hadrian blocks testing against production URLs and internal IPs
-- **Rate Limiting**: Default rate limit of 5 req/s prevents overwhelming target systems
+- **Adaptive Rate Limiting**:
+  - Proactive: Limits outgoing requests to configured rate (default 5 req/s)
+  - Reactive: Automatically backs off when detecting rate limit responses (429/503)
+  - Supports exponential and fixed backoff strategies
+  - Honors server `Retry-After` headers when present
 - **Audit Logging**: All requests are logged for compliance and debugging
 - **Proxy Support**: Use `--proxy` with Burp Suite for manual verification
+
+## Rate Limiting
+
+Hadrian includes comprehensive rate limiting to prevent overwhelming target APIs:
+
+### Proactive Rate Limiting
+
+Limits outgoing requests to a configured rate (default 5 requests/second):
+
+```bash
+# Set custom rate limit
+hadrian test --api api.yaml --roles roles.yaml --rate-limit 10.0
+```
+
+### Reactive Backoff
+
+Automatically detects rate limit responses and implements retry with backoff:
+
+```bash
+# Use fixed backoff (constant 5s wait)
+hadrian test --api api.yaml --roles roles.yaml --rate-limit-backoff fixed
+
+# Configure max retries and wait time
+hadrian test --api api.yaml --roles roles.yaml \
+  --rate-limit-max-retries 10 \
+  --rate-limit-max-wait 120s
+
+# Custom status codes for rate limit detection
+hadrian test --api api.yaml --roles roles.yaml \
+  --rate-limit-status-codes 429,503,529
+```
+
+### Backoff Strategies
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| **exponential** (default) | Wait doubles each retry: 1s, 2s, 4s, 8s... | Most APIs |
+| **fixed** | Constant wait time between retries | APIs with fixed rate windows |
+
+The backoff respects the server's `Retry-After` header when present, capping at the configured `--rate-limit-max-wait`.
 
 ## OWASP API Security Top 10 Coverage
 
