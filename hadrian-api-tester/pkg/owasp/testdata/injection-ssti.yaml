@@ -1,0 +1,38 @@
+id: injection-ssti
+info:
+  name: "Server-Side Template Injection (SSTI)"
+  category: "INJECTION"
+  severity: "HIGH"
+  requires_llm_triage: false
+  test_pattern: "injection"
+
+endpoint_selector:
+  has_query_params: true
+  has_body_params: true
+  methods: ["GET", "POST", "PUT", "PATCH"]
+
+role_selector:
+  attacker_permission_level: "any"
+
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      Content-Type: "{{operation.content_type}}"
+    body: "{{injected_body}}"
+    matchers:
+      - type: status
+        status: [200, 201, 500]
+      - type: word
+        words:
+          - "49"
+          - "TemplateSyntaxError"
+          - "TemplateError"
+        condition: or
+
+detection:
+  success_indicators:
+    - type: reflection
+      payload_executed: true
+  vulnerability_pattern: "template_injection_detected"
