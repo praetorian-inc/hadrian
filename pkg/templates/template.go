@@ -52,15 +52,16 @@ type TestPhases struct {
 }
 
 type Phase struct {
-	Path               string            `yaml:"path,omitempty"`                 // Endpoint path for this phase
-	Operation          string            `yaml:"operation"`                      // create, read, update, delete
-	Auth               string            `yaml:"auth"`                           // attacker, victim
-	Data               map[string]string `yaml:"data,omitempty"`                 // Request body data
-	StoreResponseField string            `yaml:"store_response_field,omitempty"` // Field to store
-	UseStoredField     string            `yaml:"use_stored_field,omitempty"`     // Use stored value
-	CheckField         string            `yaml:"check_field,omitempty"`          // Field to verify
-	ExpectedValue      string            `yaml:"expected_value,omitempty"`       // Expected value
-	ExpectedStatus     int               `yaml:"expected_status,omitempty"`
+	Path                string            `yaml:"path,omitempty"`                  // Endpoint path for this phase
+	Operation           string            `yaml:"operation"`                       // create, read, update, delete
+	Auth                string            `yaml:"auth"`                            // attacker, victim
+	Data                map[string]string `yaml:"data,omitempty"`                  // Request body data
+	StoreResponseField  string            `yaml:"store_response_field,omitempty"`  // Single field to store (backwards compat)
+	StoreResponseFields map[string]string `yaml:"store_response_fields,omitempty"` // Multiple fields: alias -> json_path
+	UseStoredField      string            `yaml:"use_stored_field,omitempty"`      // Use stored value
+	CheckField          string            `yaml:"check_field,omitempty"`           // Field to verify
+	ExpectedValue       string            `yaml:"expected_value,omitempty"`        // Expected value
+	ExpectedStatus      int               `yaml:"expected_status,omitempty"`
 }
 
 // RateLimit defines rate limiting detection criteria

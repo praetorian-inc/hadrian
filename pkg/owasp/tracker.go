@@ -37,3 +37,15 @@ func (t *Tracker) Clear() {
 	defer t.mu.Unlock()
 	t.resources = make(map[string]string)
 }
+
+// GetAllKeys returns all stored resource keys.
+// Used for substituting multiple placeholders in paths.
+func (t *Tracker) GetAllKeys() []string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	keys := make([]string, 0, len(t.resources))
+	for k := range t.resources {
+		keys = append(keys, k)
+	}
+	return keys
+}

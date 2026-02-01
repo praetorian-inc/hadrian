@@ -97,11 +97,26 @@ func (e *MutationExecutor) ExecuteMutation(
 		result.RequestIDs.Setup = e.trackedHTTPClient.GetRequestIDs()
 
 		// Store resource ID if needed - store by field name for later lookup
+		// Support both single field (backwards compat) and multiple fields
 		if tmpl.TestPhases.Setup.StoreResponseField != "" && setupResp != nil {
 			resourceID := extractField(setupResp.Body, tmpl.TestPhases.Setup.StoreResponseField)
 			if resourceID != "" {
 				result.ResourceID = resourceID
 				e.tracker.StoreResource(tmpl.TestPhases.Setup.StoreResponseField, resourceID)
+			}
+		}
+
+		// Store multiple fields if specified
+		if len(tmpl.TestPhases.Setup.StoreResponseFields) > 0 && setupResp != nil {
+			for alias, jsonPath := range tmpl.TestPhases.Setup.StoreResponseFields {
+				fieldValue := extractField(setupResp.Body, jsonPath)
+				if fieldValue != "" {
+					e.tracker.StoreResource(alias, fieldValue)
+					// If this is the first stored field and ResourceID is empty, use it
+					if result.ResourceID == "" {
+						result.ResourceID = fieldValue
+					}
+				}
 			}
 		}
 	}
@@ -172,11 +187,21 @@ func (e *MutationExecutor) executePhase(
 	}
 
 	// Substitute stored values into path
+	// Support backwards compatibility: if UseStoredField is set, use it
 	if phase.UseStoredField != "" {
 		storedValue := e.tracker.GetResource(phase.UseStoredField)
 		if storedValue != "" {
 			// Replace {fieldName} with stored value
 			path = strings.ReplaceAll(path, "{"+phase.UseStoredField+"}", storedValue)
+		}
+	}
+
+	// Also substitute ALL stored fields (supports multiple placeholders in path)
+	// This allows paths like "/api/{video_id}/comments/{comment_id}"
+	for _, alias := range e.tracker.GetAllKeys() {
+		storedValue := e.tracker.GetResource(alias)
+		if storedValue != "" {
+			path = strings.ReplaceAll(path, "{"+alias+"}", storedValue)
 		}
 	}
 

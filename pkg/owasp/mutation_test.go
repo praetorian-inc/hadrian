@@ -734,3 +734,173 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 	assert.Equal(t, "http://localhost:8080/api/v1/orders/order-456", client.requests[2].URL.String())
 	assert.Equal(t, "Bearer victim-token", client.requests[2].Header.Get("Authorization"))
 }
+
+// TestExecuteMutation_MultipleFieldsStorage tests storing multiple fields from setup response
+func TestExecuteMutation_MultipleFieldsStorage(t *testing.T) {
+	// Setup phase returns multiple fields: video_id and email
+	setupResp := newMockResponse(200, `{"video_id": "video123", "email": "user@example.com", "name": "Test User"}`)
+	attackResp := newMockResponse(200, `{"data": "accessed"}`)
+
+	client := &MockHTTPClient{
+		responses: []*http.Response{setupResp, attackResp},
+	}
+
+	executor := NewMutationExecutor(client)
+
+	tmpl := &templates.Template{
+		ID: "api3-bola-multi-field",
+		TestPhases: &templates.TestPhases{
+			Setup: &templates.Phase{
+				Path:      "/identity/api/v2/user/dashboard",
+				Operation: "read",
+				Auth:      "attacker",
+				StoreResponseFields: map[string]string{
+					"attacker_video_id": "video_id",  // Store as "attacker_video_id"
+					"attacker_email":    "email",     // Store as "attacker_email"
+				},
+				ExpectedStatus: 200,
+			},
+			Attack: &templates.Phase{
+				Path:           "/identity/api/v2/user/videos/{attacker_video_id}",
+				Operation:      "read",
+				Auth:           "attacker",
+				UseStoredField: "attacker_video_id",
+				Data: map[string]string{
+					"id": "{victim_video_id}", // Will be set in a second setup phase
+				},
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	result, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"read",
+		"attacker@example.com",
+		"victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"),
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	
+	// Verify multiple fields were stored
+	assert.Equal(t, "video123", executor.tracker.GetResource("attacker_video_id"))
+	assert.Equal(t, "user@example.com", executor.tracker.GetResource("attacker_email"))
+	
+	// Verify request used the substituted value
+	require.Len(t, client.requests, 2)
+	assert.Contains(t, client.requests[1].URL.Path, "/identity/api/v2/user/videos/video123")
+}
+
+// TestExecuteMutation_BackwardsCompatibility ensures single StoreResponseField still works
+func TestExecuteMutation_BackwardsCompatibility(t *testing.T) {
+	// This test verifies that existing templates using StoreResponseField continue to work
+	setupResp := newMockResponse(201, `{"id": "resource123"}`)
+	attackResp := newMockResponse(200, `{"data": "accessed"}`)
+
+	client := &MockHTTPClient{
+		responses: []*http.Response{setupResp, attackResp},
+	}
+
+	executor := NewMutationExecutor(client)
+
+	tmpl := &templates.Template{
+		ID: "backwards-compat-test",
+		TestPhases: &templates.TestPhases{
+			Setup: &templates.Phase{
+				Path:               "/api/v1/resources",
+				Operation:          "create",
+				Auth:               "victim",
+				StoreResponseField: "id", // OLD single-field approach
+			},
+			Attack: &templates.Phase{
+				Path:           "/api/v1/resources/{id}",
+				Operation:      "read",
+				Auth:           "attacker",
+				UseStoredField: "id", // OLD approach still works
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	result, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"create",
+		"attacker@example.com",
+		"victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"),
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "resource123", result.ResourceID)
+	assert.Equal(t, "resource123", executor.tracker.GetResource("id"))
+	
+	// Verify the attack request used the correct path
+	require.Len(t, client.requests, 2)
+	assert.Contains(t, client.requests[1].URL.Path, "/api/v1/resources/resource123")
+}
+
+// TestExecuteMutation_MixedFieldUsage tests using both single and multiple field storage
+func TestExecuteMutation_MixedFieldUsage(t *testing.T) {
+	// Test that we can use both StoreResponseField and StoreResponseFields in same template
+	setupResp := newMockResponse(200, `{"user_id": "u123", "video_id": "v456", "email": "test@example.com"}`)
+	attackResp := newMockResponse(200, `{"data": "accessed"}`)
+
+	client := &MockHTTPClient{
+		responses: []*http.Response{setupResp, attackResp},
+	}
+
+	executor := NewMutationExecutor(client)
+
+	tmpl := &templates.Template{
+		ID: "mixed-field-test",
+		TestPhases: &templates.TestPhases{
+			Setup: &templates.Phase{
+				Path:               "/api/users/me",
+				Operation:          "read",
+				Auth:               "attacker",
+				StoreResponseField: "user_id", // Store user_id with key "user_id"
+				StoreResponseFields: map[string]string{
+					"video_id": "video_id", // Also store video_id
+					"email":    "email",    // Also store email
+				},
+				ExpectedStatus: 200,
+			},
+			Attack: &templates.Phase{
+				Path:           "/api/users/{user_id}/videos/{video_id}",
+				Operation:      "read",
+				Auth:           "attacker",
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	result, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"read",
+		"attacker@example.com",
+		"victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"),
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	
+	// Verify all fields were stored
+	assert.Equal(t, "u123", executor.tracker.GetResource("user_id"))
+	assert.Equal(t, "v456", executor.tracker.GetResource("video_id"))
+	assert.Equal(t, "test@example.com", executor.tracker.GetResource("email"))
+	
+	// Verify ResourceID is set to the first stored field (from StoreResponseField)
+	assert.Equal(t, "u123", result.ResourceID)
+	
+	// Verify both placeholders were substituted in the attack path
+	require.Len(t, client.requests, 2)
+	assert.Contains(t, client.requests[1].URL.Path, "/api/users/u123/videos/v456")
+}
