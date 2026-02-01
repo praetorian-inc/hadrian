@@ -1,5 +1,9 @@
 package templates
 
+import (
+	"gopkg.in/yaml.v3"
+)
+
 // Template represents a parsed YAML test template
 type Template struct {
 	ID   string       `yaml:"id"`
@@ -45,10 +49,34 @@ type RoleSelector struct {
 	VictimPermissionLevel   string `yaml:"victim_permission_level"`
 }
 
+// SetupPhases supports both single phase and array of phases in YAML
+type SetupPhases []*Phase
+
+// UnmarshalYAML handles both single object and array syntax for backwards compatibility
+func (s *SetupPhases) UnmarshalYAML(value *yaml.Node) error {
+	// If it's a sequence (array), unmarshal as []*Phase
+	if value.Kind == yaml.SequenceNode {
+		var phases []*Phase
+		if err := value.Decode(&phases); err != nil {
+			return err
+		}
+		*s = phases
+		return nil
+	}
+
+	// If it's a mapping (single object), unmarshal as *Phase and wrap in slice
+	var phase Phase
+	if err := value.Decode(&phase); err != nil {
+		return err
+	}
+	*s = []*Phase{&phase}
+	return nil
+}
+
 type TestPhases struct {
-	Setup  *Phase `yaml:"setup"`
-	Attack *Phase `yaml:"attack"`
-	Verify *Phase `yaml:"verify"`
+	Setup  SetupPhases `yaml:"setup,omitempty"` // Now supports single or array
+	Attack *Phase      `yaml:"attack"`
+	Verify *Phase      `yaml:"verify"`
 }
 
 type Phase struct {
@@ -98,7 +126,7 @@ type HTTPTest struct {
 }
 
 type Matcher struct {
-	Type      string   `yaml:"type"`  // word, regex, status, size, dsl
+	Type      string   `yaml:"type"` // word, regex, status, size, dsl
 	Words     []string `yaml:"words,omitempty"`
 	Regex     []string `yaml:"regex,omitempty"`
 	Status    []int    `yaml:"status,omitempty"`

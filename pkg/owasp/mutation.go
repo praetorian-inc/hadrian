@@ -86,29 +86,40 @@ func (e *MutationExecutor) ExecuteMutation(
 		return result, fmt.Errorf("template has no test phases")
 	}
 
-	// Phase 1: Setup (create resource)
-	if tmpl.TestPhases.Setup != nil {
-		e.trackedHTTPClient.ClearRequestIDs()
-		setupResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Setup, tmpl.TestPhases.Setup.Auth, authInfos)
-		if err != nil {
-			return result, fmt.Errorf("setup phase failed: %w", err)
+	// Phase 1: Setup (create resource) - supports multiple setup phases
+	for i, setupPhase := range tmpl.TestPhases.Setup {
+		if setupPhase == nil {
+			continue
 		}
+
+		e.trackedHTTPClient.ClearRequestIDs()
+		setupResp, err := e.executePhase(ctx, baseURL, setupPhase, setupPhase.Auth, authInfos)
+		if err != nil {
+			return result, fmt.Errorf("setup phase %d failed: %w", i+1, err)
+		}
+
+		// For backwards compatibility, store last setup response
 		result.SetupResponse = setupResp
-		result.RequestIDs.Setup = e.trackedHTTPClient.GetRequestIDs()
+
+		// Append request IDs from this setup phase
+		result.RequestIDs.Setup = append(result.RequestIDs.Setup, e.trackedHTTPClient.GetRequestIDs()...)
 
 		// Store resource ID if needed - store by field name for later lookup
 		// Support both single field (backwards compat) and multiple fields
-		if tmpl.TestPhases.Setup.StoreResponseField != "" && setupResp != nil {
-			resourceID := extractField(setupResp.Body, tmpl.TestPhases.Setup.StoreResponseField)
+		if setupPhase.StoreResponseField != "" && setupResp != nil {
+			resourceID := extractField(setupResp.Body, setupPhase.StoreResponseField)
 			if resourceID != "" {
-				result.ResourceID = resourceID
-				e.tracker.StoreResource(tmpl.TestPhases.Setup.StoreResponseField, resourceID)
+				// Store in result if first setup phase with resource ID
+				if result.ResourceID == "" {
+					result.ResourceID = resourceID
+				}
+				e.tracker.StoreResource(setupPhase.StoreResponseField, resourceID)
 			}
 		}
 
 		// Store multiple fields if specified
-		if len(tmpl.TestPhases.Setup.StoreResponseFields) > 0 && setupResp != nil {
-			for alias, jsonPath := range tmpl.TestPhases.Setup.StoreResponseFields {
+		if len(setupPhase.StoreResponseFields) > 0 && setupResp != nil {
+			for alias, jsonPath := range setupPhase.StoreResponseFields {
 				fieldValue := extractField(setupResp.Body, jsonPath)
 				if fieldValue != "" {
 					e.tracker.StoreResource(alias, fieldValue)

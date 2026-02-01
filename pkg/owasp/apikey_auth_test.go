@@ -37,10 +37,12 @@ func TestAPIKeyAuth_UsesCustomHeader(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "test-apikey",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:      "/api/v1/data",
-				Operation: "read",
-				Auth:      "user",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:      "/api/v1/data",
+					Operation: "read",
+					Auth:      "user",
+				},
 			},
 		},
 	}
@@ -91,10 +93,12 @@ func TestAPIKeyAuth_InQueryParameter(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "test-apikey-query",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:      "/api/v1/data",
-				Operation: "read",
-				Auth:      "user",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:      "/api/v1/data",
+					Operation: "read",
+					Auth:      "user",
+				},
 			},
 		},
 	}
@@ -145,10 +149,12 @@ func TestBearerAuth_StillUsesAuthorizationHeader(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "test-bearer",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:      "/api/v1/data",
-				Operation: "read",
-				Auth:      "user",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:      "/api/v1/data",
+					Operation: "read",
+					Auth:      "user",
+				},
 			},
 		},
 	}
@@ -195,10 +201,12 @@ func TestBasicAuth_StillUsesAuthorizationHeader(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "test-basic",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:      "/api/v1/data",
-				Operation: "read",
-				Auth:      "user",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:      "/api/v1/data",
+					Operation: "read",
+					Auth:      "user",
+				},
 			},
 		},
 	}

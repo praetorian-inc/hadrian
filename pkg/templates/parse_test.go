@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestParse_ValidTemplate(t *testing.T) {
@@ -285,4 +286,77 @@ func TestContainsDangerousFunction_Safe(t *testing.T) {
 			assert.False(t, containsDangerousFunction(expr), "Should NOT detect dangerous function in: %s", expr)
 		})
 	}
+}
+
+func TestSetupPhases_UnmarshalYAML_SinglePhase(t *testing.T) {
+	// Test backwards compatibility: single setup phase (object syntax)
+	yamlData := `
+test_phases:
+  setup:
+    path: "/api/dashboard"
+    auth: "victim"
+    store_response_field: "video_id"
+  attack:
+    path: "/api/videos/{video_id}"
+    operation: "read"
+    auth: "attacker"
+`
+	var tmpl struct {
+		TestPhases *TestPhases `yaml:"test_phases"`
+	}
+
+	// Parse just the test_phases for direct testing
+	yamlBytes := []byte(yamlData)
+	err := yaml.Unmarshal(yamlBytes, &tmpl)
+	require.NoError(t, err)
+	require.NotNil(t, tmpl.TestPhases)
+
+	// Verify single setup phase is wrapped in a slice
+	require.Len(t, tmpl.TestPhases.Setup, 1)
+	assert.Equal(t, "/api/dashboard", tmpl.TestPhases.Setup[0].Path)
+	assert.Equal(t, "victim", tmpl.TestPhases.Setup[0].Auth)
+	assert.Equal(t, "video_id", tmpl.TestPhases.Setup[0].StoreResponseField)
+}
+
+func TestSetupPhases_UnmarshalYAML_MultiplePhases(t *testing.T) {
+	// Test new array syntax: multiple setup phases
+	yamlData := `
+test_phases:
+  setup:
+    - path: "/api/dashboard"
+      auth: "attacker"
+      store_response_fields:
+        attacker_video_id: "video_id"
+    - path: "/api/dashboard"
+      auth: "victim"
+      store_response_fields:
+        victim_video_id: "video_id"
+  attack:
+    path: "/api/videos/{attacker_video_id}"
+    operation: "update"
+    auth: "attacker"
+`
+	var tmpl struct {
+		TestPhases *TestPhases `yaml:"test_phases"`
+	}
+
+	yamlBytes := []byte(yamlData)
+	err := yaml.Unmarshal(yamlBytes, &tmpl)
+	require.NoError(t, err)
+	require.NotNil(t, tmpl.TestPhases)
+
+	// Verify multiple setup phases
+	require.Len(t, tmpl.TestPhases.Setup, 2)
+
+	// First setup phase
+	assert.Equal(t, "/api/dashboard", tmpl.TestPhases.Setup[0].Path)
+	assert.Equal(t, "attacker", tmpl.TestPhases.Setup[0].Auth)
+	require.NotNil(t, tmpl.TestPhases.Setup[0].StoreResponseFields)
+	assert.Equal(t, "video_id", tmpl.TestPhases.Setup[0].StoreResponseFields["attacker_video_id"])
+
+	// Second setup phase
+	assert.Equal(t, "/api/dashboard", tmpl.TestPhases.Setup[1].Path)
+	assert.Equal(t, "victim", tmpl.TestPhases.Setup[1].Auth)
+	require.NotNil(t, tmpl.TestPhases.Setup[1].StoreResponseFields)
+	assert.Equal(t, "video_id", tmpl.TestPhases.Setup[1].StoreResponseFields["victim_video_id"])
 }

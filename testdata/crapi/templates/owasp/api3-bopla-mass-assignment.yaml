@@ -1,7 +1,7 @@
 id: api3_bopla_mass_assignment
 
 info:
-  name: "BOPLA - Unauthorized Video Modification via Cross-User Write"
+  name: "BOPLA - Mass Assignment via ID Field Injection"
   category: "API3:2023"
   severity: "HIGH"
   author: "hadrian"
@@ -9,7 +9,7 @@ info:
   requires_llm_triage: true
   test_pattern: "mutation"
 
-# Role configuration: Lower-privileged user attempts to modify another user's objects
+# Role configuration: Lower-privileged user attempts to inject victim's resource ID
 role_selector:
   attacker_permission_level: "lower"
   victim_permission_level: "higher"
@@ -21,33 +21,46 @@ endpoint_selector:
   methods: ["PUT"]
   path_pattern: ".*/user/videos/.*"
 
-# Three-phase mutation test: setup -> attack -> verify
+# Multi-phase mutation test: setup (attacker) -> setup (victim) -> attack -> verify
 test_phases:
-  # Phase 1: Setup - Get victim's video_id and current video details
+  # Phase 1 & 2: Setup - Get both attacker's and victim's video_id
   setup:
-    path: "/identity/api/v2/user/dashboard"
-    operation: "read"
-    auth: "victim"
-    store_response_field: "video_id"
-    expected_status: 200
+    # Setup 1: Get attacker's video_id from their dashboard
+    - path: "/identity/api/v2/user/dashboard"
+      operation: "read"
+      auth: "attacker"
+      store_response_fields:
+        attacker_video_id: "video_id"
+      expected_status: 200
 
-  # Phase 2: Attack - Attacker attempts to modify victim's video using victim's video_id
+    # Setup 2: Get victim's video_id from their dashboard
+    - path: "/identity/api/v2/user/dashboard"
+      operation: "read"
+      auth: "victim"
+      store_response_fields:
+        victim_video_id: "video_id"
+      expected_status: 200
+
+  # Phase 3: Attack - PUT to attacker's video endpoint, but inject victim's video_id in body
+  # This tests whether the API improperly processes the 'id' field from the request body,
+  # allowing an attacker to modify a different video than the one in the URL path.
   attack:
-    path: "/identity/api/v2/user/videos/{video_id}"
+    path: "/identity/api/v2/user/videos/{attacker_video_id}"
     operation: "write"
     auth: "attacker"
-    use_stored_field: "video_id"
+    use_stored_field: "attacker_video_id"
     data:
+      id: "{victim_video_id}"
       videoName: "mass_assignment_exploit_test"
       conversion_params: "test_params"
     expected_status: 200
 
-  # Phase 3: Verify - Check if victim's video was modified
+  # Phase 4: Verify - Check if victim's video was modified (should NOT happen if API is secure)
   verify:
-    path: "/identity/api/v2/user/videos/{video_id}"
+    path: "/identity/api/v2/user/videos/{victim_video_id}"
     operation: "read"
     auth: "victim"
-    use_stored_field: "video_id"
+    use_stored_field: "victim_video_id"
     check_field: "videoName"
     expected_value: "mass_assignment_exploit_test"
     expected_status: 200
@@ -57,6 +70,8 @@ detection:
   # Vulnerability is confirmed when:
   # 1. Attack phase returns 200 (update accepted)
   # 2. Verify phase shows victim's video was modified (field matches injected value)
+  # This indicates the API processed the 'id' field from the request body instead of
+  # using only the resource ID from the URL path parameter.
   success_indicators:
     - type: "status_code"
       status_code: 200

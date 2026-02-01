@@ -83,12 +83,14 @@ func TestExecuteMutation_Success(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "api1-bola",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:               "/api/v1/resources",
-				Operation:          "create",
-				Auth:               "victim",
-				Data:               map[string]string{"name": "test"},
-				StoreResponseField: "id",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:               "/api/v1/resources",
+					Operation:          "create",
+					Auth:               "victim",
+					Data:               map[string]string{"name": "test"},
+					StoreResponseField: "id",
+				},
 			},
 			Attack: &templates.Phase{
 				Path:           "/api/v1/resources/{id}",
@@ -141,12 +143,14 @@ func TestExecuteMutation_Secure(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "api1-bola",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:               "/api/v1/resources",
-				Operation:          "create",
-				Auth:               "victim",
-				Data:               map[string]string{"name": "test"},
-				StoreResponseField: "id",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:               "/api/v1/resources",
+					Operation:          "create",
+					Auth:               "victim",
+					Data:               map[string]string{"name": "test"},
+					StoreResponseField: "id",
+				},
 			},
 			Attack: &templates.Phase{
 				Path:           "/api/v1/resources/{id}",
@@ -224,11 +228,11 @@ func TestExtractField(t *testing.T) {
 
 func TestMatchesDetectionConditions(t *testing.T) {
 	tests := []struct {
-		name      string
-		phase     *templates.Phase
+		name       string
+		phase      *templates.Phase
 		statusCode int
-		body      string
-		expected  bool
+		body       string
+		expected   bool
 	}{
 		{
 			name: "status matches",
@@ -318,11 +322,13 @@ func TestExecuteMutation_StoresResourceID(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "api1-bola",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:               "/api/v1/resources",
-				Operation:          "create",
-				Auth:               "victim",
-				StoreResponseField: "id",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:               "/api/v1/resources",
+					Operation:          "create",
+					Auth:               "victim",
+					StoreResponseField: "id",
+				},
 			},
 			Attack: &templates.Phase{
 				Path:           "/api/v1/resources/{id}",
@@ -666,12 +672,14 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "api1-bola-orders",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:               "/api/v1/orders",
-				Operation:          "create",
-				Auth:               "victim",
-				Data:               map[string]string{"item": "test-item"},
-				StoreResponseField: "id",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:               "/api/v1/orders",
+					Operation:          "create",
+					Auth:               "victim",
+					Data:               map[string]string{"item": "test-item"},
+					StoreResponseField: "id",
+				},
 			},
 			Attack: &templates.Phase{
 				Path:           "/api/v1/orders/{id}",
@@ -750,15 +758,17 @@ func TestExecuteMutation_MultipleFieldsStorage(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "api3-bola-multi-field",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:      "/identity/api/v2/user/dashboard",
-				Operation: "read",
-				Auth:      "attacker",
-				StoreResponseFields: map[string]string{
-					"attacker_video_id": "video_id",  // Store as "attacker_video_id"
-					"attacker_email":    "email",     // Store as "attacker_email"
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:      "/identity/api/v2/user/dashboard",
+					Operation: "read",
+					Auth:      "attacker",
+					StoreResponseFields: map[string]string{
+						"attacker_video_id": "video_id", // Store as "attacker_video_id"
+						"attacker_email":    "email",    // Store as "attacker_email"
+					},
+					ExpectedStatus: 200,
 				},
-				ExpectedStatus: 200,
 			},
 			Attack: &templates.Phase{
 				Path:           "/identity/api/v2/user/videos/{attacker_video_id}",
@@ -785,11 +795,11 @@ func TestExecuteMutation_MultipleFieldsStorage(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
-	
+
 	// Verify multiple fields were stored
 	assert.Equal(t, "video123", executor.tracker.GetResource("attacker_video_id"))
 	assert.Equal(t, "user@example.com", executor.tracker.GetResource("attacker_email"))
-	
+
 	// Verify request used the substituted value
 	require.Len(t, client.requests, 2)
 	assert.Contains(t, client.requests[1].URL.Path, "/identity/api/v2/user/videos/video123")
@@ -810,11 +820,13 @@ func TestExecuteMutation_BackwardsCompatibility(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "backwards-compat-test",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:               "/api/v1/resources",
-				Operation:          "create",
-				Auth:               "victim",
-				StoreResponseField: "id", // OLD single-field approach
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:               "/api/v1/resources",
+					Operation:          "create",
+					Auth:               "victim",
+					StoreResponseField: "id", // OLD single-field approach
+				},
 			},
 			Attack: &templates.Phase{
 				Path:           "/api/v1/resources/{id}",
@@ -839,7 +851,7 @@ func TestExecuteMutation_BackwardsCompatibility(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "resource123", result.ResourceID)
 	assert.Equal(t, "resource123", executor.tracker.GetResource("id"))
-	
+
 	// Verify the attack request used the correct path
 	require.Len(t, client.requests, 2)
 	assert.Contains(t, client.requests[1].URL.Path, "/api/v1/resources/resource123")
@@ -860,16 +872,18 @@ func TestExecuteMutation_MixedFieldUsage(t *testing.T) {
 	tmpl := &templates.Template{
 		ID: "mixed-field-test",
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Path:               "/api/users/me",
-				Operation:          "read",
-				Auth:               "attacker",
-				StoreResponseField: "user_id", // Store user_id with key "user_id"
-				StoreResponseFields: map[string]string{
-					"video_id": "video_id", // Also store video_id
-					"email":    "email",    // Also store email
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:               "/api/users/me",
+					Operation:          "read",
+					Auth:               "attacker",
+					StoreResponseField: "user_id", // Store user_id with key "user_id"
+					StoreResponseFields: map[string]string{
+						"video_id": "video_id", // Also store video_id
+						"email":    "email",    // Also store email
+					},
+					ExpectedStatus: 200,
 				},
-				ExpectedStatus: 200,
 			},
 			Attack: &templates.Phase{
 				Path:           "/api/users/{user_id}/videos/{video_id}",
@@ -891,16 +905,155 @@ func TestExecuteMutation_MixedFieldUsage(t *testing.T) {
 	)
 
 	require.NoError(t, err)
-	
+
 	// Verify all fields were stored
 	assert.Equal(t, "u123", executor.tracker.GetResource("user_id"))
 	assert.Equal(t, "v456", executor.tracker.GetResource("video_id"))
 	assert.Equal(t, "test@example.com", executor.tracker.GetResource("email"))
-	
+
 	// Verify ResourceID is set to the first stored field (from StoreResponseField)
 	assert.Equal(t, "u123", result.ResourceID)
-	
+
 	// Verify both placeholders were substituted in the attack path
 	require.Len(t, client.requests, 2)
 	assert.Contains(t, client.requests[1].URL.Path, "/api/users/u123/videos/v456")
+}
+
+// TestExecuteMutation_MultipleSetupPhases tests executing multiple setup phases
+func TestExecuteMutation_MultipleSetupPhases(t *testing.T) {
+	// First setup: attacker creates a video, stores attacker_video_id
+	// Second setup: victim creates a video, stores victim_video_id
+	// Attack: attacker tries to update victim's video using mass assignment
+	setupResp1 := newMockResponse(200, `{"video_id": "attacker123"}`)
+	setupResp2 := newMockResponse(200, `{"video_id": "victim456"}`)
+	attackResp := newMockResponse(200, `{"video_id": "victim456", "owner": "attacker"}`) // Vulnerability!
+
+	client := &MockHTTPClient{
+		responses: []*http.Response{setupResp1, setupResp2, attackResp},
+	}
+
+	executor := NewMutationExecutor(client)
+
+	tmpl := &templates.Template{
+		ID: "api3-mass-assignment",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:      "/api/dashboard",
+					Operation: "read",
+					Auth:      "attacker",
+					StoreResponseFields: map[string]string{
+						"attacker_video_id": "video_id",
+					},
+				},
+				&templates.Phase{
+					Path:      "/api/dashboard",
+					Operation: "read",
+					Auth:      "victim",
+					StoreResponseFields: map[string]string{
+						"victim_video_id": "video_id",
+					},
+				},
+			},
+			Attack: &templates.Phase{
+				Path:      "/api/videos/{attacker_video_id}",
+				Operation: "update",
+				Auth:      "attacker",
+				Data: map[string]string{
+					"id": "{victim_video_id}", // Mass assignment vulnerability
+				},
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	result, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"update",
+		"attacker@example.com",
+		"victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"),
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Verify both fields were stored from setup phases
+	assert.Equal(t, "attacker123", executor.tracker.GetResource("attacker_video_id"))
+	assert.Equal(t, "victim456", executor.tracker.GetResource("victim_video_id"))
+
+	// Verify ResourceID is set from first setup phase
+	assert.Equal(t, "attacker123", result.ResourceID)
+
+	// Verify vulnerability was detected
+	assert.True(t, result.Matched)
+
+	// Verify requests were made correctly
+	require.Len(t, client.requests, 3)
+
+	// Setup 1: attacker dashboard
+	assert.Equal(t, "http://localhost:8080/api/dashboard", client.requests[0].URL.String())
+	assert.Equal(t, "Bearer attacker-token", client.requests[0].Header.Get("Authorization"))
+
+	// Setup 2: victim dashboard
+	assert.Equal(t, "http://localhost:8080/api/dashboard", client.requests[1].URL.String())
+	assert.Equal(t, "Bearer victim-token", client.requests[1].Header.Get("Authorization"))
+
+	// Attack: uses attacker_video_id in path
+	assert.Equal(t, "http://localhost:8080/api/videos/attacker123", client.requests[2].URL.String())
+	assert.Equal(t, "Bearer attacker-token", client.requests[2].Header.Get("Authorization"))
+}
+
+// TestExecuteMutation_SingleSetupPhase_BackwardsCompatibility ensures existing templates still work
+func TestExecuteMutation_SingleSetupPhase_BackwardsCompatibility(t *testing.T) {
+	setupResp := newMockResponse(201, `{"id": "resource123"}`)
+	attackResp := newMockResponse(200, `{"data": "accessed"}`)
+
+	client := &MockHTTPClient{
+		responses: []*http.Response{setupResp, attackResp},
+	}
+
+	executor := NewMutationExecutor(client)
+
+	// Use slice syntax for single setup phase (compatible with old syntax via UnmarshalYAML)
+	tmpl := &templates.Template{
+		ID: "backwards-compat",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:               "/api/v1/resources",
+					Operation:          "create",
+					Auth:               "victim",
+					StoreResponseField: "id",
+				},
+			},
+			Attack: &templates.Phase{
+				Path:           "/api/v1/resources/{id}",
+				Operation:      "read",
+				Auth:           "attacker",
+				UseStoredField: "id",
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	result, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"create",
+		"attacker@example.com",
+		"victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"),
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "resource123", result.ResourceID)
+	assert.Equal(t, "resource123", executor.tracker.GetResource("id"))
+
+	// Verify backwards compatibility
+	require.Len(t, client.requests, 2)
+	assert.Equal(t, "http://localhost:8080/api/v1/resources/resource123", client.requests[1].URL.String())
 }
