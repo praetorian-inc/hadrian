@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -76,97 +75,144 @@ func parseFlags(args []string) (config, error) {
 	return cfg, nil
 }
 
-// run executes the SSTI testing
+// run executes the SSTI testing with multi-pass verification (always enabled)
 func run(cfg config) error {
-	// Create SSTI module (with custom payloads if specified)
-	var module *ssti.SSTIModule
-
-	if cfg.payloadsDir != "" {
-		payloads, err := ssti.LoadPayloads(cfg.payloadsDir)
-		if err != nil {
-			return fmt.Errorf("loading payloads: %w", err)
-		}
-		module = ssti.NewSSTIModuleWithPayloadList(payloads)
-		fmt.Printf("[*] Loaded custom payloads from: %s\n", cfg.payloadsDir)
-	} else {
-		module = ssti.NewSSTIModule()
-		fmt.Println("[*] Using embedded default payloads")
-	}
-
-	payloads := module.Payloads()
-
 	// Create HTTP client
 	client, err := createClient(cfg)
 	if err != nil {
 		return err
 	}
 
+	// Create SSTI module for detection helpers
+	module := ssti.NewSSTIModule()
+
+	fmt.Println("[*] SSTI Scanner - Multi-pass Verification")
 	fmt.Printf("[*] Target: %s\n", cfg.target)
-	fmt.Printf("[*] Parameter: %s\n", cfg.param)
-	fmt.Printf("[*] Testing %d SSTI payloads...\n\n", len(payloads))
+	fmt.Printf("[*] Parameter: %s\n\n", cfg.param)
 
-	var results []result
-	for _, payload := range payloads {
-		if cfg.verbose {
-			fmt.Printf("[>] Testing: %s (%s)\n", payload.Value, payload.Description)
+	// Load verification chains from YAML files (all payloads are treated as verification chain)
+	engines, err := loadVerificationChains(cfg.payloadsDir)
+	if err != nil {
+		return fmt.Errorf("loading verification chains: %w", err)
+	}
+
+	if len(engines) == 0 {
+		return fmt.Errorf("no verification chains found in payload files")
+	}
+
+	// Run verification for all engines
+	results := module.RunVerification(client, cfg.target, cfg.param, cfg.method, engines)
+
+	// Display results
+	var confirmed []string
+	var likely []string
+	var uncertain []string
+
+	for _, result := range results {
+		fmt.Printf("[ENGINE: %s]\n", result.Engine)
+
+		for i, pass := range result.PassResults {
+			status := "✗ NOT FOUND"
+			if pass.Found {
+				status = "✓ FOUND"
+			}
+			fmt.Printf("  Pass %d/%d: %s → \"%s\"... %s\n",
+				i+1, result.TotalPasses, pass.Payload, pass.Expected, status)
 		}
 
-		// Build and send request
-		req, err := buildRequest(cfg, payload.Value)
-		if err != nil {
-			if cfg.verbose {
-				fmt.Printf("    Error building request: %v\n", err)
-			}
-			continue
-		}
-
-		resp, err := client.Do(req)
-		if err != nil {
-			if cfg.verbose {
-				fmt.Printf("    Error sending request: %v\n", err)
-			}
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			if cfg.verbose {
-				fmt.Printf("    Error reading response: %v\n", err)
-			}
-			continue
-		}
-
-		// Detect vulnerability
-		detection := module.Detect(resp, string(body), payload)
-		if detection.Detected {
-			results = append(results, result{
-				detected:  true,
-				payload:   payload.Value,
-				engine:    payload.Engine,
-				evidence:  detection.Evidence,
-				matchType: detection.MatchType,
-			})
-
-			fmt.Printf("[+] VULNERABLE! Payload: %s\n", payload.Value)
-			fmt.Printf("    Engine: %s\n", payload.Engine)
-			if len(detection.Evidence) < 100 {
-				fmt.Printf("    Evidence: %s\n", detection.Evidence)
-			} else {
-				fmt.Printf("    Evidence: %s...\n", detection.Evidence[:100])
-			}
-			fmt.Printf("    Match Type: %s\n\n", detection.MatchType)
+		if result.Confirmed {
+			fmt.Printf("  Result: ✓ CONFIRMED (%d/%d)\n\n", result.PassCount, result.TotalPasses)
+			confirmed = append(confirmed, result.Engine)
+		} else if result.PassCount >= 2 {
+			fmt.Printf("  Result: ~ LIKELY (%d/%d)\n\n", result.PassCount, result.TotalPasses)
+			likely = append(likely, result.Engine)
+		} else if result.Uncertain {
+			fmt.Printf("  Result: ? UNCERTAIN (%d/%d)\n\n", result.PassCount, result.TotalPasses)
+			uncertain = append(uncertain, result.Engine)
+		} else {
+			fmt.Printf("  Result: ✗ NOT VULNERABLE (%d/%d)\n\n", result.PassCount, result.TotalPasses)
 		}
 	}
 
 	// Print summary
-	if len(results) > 0 {
-		fmt.Printf("[*] Scan complete. Found %d SSTI indicator(s).\n", len(results))
-	} else {
-		fmt.Println("[*] Scan complete. No SSTI vulnerabilities detected.")
+	fmt.Println("[SUMMARY]")
+	if len(confirmed) > 0 {
+		fmt.Printf("  CONFIRMED: %s\n", strings.Join(confirmed, ", "))
+	}
+	if len(likely) > 0 {
+		fmt.Printf("  LIKELY: %s\n", strings.Join(likely, ", "))
+	}
+	if len(uncertain) > 0 {
+		fmt.Printf("  UNCERTAIN: %s\n", strings.Join(uncertain, ", "))
+	}
+	if len(confirmed) == 0 && len(likely) == 0 && len(uncertain) == 0 {
+		fmt.Println("  No vulnerabilities detected")
 	}
 
 	return nil
+}
+
+// loadVerificationChains loads verification chains from YAML files (all payloads treated as chain)
+func loadVerificationChains(payloadDir string) (map[string][]ssti.PayloadWithExpected, error) {
+	// If no directory specified, use default
+	if payloadDir == "" {
+		payloadDir = "payloads/ssti"
+	}
+
+	// Check if it's a directory or file(s)
+	info, err := os.Stat(payloadDir)
+	if err != nil {
+		return nil, err
+	}
+
+	var files []string
+	if info.IsDir() {
+		entries, err := os.ReadDir(payloadDir)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+				files = append(files, payloadDir+"/"+entry.Name())
+			}
+		}
+	} else {
+		// Single file or comma-separated
+		if strings.Contains(payloadDir, ",") {
+			files = strings.Split(payloadDir, ",")
+		} else {
+			files = []string{payloadDir}
+		}
+	}
+
+	engines := make(map[string][]ssti.PayloadWithExpected)
+
+	for _, file := range files {
+		file = strings.TrimSpace(file)
+		payloadFile, err := ssti.LoadPayloadFileWithPayloads(file)
+		if err != nil {
+			continue // Skip files that can't be loaded
+		}
+
+		if len(payloadFile.Payloads) == 0 {
+			continue // Skip if no payloads
+		}
+
+		// Convert all payloads to PayloadWithExpected (all payloads are verification chain)
+		chain := make([]ssti.PayloadWithExpected, 0, len(payloadFile.Payloads))
+		for _, yp := range payloadFile.Payloads {
+			chain = append(chain, ssti.PayloadWithExpected{
+				Value:       yp.Value,
+				Expected:    yp.Expected,
+				Description: yp.Description,
+			})
+		}
+
+		engines[payloadFile.Engine] = chain
+	}
+
+	return engines, nil
 }
 
 // createClient creates an HTTP client with optional proxy and TLS settings
@@ -217,50 +263,4 @@ func buildRequest(cfg config, payload string) (*http.Request, error) {
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	return req, nil
-}
-
-// detectVulnerability analyzes response for SSTI indicators
-func detectVulnerability(resp *http.Response, body, payload, expected string) result {
-	r := result{
-		detected: false,
-		payload:  payload,
-	}
-
-	// Error-based detection
-	if expected == "error" {
-		if resp.StatusCode == http.StatusInternalServerError && containsTemplateError(body) {
-			r.detected = true
-			r.evidence = body
-			r.matchType = "error"
-			return r
-		}
-	}
-
-	// Exact match detection
-	if strings.Contains(body, expected) {
-		r.detected = true
-		r.evidence = body
-		r.matchType = "exact"
-	}
-
-	return r
-}
-
-// containsTemplateError checks for template error indicators
-func containsTemplateError(body string) bool {
-	errorIndicators := []string{
-		"TemplateSyntaxError",
-		"TemplateError",
-		"TemplateException",
-		"template",
-		"syntax error",
-	}
-
-	bodyLower := strings.ToLower(body)
-	for _, indicator := range errorIndicators {
-		if strings.Contains(bodyLower, strings.ToLower(indicator)) {
-			return true
-		}
-	}
-	return false
 }

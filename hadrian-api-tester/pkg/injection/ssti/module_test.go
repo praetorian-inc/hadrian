@@ -140,13 +140,13 @@ func TestLoadPayloadsFromDir_Success(t *testing.T) {
 		engines[payload.Engine] = true
 	}
 
-	assert.True(t, engines["universal"], "Should have universal payloads")
 	assert.True(t, engines["jinja2"], "Should have Jinja2 payloads")
 	assert.True(t, engines["freemarker"], "Should have FreeMarker payloads")
 	assert.True(t, engines["twig"], "Should have Twig payloads")
+	assert.True(t, engines["erb"], "Should have ERB payloads")
 
-	// Verify minimum payload count (should have at least the 13 we created)
-	assert.GreaterOrEqual(t, len(payloads), 13, "Should have at least 13 payloads from 4 YAML files")
+	// Verify minimum payload count (4 engines × 3 payloads = 12)
+	assert.GreaterOrEqual(t, len(payloads), 12, "Should have at least 12 payloads from 4 YAML files")
 }
 
 func TestLoadPayloadsFromDir_InvalidDirectory(t *testing.T) {

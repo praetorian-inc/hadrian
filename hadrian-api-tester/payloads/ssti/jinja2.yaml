@@ -1,18 +1,15 @@
-# Jinja2-specific SSTI payloads
+# Jinja2 SSTI verification payloads
+# All payloads must match for CONFIRMED status
 engine: jinja2
 payloads:
-  - value: "{{config}}"
-    expected: "error"
-    description: "Config object access (error-based detection)"
+  - value: "{{7*191}}"
+    expected: "1337"
+    description: "Pass 1: Uncommon multiplication"
 
-  - value: "{{''.__class__}}"
-    expected: "str"
-    description: "String class introspection"
+  - value: "{{13*37}}"
+    expected: "481"
+    description: "Pass 2: Prime multiplication"
 
-  - value: "{{''.__class__.__mro__}}"
-    expected: "tuple"
-    description: "Method resolution order"
-
-  - value: "{{request.application.__globals__}}"
-    expected: "error"
-    description: "Flask globals access attempt"
+  - value: "{{17*89}}"
+    expected: "1513"
+    description: "Pass 3: Large prime multiplication"

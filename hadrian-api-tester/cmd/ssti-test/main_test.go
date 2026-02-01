@@ -3,11 +3,12 @@ package main
 import (
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/praetorian-inc/hadrian/pkg/injection"
+	"github.com/praetorian-inc/hadrian/pkg/injection/ssti"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -163,8 +164,10 @@ func TestBuildRequest(t *testing.T) {
 	}
 }
 
-// TestDetectVulnerability tests SSTI detection logic
-func TestDetectVulnerability(t *testing.T) {
+// TestModuleDetection tests SSTI detection logic via module
+func TestModuleDetection(t *testing.T) {
+	module := ssti.NewSSTIModule()
+
 	tests := []struct {
 		name           string
 		responseBody   string
@@ -204,35 +207,27 @@ func TestDetectVulnerability(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create mock server
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.WriteHeader(tt.statusCode)
-				w.Write([]byte(tt.responseBody))
-			}))
-			defer server.Close()
-
-			cfg := config{
-				target: server.URL,
-				param:  "test",
-				method: "GET",
+			// Create mock response
+			resp := &http.Response{
+				StatusCode: tt.statusCode,
+				Body:       io.NopCloser(strings.NewReader(tt.responseBody)),
 			}
 
-			req, _ := buildRequest(cfg, tt.payload)
-			client := &http.Client{}
-			resp, err := client.Do(req)
-			if err != nil {
-				t.Fatalf("request failed: %v", err)
-			}
-			defer resp.Body.Close()
-
-			result := detectVulnerability(resp, tt.responseBody, tt.payload, tt.expected)
-
-			if result.detected != tt.wantDetected {
-				t.Errorf("detected = %v, want %v", result.detected, tt.wantDetected)
+			// Create payload
+			payload := injection.Payload{
+				Value:    tt.payload,
+				Expected: tt.expected,
 			}
 
-			if tt.wantDetected && result.matchType != tt.wantMatchType {
-				t.Errorf("matchType = %q, want %q", result.matchType, tt.wantMatchType)
+			// Use module's Detect method
+			result := module.Detect(resp, tt.responseBody, payload)
+
+			if result.Detected != tt.wantDetected {
+				t.Errorf("detected = %v, want %v", result.Detected, tt.wantDetected)
+			}
+
+			if tt.wantDetected && result.MatchType != tt.wantMatchType {
+				t.Errorf("matchType = %q, want %q", result.MatchType, tt.wantMatchType)
 			}
 		})
 	}

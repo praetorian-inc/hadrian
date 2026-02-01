@@ -2,7 +2,9 @@ package ssti
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +24,32 @@ type YAMLPayload struct {
 	Value       string `yaml:"value"`
 	Expected    string `yaml:"expected"`
 	Description string `yaml:"description"`
+}
+
+// PayloadWithExpected represents a payload with expected value for verification
+type PayloadWithExpected struct {
+	Value       string
+	Expected    string
+	Description string
+}
+
+// VerificationResult tracks the result of a multi-pass verification
+type VerificationResult struct {
+	Engine       string
+	PassCount    int
+	TotalPasses  int
+	Confirmed    bool
+	Uncertain    bool
+	PassResults  []PassResult
+}
+
+// PassResult tracks individual verification pass results
+type PassResult struct {
+	Payload     string
+	Expected    string
+	Found       bool
+	Evidence    string
+	Description string
 }
 
 // SSTIModule implements injection testing for Server-Side Template Injection
@@ -177,6 +205,21 @@ func loadPayloadFile(filePath string) ([]injection.Payload, error) {
 	return payloads, nil
 }
 
+// LoadPayloadFileWithPayloads loads payload file (all payloads treated as verification chain)
+func LoadPayloadFileWithPayloads(filePath string) (*PayloadFile, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("reading file: %w", err)
+	}
+
+	var payloadFile PayloadFile
+	if err := yaml.Unmarshal(data, &payloadFile); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+
+	return &payloadFile, nil
+}
+
 // Name returns the module name
 func (m *SSTIModule) Name() string {
 	return "SSTI"
@@ -247,6 +290,120 @@ func (m *SSTIModule) detectTemplateError(response *http.Response, body string) b
 	}
 
 	return false
+}
+
+// VerifyEngine runs the full verification chain for an engine
+func (m *SSTIModule) VerifyEngine(
+	client *http.Client,
+	targetURL string,
+	param string,
+	method string,
+	engine string,
+	chain []PayloadWithExpected,
+) VerificationResult {
+	result := VerificationResult{
+		Engine:      engine,
+		TotalPasses: len(chain),
+		PassResults: make([]PassResult, 0, len(chain)),
+	}
+
+	for _, payload := range chain {
+		passResult := PassResult{
+			Payload:     payload.Value,
+			Expected:    payload.Expected,
+			Description: payload.Description,
+		}
+
+		// Build request
+		var req *http.Request
+		var err error
+
+		if method == "GET" {
+			u, parseErr := url.Parse(targetURL)
+			if parseErr != nil {
+				passResult.Found = false
+				result.PassResults = append(result.PassResults, passResult)
+				continue
+			}
+
+			q := u.Query()
+			q.Set(param, payload.Value)
+			u.RawQuery = q.Encode()
+
+			req, err = http.NewRequest("GET", u.String(), nil)
+		} else {
+			// POST
+			data := fmt.Sprintf("%s=%s", param, payload.Value)
+			req, err = http.NewRequest("POST", targetURL, strings.NewReader(data))
+			if err == nil {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+		}
+
+		if err != nil {
+			passResult.Found = false
+			result.PassResults = append(result.PassResults, passResult)
+			continue
+		}
+
+		// Send request
+		resp, err := client.Do(req)
+		if err != nil {
+			passResult.Found = false
+			result.PassResults = append(result.PassResults, passResult)
+			continue
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			passResult.Found = false
+			result.PassResults = append(result.PassResults, passResult)
+			continue
+		}
+
+		bodyStr := string(body)
+
+		// Check if expected value is in response
+		if strings.Contains(bodyStr, payload.Expected) {
+			passResult.Found = true
+			passResult.Evidence = bodyStr
+			result.PassCount++
+		}
+
+		result.PassResults = append(result.PassResults, passResult)
+	}
+
+	// Determine confidence level
+	if result.PassCount == result.TotalPasses {
+		result.Confirmed = true // All passes = CONFIRMED
+	} else if result.PassCount >= 2 {
+		// 2+ passes = LIKELY (not using Uncertain flag here, handled in CLI)
+		result.Uncertain = false
+	} else if result.PassCount == 1 {
+		result.Uncertain = true // 1 pass = UNCERTAIN
+	}
+	// 0 passes = NOT VULNERABLE (no flags set)
+
+	return result
+}
+
+// RunVerification runs all verification chains for multiple engines
+func (m *SSTIModule) RunVerification(
+	client *http.Client,
+	targetURL string,
+	param string,
+	method string,
+	engines map[string][]PayloadWithExpected,
+) []VerificationResult {
+	results := make([]VerificationResult, 0, len(engines))
+
+	for engine, chain := range engines {
+		result := m.VerifyEngine(client, targetURL, param, method, engine, chain)
+		results = append(results, result)
+	}
+
+	return results
 }
 
 // defaultPayloads returns the default set of SSTI payloads
