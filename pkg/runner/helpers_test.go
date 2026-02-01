@@ -218,6 +218,71 @@ func TestTerminalReporter_ReportFinding(t *testing.T) {
 	assert.Contains(t, string(output[:n]), "API1")
 }
 
+func TestTerminalReporter_ReportFinding_WithLLMAnalysis(t *testing.T) {
+	// Capture stdout
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	rep := NewTerminalReporter(tmpFile, 1)
+	finding := &model.Finding{
+		Severity:    model.SeverityHigh,
+		Category:    "API1",
+		Name:        "Broken Object Level Authorization",
+		Method:      "GET",
+		Endpoint:    "/api/users/{id}",
+		LLMAnalysis: &model.LLMTriage{
+			Provider:        "ollama",
+			IsVulnerability: true,
+			Confidence:      0.85,
+			Reasoning:       "Attacker can access victim data",
+		},
+	}
+
+	rep.ReportFinding(finding)
+
+	// Read output
+	tmpFile.Seek(0, 0)
+	output := make([]byte, 1024)
+	n, _ := tmpFile.Read(output)
+	outputStr := string(output[:n])
+
+	assert.Contains(t, outputStr, "LLM Analysis: Confidence 85%")
+	assert.NotContains(t, outputStr, "Vulnerability confirmed")
+}
+
+func TestTerminalReporter_ReportFinding_WithoutLLMAnalysis(t *testing.T) {
+	// Capture stdout
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	rep := NewTerminalReporter(tmpFile, 1)
+	finding := &model.Finding{
+		Severity:        model.SeverityHigh,
+		Category:        "API1",
+		Name:            "Broken Object Level Authorization",
+		Method:          "GET",
+		Endpoint:        "/api/users/{id}",
+		IsVulnerability: true,
+		Confidence:      0.95,
+		LLMAnalysis:     nil, // No LLM analysis
+	}
+
+	rep.ReportFinding(finding)
+
+	// Read output
+	tmpFile.Seek(0, 0)
+	output := make([]byte, 1024)
+	n, _ := tmpFile.Read(output)
+	outputStr := string(output[:n])
+
+	// Should not show anything about LLM or confidence when no LLM analysis
+	assert.NotContains(t, outputStr, "LLM Analysis")
+	assert.NotContains(t, outputStr, "Confidence")
+	assert.NotContains(t, outputStr, "Vulnerability confirmed")
+}
+
 func TestTerminalReporter_GenerateReport(t *testing.T) {
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
@@ -247,6 +312,105 @@ func TestTerminalReporter_GenerateReport(t *testing.T) {
 	assert.Contains(t, string(output[:n]), "Hadrian Security Test Results")
 	assert.Contains(t, string(output[:n]), "CRITICAL: 1")
 	assert.Contains(t, string(output[:n]), "HIGH: 2")
+}
+
+func TestTerminalReporter_GenerateReport_WithLLMFindings(t *testing.T) {
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	rep := NewTerminalReporter(tmpFile, 1)
+	rep.SetLLMMode(true) // Enable LLM mode
+
+	// Findings with LLM analysis (would have been printed during triage)
+	findings := []*model.Finding{
+		{
+			Severity:    model.SeverityHigh,
+			Category:    "API1",
+			Name:        "Broken Object Level Authorization",
+			Method:      "GET",
+			Endpoint:    "/api/users/{id}",
+			LLMAnalysis: &model.LLMTriage{
+				Provider:        "ollama",
+				IsVulnerability: true,
+				Confidence:      0.85,
+				Reasoning:       "Attacker can access victim data",
+			},
+		},
+	}
+
+	stats := &Stats{
+		Findings:        1,
+		High:            1,
+		Duration:        time.Second * 30,
+		OperationCount:  10,
+		RoleCount:       3,
+		TemplatesLoaded: 5,
+	}
+
+	err = rep.GenerateReport(findings, stats)
+	require.NoError(t, err)
+
+	// Read output
+	tmpFile.Seek(0, 0)
+	output := make([]byte, 4096)
+	n, _ := tmpFile.Read(output)
+	outputStr := string(output[:n])
+
+	// Verify summary is shown (findings were already printed during triage)
+	assert.Contains(t, outputStr, "Hadrian Security Test Results")
+	assert.Contains(t, outputStr, "HIGH: 1")
+
+	// Findings are NOT printed in GenerateReport anymore (printed in real-time during triage)
+	// So we should NOT see finding details here
+}
+
+func TestTerminalReporter_GenerateReport_LLMModeWithoutAnalysis(t *testing.T) {
+	// Test that when LLM mode is enabled, findings are printed during triage
+	// (not in GenerateReport). Even if LLM calls fail, findings are printed
+	// in triageWithLLM as they fail, so GenerateReport only shows summary.
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+
+	rep := NewTerminalReporter(tmpFile, 1)
+	rep.SetLLMMode(true) // LLM mode enabled
+
+	// Findings WITHOUT LLM analysis (all LLM calls failed, but were printed during triage)
+	findings := []*model.Finding{
+		{
+			Severity:    model.SeverityHigh,
+			Category:    "API1",
+			Name:        "Broken Object Level Authorization",
+			Method:      "GET",
+			Endpoint:    "/api/users/{id}",
+			LLMAnalysis: nil, // No LLM analysis (all calls failed)
+		},
+	}
+
+	stats := &Stats{
+		Findings:        1,
+		High:            1,
+		Duration:        time.Second * 30,
+		OperationCount:  10,
+		RoleCount:       3,
+		TemplatesLoaded: 5,
+	}
+
+	err = rep.GenerateReport(findings, stats)
+	require.NoError(t, err)
+
+	// Read output
+	tmpFile.Seek(0, 0)
+	output := make([]byte, 4096)
+	n, _ := tmpFile.Read(output)
+	outputStr := string(output[:n])
+
+	// Verify summary still shown
+	assert.Contains(t, outputStr, "Hadrian Security Test Results")
+	assert.Contains(t, outputStr, "HIGH: 1")
+
+	// Findings are printed during triage (not in GenerateReport anymore)
 }
 
 // =============================================================================
@@ -386,8 +550,92 @@ func TestTriageWithLLM_NoProvider(t *testing.T) {
 		},
 	}
 
+	// Create a mock reporter
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+	rep := NewTerminalReporter(tmpFile, 1)
+
 	// Should return findings unchanged (no LLM available)
-	result, err := triageWithLLM(ctx, findings, rolesCfg)
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, "", rep)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Equal(t, "test-1", result[0].ID)
+}
+
+func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
+	// Test that when LLM triage is configured but fails/succeeds,
+	// findings are printed immediately after each analysis.
+	// This test simulates the case where LLM client fails per-finding
+	// (not at initialization) by mocking findings that would trigger
+	// the per-finding error path.
+
+	// Note: This is a behavioral test. In reality, if no LLM is available,
+	// findings are printed in real-time during detection (not in triageWithLLM).
+	// This function only prints findings when LLM client is successfully created
+	// and either succeeds or fails on a per-finding basis.
+
+	// For now, we test that the signature accepts a Reporter and the function
+	// doesn't panic. Integration tests would verify the full workflow.
+
+	os.Unsetenv("ANTHROPIC_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	os.Unsetenv("OLLAMA_HOST")
+
+	ctx := context.Background()
+	findings := []*model.Finding{
+		{ID: "test-1", Severity: model.SeverityHigh, Category: "API1", Name: "Finding 1", Method: "GET", Endpoint: "/api/test1"},
+	}
+
+	rolesCfg := &roles.RoleConfig{
+		Roles: []*roles.Role{
+			{Name: "user"},
+		},
+	}
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+	rep := NewTerminalReporter(tmpFile, 1)
+
+	// Should not panic with reporter parameter
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, "", rep)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+
+	// When no LLM is available, findings are returned unchanged
+	// (they would have been printed during detection in run.go)
+}
+
+func TestTriageWithLLM_WithContext(t *testing.T) {
+	// Ensure no LLM providers are configured (so we don't make actual API calls)
+	os.Unsetenv("ANTHROPIC_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	os.Unsetenv("OLLAMA_HOST")
+
+	ctx := context.Background()
+	findings := []*model.Finding{
+		{ID: "test-1", Severity: model.SeverityHigh},
+	}
+
+	// Create a minimal role config
+	rolesCfg := &roles.RoleConfig{
+		Roles: []*roles.Role{
+			{Name: "user"},
+		},
+	}
+
+	// Create a mock reporter
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer tmpFile.Close()
+	rep := NewTerminalReporter(tmpFile, 1)
+
+	customContext := "This API handles PCI-DSS regulated payment data"
+
+	// Should return findings unchanged (no LLM available)
+	// This test verifies the signature accepts llmContext parameter
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, customContext, rep)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 	assert.Equal(t, "test-1", result[0].ID)

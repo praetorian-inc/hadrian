@@ -46,7 +46,11 @@ type Config struct {
 	OWASPCategories       []string
 	Verbose               bool
 	DryRun                bool
-	RequestIDsLimit       int      // Number of request IDs to display per finding (0 = all)
+	RequestIDsLimit       int    // Number of request IDs to display per finding (0 = all)
+	LLMHost               string // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel              string // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout            int    // LLM request timeout in seconds
+	LLMContext            string // Additional context for LLM prompts
 }
 
 // Run is the main entry point for the Hadrian CLI
@@ -107,6 +111,12 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "Enable verbose logging output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Show what would be tested without making requests")
 	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids", 1, "Number of request IDs to display per finding (0 = all)")
+
+	// LLM configuration
+	cmd.Flags().StringVar(&config.LLMHost, "llm-host", "", "LLM provider host URL (e.g., http://localhost:11434 for Ollama)")
+	cmd.Flags().StringVar(&config.LLMModel, "llm-model", "", "LLM model name (e.g., llama3.2:latest)")
+	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 180, "LLM request timeout in seconds")
+	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM analysis (e.g., 'This API handles financial data')")
 
 	return cmd
 }
@@ -207,6 +217,13 @@ func runTest(ctx context.Context, config Config) error {
 	}
 	defer rep.Close()
 
+	// 7a. Set LLM mode on terminal reporter if LLM is enabled
+	llmEnabled := hasLLMConfig() || config.LLMHost != ""
+	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
+		terminalReporter.SetLLMMode(true)
+		log.Debug("LLM mode enabled on terminal reporter")
+	}
+
 	// 8. Load templates
 	templateDir := config.TemplateDir
 	if templateDir == "" {
@@ -257,9 +274,12 @@ func runTest(ctx context.Context, config Config) error {
 				continue
 			}
 
-			// Real-time reporting
-			for _, f := range findings {
-				rep.ReportFinding(f)
+			// Real-time reporting (skip if LLM triage will run - show in final report instead)
+			llmEnabled := hasLLMConfig() || config.LLMHost != ""
+			if !llmEnabled {
+				for _, f := range findings {
+					rep.ReportFinding(f)
+				}
 			}
 
 			allFindings = append(allFindings, findings...)
@@ -267,11 +287,12 @@ func runTest(ctx context.Context, config Config) error {
 	}
 
 	// 11. Optional LLM triage
-	if hasLLMConfig() {
-		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg)
+	if hasLLMConfig() || config.LLMHost != "" {
+		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
 	}
 
 	// 12. Generate final report
+	log.Debug("Generating final report with %d findings", len(allFindings))
 	stats := calculateStats(allFindings, startTime)
 	stats.OperationCount = len(spec.Operations)
 	stats.RoleCount = len(rolesCfg.Roles)

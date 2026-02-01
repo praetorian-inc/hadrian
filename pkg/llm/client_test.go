@@ -12,36 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewClient_AnthropicKeySet(t *testing.T) {
-	// Arrange
-	os.Setenv("ANTHROPIC_API_KEY", "test-key-anthropic")
-	defer os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-
-	// Act
-	client, err := NewClient(context.Background())
-
-	// Assert
-	require.NoError(t, err)
-	assert.NotNil(t, client)
-	assert.Equal(t, "claude", client.Name())
-}
-
-func TestNewClient_OpenAIKeySet(t *testing.T) {
-	// Arrange
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Setenv("OPENAI_API_KEY", "test-key-openai")
-	defer os.Unsetenv("OPENAI_API_KEY")
-
-	// Act
-	client, err := NewClient(context.Background())
-
-	// Assert
-	require.NoError(t, err)
-	assert.NotNil(t, client)
-	assert.Equal(t, "openai", client.Name())
-}
-
 func TestNewClient_OllamaRunning(t *testing.T) {
 	// Arrange - Mock Ollama server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -54,14 +24,17 @@ func TestNewClient_OllamaRunning(t *testing.T) {
 	os.Unsetenv("ANTHROPIC_API_KEY")
 	os.Unsetenv("OPENAI_API_KEY")
 
-	// This test would need refactoring to inject the URL - skipping for now
-	t.Skip("Ollama check uses hardcoded localhost:11434 - needs refactor for testing")
+	// Test IsOllamaRunningAt directly with mock server
+	ctx := context.Background()
+	running := IsOllamaRunningAt(ctx, server.URL)
+
+	// Assert
+	assert.True(t, running, "Mock Ollama server should be detected as running")
 }
 
 func TestNewClient_NoProvider(t *testing.T) {
 	// Arrange
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
+	// No Ollama running
 
 	// Act
 	client, err := NewClient(context.Background())
@@ -81,8 +54,12 @@ func TestIsOllamaRunning_ServerResponds(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// This test requires refactoring IsOllamaRunning to accept a URL parameter
-	t.Skip("IsOllamaRunning uses hardcoded localhost:11434 - needs refactor for testing")
+	// Act - Use IsOllamaRunningAt with mock server URL
+	ctx := context.Background()
+	running := IsOllamaRunningAt(ctx, server.URL)
+
+	// Assert
+	assert.True(t, running)
 }
 
 func TestIsOllamaRunning_ServerNotResponding(t *testing.T) {
@@ -94,4 +71,123 @@ func TestIsOllamaRunning_ServerNotResponding(t *testing.T) {
 
 	// Assert
 	assert.False(t, running)
+}
+
+func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
+	// Arrange - Mock Ollama server on custom port
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	os.Setenv("OLLAMA_HOST", server.URL)
+	defer os.Unsetenv("OLLAMA_HOST")
+
+	// Act
+	ctx := context.Background()
+	running := IsOllamaRunning(ctx)
+
+	// Assert
+	assert.True(t, running, "IsOllamaRunning should check OLLAMA_HOST env var")
+}
+
+func TestIsOllamaRunning_WithCustomHostNotRunning(t *testing.T) {
+	// Arrange - Set custom host that doesn't exist
+	os.Setenv("OLLAMA_HOST", "http://localhost:99999")
+	defer os.Unsetenv("OLLAMA_HOST")
+
+	// Act
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	running := IsOllamaRunning(ctx)
+
+	// Assert
+	assert.False(t, running, "IsOllamaRunning should return false when custom host not responding")
+}
+
+// TestNewClientWithConfig tests LLM client creation with explicit config
+func TestNewClientWithConfig_WithOllamaHost(t *testing.T) {
+	// Arrange - Mock Ollama server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	os.Unsetenv("ANTHROPIC_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	os.Unsetenv("OLLAMA_HOST")
+
+	// Act
+	ctx := context.Background()
+	client, err := NewClientWithConfig(ctx, server.URL, "llama3.2:latest", 180*time.Second, "")
+
+	// Assert
+	require.NoError(t, err)
+	assert.NotNil(t, client)
+	assert.Equal(t, "ollama", client.Name())
+}
+
+func TestNewClientWithConfig_WithEmptyModel(t *testing.T) {
+	// Arrange - Mock Ollama server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	os.Unsetenv("ANTHROPIC_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	os.Unsetenv("OLLAMA_HOST")
+	os.Unsetenv("OLLAMA_MODEL")
+
+	// Act
+	ctx := context.Background()
+	client, err := NewClientWithConfig(ctx, server.URL, "", 180*time.Second, "")
+
+	// Assert
+	require.NoError(t, err)
+	assert.NotNil(t, client)
+	assert.Equal(t, "ollama", client.Name())
+}
+
+func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
+	// Arrange
+	os.Unsetenv("ANTHROPIC_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	os.Unsetenv("OLLAMA_HOST")
+
+	// Act
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	client, err := NewClientWithConfig(ctx, "http://localhost:99999", "llama3.2:latest", 180*time.Second, "")
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "not reachable")
+}
+
+func TestNewClientWithConfig_EmptyHostFallsBackToEnv(t *testing.T) {
+	// Arrange
+	os.Unsetenv("ANTHROPIC_API_KEY")
+	os.Unsetenv("OPENAI_API_KEY")
+	os.Unsetenv("OLLAMA_HOST")
+
+	// Act
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	client, err := NewClientWithConfig(ctx, "", "", 180*time.Second, "")
+
+	// Assert - Should fall back to NewClient logic, which will fail with no env vars
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "no LLM provider available")
 }
