@@ -1,0 +1,10 @@
+# Twig-specific SSTI payloads
+engine: twig
+payloads:
+  - value: "{{7*'7'}}"
+    expected: "49"
+    description: "String multiplication (Twig-specific behavior)"
+
+  - value: "{{_self.env.getRuntimeLoader}}"
+    expected: "error"
+    description: "Runtime loader access attempt"

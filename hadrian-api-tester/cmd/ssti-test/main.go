@@ -15,12 +15,13 @@ import (
 
 // config holds command-line configuration
 type config struct {
-	target   string
-	param    string
-	method   string
-	proxy    string
-	verbose  bool
-	insecure bool
+	target      string
+	param       string
+	method      string
+	proxy       string
+	verbose     bool
+	insecure    bool
+	payloadsDir string
 }
 
 // result holds detection results
@@ -56,6 +57,7 @@ func parseFlags(args []string) (config, error) {
 	fs.StringVar(&cfg.proxy, "proxy", "", "Proxy URL for Burp Suite")
 	fs.BoolVar(&cfg.verbose, "verbose", false, "Show all payloads tested")
 	fs.BoolVar(&cfg.insecure, "insecure", false, "Skip TLS verification")
+	fs.StringVar(&cfg.payloadsDir, "payloads", "", "YAML payload source: directory, single file, or comma-separated files (optional, uses embedded defaults if not specified)")
 
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
@@ -76,8 +78,21 @@ func parseFlags(args []string) (config, error) {
 
 // run executes the SSTI testing
 func run(cfg config) error {
-	// Create SSTI module
-	module := ssti.NewSSTIModule()
+	// Create SSTI module (with custom payloads if specified)
+	var module *ssti.SSTIModule
+
+	if cfg.payloadsDir != "" {
+		payloads, err := ssti.LoadPayloads(cfg.payloadsDir)
+		if err != nil {
+			return fmt.Errorf("loading payloads: %w", err)
+		}
+		module = ssti.NewSSTIModuleWithPayloadList(payloads)
+		fmt.Printf("[*] Loaded custom payloads from: %s\n", cfg.payloadsDir)
+	} else {
+		module = ssti.NewSSTIModule()
+		fmt.Println("[*] Using embedded default payloads")
+	}
+
 	payloads := module.Payloads()
 
 	// Create HTTP client

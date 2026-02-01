@@ -1,22 +1,180 @@
 package ssti
 
 import (
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/injection"
+	"gopkg.in/yaml.v3"
 )
+
+// PayloadFile represents a YAML payload file structure
+type PayloadFile struct {
+	Engine   string        `yaml:"engine"`
+	Payloads []YAMLPayload `yaml:"payloads"`
+}
+
+// YAMLPayload represents a single payload in YAML format
+type YAMLPayload struct {
+	Value       string `yaml:"value"`
+	Expected    string `yaml:"expected"`
+	Description string `yaml:"description"`
+}
 
 // SSTIModule implements injection testing for Server-Side Template Injection
 type SSTIModule struct {
 	payloads []injection.Payload
 }
 
-// NewSSTIModule creates a new SSTI injection testing module
+// NewSSTIModule creates a new SSTI injection testing module with embedded default payloads
 func NewSSTIModule() *SSTIModule {
 	return &SSTIModule{
 		payloads: defaultPayloads(),
 	}
+}
+
+// NewSSTIModuleWithPayloads creates a new SSTI module with custom payloads loaded from directory
+func NewSSTIModuleWithPayloads(payloadDir string) (*SSTIModule, error) {
+	payloads, err := LoadPayloadsFromDir(payloadDir)
+	if err != nil {
+		return nil, fmt.Errorf("loading payloads from %s: %w", payloadDir, err)
+	}
+
+	// Fall back to defaults if no payloads loaded from directory
+	if len(payloads) == 0 {
+		payloads = defaultPayloads()
+	}
+
+	return &SSTIModule{
+		payloads: payloads,
+	}, nil
+}
+
+// NewSSTIModuleWithPayloadList creates a new SSTI module with a custom payload list
+func NewSSTIModuleWithPayloadList(payloads []injection.Payload) *SSTIModule {
+	// Fall back to defaults if no payloads provided
+	if len(payloads) == 0 {
+		payloads = defaultPayloads()
+	}
+
+	return &SSTIModule{
+		payloads: payloads,
+	}
+}
+
+// LoadPayloads is a unified loader that accepts:
+// - A directory path (loads all .yaml files in directory)
+// - A single file path
+// - Comma-separated file paths
+func LoadPayloads(path string) ([]injection.Payload, error) {
+	// Check if path contains commas (multiple files)
+	if strings.Contains(path, ",") {
+		files := strings.Split(path, ",")
+		return LoadPayloadsFromFiles(files)
+	}
+
+	// Check if path is a directory or file
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if info.IsDir() {
+		return LoadPayloadsFromDir(path)
+	}
+
+	// Single file
+	return LoadPayloadsFromFiles([]string{path})
+}
+
+// LoadPayloadsFromFiles loads payloads from one or more YAML files
+func LoadPayloadsFromFiles(files []string) ([]injection.Payload, error) {
+	var allPayloads []injection.Payload
+
+	for _, file := range files {
+		// Trim whitespace from file path
+		file = strings.TrimSpace(file)
+
+		// Read and parse YAML file
+		payloads, err := loadPayloadFile(file)
+		if err != nil {
+			return nil, fmt.Errorf("loading %s: %w", file, err)
+		}
+
+		allPayloads = append(allPayloads, payloads...)
+	}
+
+	return allPayloads, nil
+}
+
+// LoadPayloadsFromDir loads all YAML payload files from a directory
+func LoadPayloadsFromDir(dir string) ([]injection.Payload, error) {
+	// Check if directory exists
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("directory does not exist: %s", dir)
+	}
+
+	// Find all YAML files in directory
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, fmt.Errorf("reading directory: %w", err)
+	}
+
+	var allPayloads []injection.Payload
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		// Only process .yaml and .yml files
+		filename := entry.Name()
+		ext := filepath.Ext(filename)
+		if ext != ".yaml" && ext != ".yml" {
+			continue
+		}
+
+		// Read and parse YAML file
+		filePath := filepath.Join(dir, filename)
+		payloads, err := loadPayloadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("loading %s: %w", filename, err)
+		}
+
+		allPayloads = append(allPayloads, payloads...)
+	}
+
+	return allPayloads, nil
+}
+
+// loadPayloadFile loads payloads from a single YAML file
+func loadPayloadFile(filePath string) ([]injection.Payload, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("reading file: %w", err)
+	}
+
+	var payloadFile PayloadFile
+	if err := yaml.Unmarshal(data, &payloadFile); err != nil {
+		return nil, fmt.Errorf("parsing YAML: %w", err)
+	}
+
+	// Convert YAML payloads to injection.Payload format
+	payloads := make([]injection.Payload, 0, len(payloadFile.Payloads))
+	for _, yp := range payloadFile.Payloads {
+		payload := injection.Payload{
+			Value:       yp.Value,
+			Expected:    yp.Expected,
+			Engine:      payloadFile.Engine,
+			Description: yp.Description,
+		}
+		payloads = append(payloads, payload)
+	}
+
+	return payloads, nil
 }
 
 // Name returns the module name

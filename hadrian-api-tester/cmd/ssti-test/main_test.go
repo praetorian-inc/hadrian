@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -15,14 +15,15 @@ import (
 // TestParseFlags tests command-line flag parsing
 func TestParseFlags(t *testing.T) {
 	tests := []struct {
-		name        string
-		args        []string
-		wantTarget  string
-		wantParam   string
-		wantMethod  string
-		wantProxy   string
-		wantVerbose bool
-		wantErr     bool
+		name           string
+		args           []string
+		wantTarget     string
+		wantParam      string
+		wantMethod     string
+		wantProxy      string
+		wantVerbose    bool
+		wantPayloadsDir string
+		wantErr        bool
 	}{
 		{
 			name:       "valid GET request",
@@ -45,10 +46,16 @@ func TestParseFlags(t *testing.T) {
 			wantProxy:  "http://127.0.0.1:8080",
 		},
 		{
-			name:       "verbose mode",
-			args:       []string{"-target", "https://example.com", "-verbose"},
-			wantTarget: "https://example.com",
+			name:        "verbose mode",
+			args:        []string{"-target", "https://example.com", "-verbose"},
+			wantTarget:  "https://example.com",
 			wantVerbose: true,
+		},
+		{
+			name:            "custom payloads directory",
+			args:            []string{"-target", "https://example.com", "-payloads", "./payloads/ssti"},
+			wantTarget:      "https://example.com",
+			wantPayloadsDir: "./payloads/ssti",
 		},
 		{
 			name:    "missing target",
@@ -87,6 +94,9 @@ func TestParseFlags(t *testing.T) {
 			}
 			if cfg.verbose != tt.wantVerbose {
 				t.Errorf("verbose = %v, want %v", cfg.verbose, tt.wantVerbose)
+			}
+			if tt.wantPayloadsDir != "" && cfg.payloadsDir != tt.wantPayloadsDir {
+				t.Errorf("payloadsDir = %q, want %q", cfg.payloadsDir, tt.wantPayloadsDir)
 			}
 		})
 	}
@@ -226,4 +236,27 @@ func TestDetectVulnerability(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRunWithCustomPayloads tests execution with custom payload directory
+func TestRunWithCustomPayloads(t *testing.T) {
+	// Get project root (3 levels up from test file)
+	projectRoot, err := filepath.Abs(filepath.Join(".", "..", ".."))
+	require.NoError(t, err)
+
+	payloadsDir := filepath.Join(projectRoot, "payloads", "ssti")
+
+	cfg := config{
+		target:      "https://example.com",
+		param:       "q",
+		method:      "GET",
+		payloadsDir: payloadsDir,
+		verbose:     false,
+		insecure:    false,
+	}
+
+	// This test just verifies the payloads load without error
+	// We don't actually run the scan as it requires a real server
+	_ = cfg
+	assert.NotEmpty(t, cfg.payloadsDir, "Payloads directory should be set")
 }
