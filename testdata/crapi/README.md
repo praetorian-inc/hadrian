@@ -77,11 +77,24 @@ CRAPI_ADMIN_TOKEN=eyJ...
 
 Note: The `.env` file is gitignored to prevent committing secrets.
 
-### 5. (Optional) Start Burp Suite
+### 5. Upload Test Videos (Required for BFLA/BOPLA tests)
+
+The BFLA and BOPLA mass assignment tests require each user to have an uploaded video:
+
+```bash
+# Run the setup script (requires .env file with tokens)
+./testdata/crapi/setup-videos.sh
+```
+
+This script uploads test videos for user, user2, and mechanic accounts. The videos are required because:
+- **BFLA test**: Detects if regular users can delete admin videos
+- **BOPLA test**: Detects mass assignment via ID field injection in video updates
+
+### 6. (Optional) Start Burp Suite
 
 If you want to inspect requests in Burp Suite, start it and configure the proxy listener on `127.0.0.1:8080`.
 
-### 6. Run Hadrian
+### 7. Run Hadrian
 
 From the repository root:
 
@@ -107,7 +120,8 @@ crAPI is intentionally vulnerable. Hadrian should detect:
 | API1:2023 | ✅ BOLA - Access other user's vehicle | `GET /identity/api/v2/vehicle/{vehicleId}/location` | `api1-bola-read.yaml` |
 | API1:2023 | ✅ BOLA - Access other user's order | `GET /workshop/api/shop/orders/{order_id}` |  `api1-bola-read.yaml` |
 | API2:2023 | ✅ Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` | `api2-otp-bruteforce` |
-| API5:2023 | ⏳ TBI: BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` |
+| API3:2023 | ✅ BOPLA - Mass assignment via ID injection | `PUT /identity/api/v2/user/videos/{video_id}` | `api3-bopla-mass-assignment.yaml` |
+| API5:2023 | ✅ BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` | `api5-bfla-admin-video-delete.yaml` |
 
 ## Expected No Vulnerabilities
 crAPI is does not have the following vulnerability. Hadrian should not detect:
