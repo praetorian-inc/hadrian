@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/log"
+	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/util"
 )
 
 // generateRequestID creates a random UUID-style request ID
@@ -33,19 +34,6 @@ func generateRequestID() string {
 		hex.EncodeToString(b[10:16])
 }
 
-// hasUnresolvedPlaceholders checks if a path contains unresolved {placeholder} patterns.
-// Returns the first unresolved placeholder name if found, or empty string if all resolved.
-func hasUnresolvedPlaceholders(path string) string {
-	start := strings.Index(path, "{")
-	if start == -1 {
-		return ""
-	}
-	end := strings.Index(path[start:], "}")
-	if end == -1 {
-		return ""
-	}
-	return path[start+1 : start+end]
-}
 
 // HTTPClient interface for dependency injection
 type HTTPClient interface {
@@ -353,7 +341,7 @@ func buildRequest(
 	}
 
 	// Check for unresolved placeholders - error if any remain
-	if placeholder := hasUnresolvedPlaceholders(path); placeholder != "" {
+	if placeholder := util.HasUnresolvedPlaceholders(path); placeholder != "" {
 		return nil, fmt.Errorf("unresolved placeholder {%s} in path %q - no variable provided", placeholder, test.Path)
 	}
 
