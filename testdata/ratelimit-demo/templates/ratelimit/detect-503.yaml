@@ -1,0 +1,33 @@
+id: ratelimit-detect-503
+
+info:
+  name: "Rate Limit Detection - 503 Status"
+  category: "API4:2023"
+  severity: "LOW"
+  requires_llm_triage: false
+  test_pattern: "rate_limit"
+
+endpoint_selector:
+  requires_auth: false
+  methods: ["GET"]
+  path_pattern: ".*/status-503/.*"
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: ""
+
+http:
+  - method: "GET"
+    path: "{{operation.path}}"
+    repeat: 10
+    rate_limit:
+      threshold: 1
+      status_codes: [503]
+    matchers:
+      - type: status
+        status: [200]
+
+detection:
+  success_indicators: []
+  vulnerability_pattern: "rate_limit"
+  conditions: []

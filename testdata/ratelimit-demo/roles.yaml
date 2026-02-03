@@ -1,0 +1,6 @@
+objects: []
+
+roles:
+  - name: anonymous
+    level: 0
+    permissions: []

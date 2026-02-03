@@ -45,7 +45,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 
 ### Key Packages
 
-- **pkg/runner**: CLI commands and main test orchestration loop
+- **pkg/runner**: CLI commands, test orchestration, rate limiting (`ratelimit.go`, `ratelimit_client.go`), and execution logic
 - **pkg/templates**: YAML template parsing (`parse.go`), compilation (`compile.go`), and HTTP execution (`execute.go`)
 - **pkg/owasp**: OWASP-specific test runner, endpoint/role selectors, and mutation testing
 - **pkg/roles**: Permission model with `<action>:<object>:<scope>` format and role-based filtering
@@ -72,10 +72,11 @@ Permissions follow `<action>:<object>:<scope>`:
 
 ### Production Safety
 
-Built-in safeguards in `pkg/runner/production.go`:
+Built-in safeguards in `pkg/runner/production.go` and `pkg/runner/ratelimit_client.go`:
 - Blocks production URLs by default (requires `--allow-production`)
 - Blocks internal/private IPs (requires `--allow-internal`)
-- Rate limiting (default 5 req/s)
+- Proactive rate limiting (default 5 req/s) via `RateLimiter`
+- Reactive backoff on 429/503 responses via `RateLimitingClient`
 - Audit logging to `.hadrian/audit.log`
 
 ## Testing with crAPI
