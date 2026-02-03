@@ -11,21 +11,8 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
+	"github.com/praetorian-inc/hadrian/pkg/util"
 )
-
-// hasUnresolvedPlaceholders checks if a path contains unresolved {placeholder} patterns.
-// Returns the first unresolved placeholder name if found, or empty string if all resolved.
-func hasUnresolvedPlaceholders(path string) string {
-	start := strings.Index(path, "{")
-	if start == -1 {
-		return ""
-	}
-	end := strings.Index(path[start:], "}")
-	if end == -1 {
-		return ""
-	}
-	return path[start+1 : start+end]
-}
 
 // HTTPClient interface for making HTTP requests
 type HTTPClient interface {
@@ -181,7 +168,7 @@ func (e *MutationExecutor) executePhase(
 	}
 
 	// Check for unresolved placeholders - error if any remain
-	if placeholder := hasUnresolvedPlaceholders(path); placeholder != "" {
+	if placeholder := util.HasUnresolvedPlaceholders(path); placeholder != "" {
 		return nil, fmt.Errorf("unresolved placeholder {%s} in path %q - required value not stored from setup phase", placeholder, phase.Path)
 	}
 

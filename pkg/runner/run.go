@@ -22,35 +22,35 @@ import (
 
 // Config holds the test command configuration
 type Config struct {
-	API                   string
-	Roles                 string
-	Auth                  string
-	Proxy                 string
-	CACert                string
-	Insecure              bool
-	Concurrency           int
-	RateLimit             float64
-	RateLimitBackoff      string        // Backoff type: exponential or fixed
-	RateLimitMaxWait      time.Duration // Maximum backoff wait time
-	RateLimitMaxRetries   int           // Maximum retry attempts on rate limit
-	RateLimitStatusCodes  []int         // Status codes that trigger rate limit retry
-	Timeout               int
-	AllowProduction       bool
-	AllowInternal         bool
-	Output                string
-	OutputFile            string
-	Categories            []string
-	TemplateDir           string   // Directory containing templates
-	Templates             []string // Filter templates by ID or name
-	AuditLog              string
-	OWASPCategories       []string
-	Verbose               bool
-	DryRun                bool
-	RequestIDsLimit       int    // Number of request IDs to display per finding (0 = all)
-	LLMHost               string // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel              string // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout            int    // LLM request timeout in seconds
-	LLMContext            string // Additional context for LLM prompts
+	API                  string
+	Roles                string
+	Auth                 string
+	Proxy                string
+	CACert               string
+	Insecure             bool
+	Concurrency          int
+	RateLimit            float64
+	RateLimitBackoff     string        // Backoff type: exponential or fixed
+	RateLimitMaxWait     time.Duration // Maximum backoff wait time
+	RateLimitMaxRetries  int           // Maximum retry attempts on rate limit
+	RateLimitStatusCodes []int         // Status codes that trigger rate limit retry
+	Timeout              int
+	AllowProduction      bool
+	AllowInternal        bool
+	Output               string
+	OutputFile           string
+	Categories           []string
+	TemplateDir          string   // Directory containing templates
+	Templates            []string // Filter templates by ID or name
+	AuditLog             string
+	OWASPCategories      []string
+	Verbose              bool
+	DryRun               bool
+	RequestIDsLimit      int    // Number of request IDs to display per finding (0 = all)
+	LLMHost              string // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel             string // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout           int    // LLM request timeout in seconds
+	LLMContext           string // Additional context for LLM prompts
 }
 
 // Run is the main entry point for the Hadrian CLI
@@ -468,7 +468,6 @@ func filterByTemplates(tmpls []*templates.CompiledTemplate, templateFilters []st
 	}
 	return result
 }
-
 
 // filterTemplatesByOWASP filters templates by OWASP category prefix.
 // If owaspCategories is empty, returns all templates unchanged.
