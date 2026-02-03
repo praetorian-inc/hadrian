@@ -28,6 +28,10 @@ coverage.out
 coverage.html
 *.coverprofile
 
+# Test output artifacts
+hadrian-*.log
+results-*.json
+
 # IDE/Editor
 .idea/
 .vscode/

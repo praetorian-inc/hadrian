@@ -18,6 +18,7 @@ type RoleConfig struct {
 
 type Role struct {
 	Name        string       `yaml:"name"`
+	Level       int          `yaml:"level"`       // Explicit privilege level (higher = more privilege)
 	RawPerms    []string     `yaml:"permissions"` // Raw permission strings from YAML
 	Permissions []Permission `yaml:"-"`           // Parsed permissions
 }
@@ -143,24 +144,24 @@ func (p *Permission) Matches(action, object, scope string) bool {
 	return true
 }
 
-// GetRolesByPermissionLevel returns roles grouped by permission count
+// GetRolesByPermissionLevel returns roles grouped by privilege level
 func (c *RoleConfig) GetRolesByPermissionLevel(level string) []*Role {
-	counts := make(map[string]int)
+	levels := make(map[string]int)
 	for _, role := range c.Roles {
-		counts[role.Name] = len(role.Permissions)
+		levels[role.Name] = role.Level
 	}
 
-	median := calculateMedian(counts)
+	median := calculateMedian(levels)
 
 	result := []*Role{}
 	for _, role := range c.Roles {
 		switch level {
 		case "lower":
-			if counts[role.Name] < median {
+			if role.Level < median {
 				result = append(result, role)
 			}
 		case "higher":
-			if counts[role.Name] >= median {
+			if role.Level >= median {
 				result = append(result, role)
 			}
 		case "all":

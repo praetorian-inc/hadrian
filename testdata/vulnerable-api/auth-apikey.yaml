@@ -1,0 +1,17 @@
+# Hadrian auth configuration for API Key authentication
+# Usage: --auth auth-apikey.yaml
+#
+# Start the API with: AUTH_METHOD=api_key ./vulnerable-api
+
+method: api_key
+location: header
+key_name: X-API-Key
+
+roles:
+  admin:
+    api_key: "admin-api-key-12345"
+  user1:
+    api_key: "user1-api-key-67890"
+  user2:
+    api_key: "user2-api-key-abcde"
+  # anonymous role has no credentials - tests unauthenticated access

@@ -1,0 +1,744 @@
+openapi: 3.0.3
+info:
+  title: Vulnerable Test API
+  description: |
+    A deliberately vulnerable REST API for testing Hadrian's OWASP API security testing capabilities.
+
+    **WARNING**: This API has intentional BOLA vulnerabilities. DO NOT deploy to production.
+  version: 1.0.0
+  contact:
+    name: Hadrian Security Testing
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: auth
+    description: Authentication endpoints
+  - name: public
+    description: Public endpoints (no authentication required)
+  - name: users
+    description: User management (BOLA vulnerable)
+  - name: profiles
+    description: User profiles with sensitive data (BOLA vulnerable)
+  - name: orders
+    description: Order management (BOLA vulnerable)
+  - name: documents
+    description: Document management (BOLA vulnerable)
+  - name: admin
+    description: Admin-only endpoints (properly protected)
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      tags: [public]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  auth_method:
+                    type: string
+                    example: bearer
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /api/auth/login:
+    post:
+      summary: Authenticate and get credentials
+      operationId: login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: user1
+                password:
+                  type: string
+                  example: user1pass
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT token (when auth_method=bearer)
+                  api_key:
+                    type: string
+                    description: API key (when auth_method=api_key)
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/me:
+    get:
+      summary: Get current user
+      operationId: getCurrentUser
+      tags: [auth]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/public/documents:
+    get:
+      summary: List public documents
+      operationId: listPublicDocuments
+      tags: [public]
+      responses:
+        '200':
+          description: List of public documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+
+  /api/public/documents/{id}:
+    get:
+      summary: Get a public document
+      operationId: getPublicDocument
+      tags: [public]
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '403':
+          description: Document is private
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/users:
+    get:
+      summary: List all users (BOLA vulnerable)
+      operationId: listUsers
+      tags: [users]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: List of all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/users/{id}:
+    get:
+      summary: Get user by ID (BOLA vulnerable - no ownership check)
+      operationId: getUser
+      tags: [users]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update user (BOLA vulnerable - no ownership check)
+      operationId: updateUser
+      tags: [users]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete user (BOLA vulnerable - no ownership check)
+      operationId: deleteUser
+      tags: [users]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: User deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/profiles/{id}:
+    get:
+      summary: Get profile by ID (BOLA vulnerable - exposes SSN!)
+      operationId: getProfile
+      tags: [profiles]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      responses:
+        '200':
+          description: Profile with sensitive data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update profile (BOLA vulnerable - no ownership check)
+      operationId: updateProfile
+      tags: [profiles]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ProfileId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name:
+                  type: string
+                phone_number:
+                  type: string
+                address:
+                  type: string
+      responses:
+        '200':
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Profile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/orders:
+    get:
+      summary: List all orders (BOLA vulnerable - returns all users' orders)
+      operationId: listOrders
+      tags: [orders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: List of all orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create order
+      operationId: createOrder
+      tags: [orders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product, amount]
+              properties:
+                product:
+                  type: string
+                  example: Test Product
+                amount:
+                  type: number
+                  format: float
+                  example: 29.99
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/orders/{id}:
+    get:
+      summary: Get order by ID (BOLA vulnerable - no ownership check)
+      operationId: getOrder
+      tags: [orders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete order (BOLA vulnerable - no ownership check)
+      operationId: deleteOrder
+      tags: [orders]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Order deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/documents:
+    get:
+      summary: List all documents (BOLA vulnerable - returns private docs)
+      operationId: listDocuments
+      tags: [documents]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: List of all documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create document
+      operationId: createDocument
+      tags: [documents]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title:
+                  type: string
+                content:
+                  type: string
+                is_private:
+                  type: boolean
+                  default: false
+      responses:
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/documents/{id}:
+    get:
+      summary: Get document by ID (BOLA vulnerable - no ownership check for private docs)
+      operationId: getDocument
+      tags: [documents]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update document (BOLA vulnerable - no ownership check)
+      operationId: updateDocument
+      tags: [documents]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                content:
+                  type: string
+                is_private:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete document (BOLA vulnerable - no ownership check)
+      operationId: deleteDocument
+      tags: [documents]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Document deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/users:
+    get:
+      summary: Admin list users (properly protected)
+      operationId: adminListUsers
+      tags: [admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: List of all users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/admin/stats:
+    get:
+      summary: Admin statistics (properly protected)
+      operationId: adminStats
+      tags: [admin]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: System statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_users:
+                    type: integer
+                  total_profiles:
+                    type: integer
+                  total_orders:
+                    type: integer
+                  total_documents:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    basicAuth:
+      type: http
+      scheme: basic
+
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      description: User ID
+      schema:
+        type: integer
+        example: 2
+    ProfileId:
+      name: id
+      in: path
+      required: true
+      description: Profile ID
+      schema:
+        type: integer
+        example: 2
+    OrderId:
+      name: id
+      in: path
+      required: true
+      description: Order ID
+      schema:
+        type: integer
+        example: 2
+    DocumentId:
+      name: id
+      in: path
+      required: true
+      description: Document ID
+      schema:
+        type: integer
+        example: 2
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        username:
+          type: string
+          example: user1
+        email:
+          type: string
+          format: email
+          example: user1@example.com
+        role:
+          type: string
+          enum: [admin, user, anonymous]
+          example: user
+
+    Profile:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        user_id:
+          type: integer
+          example: 2
+        full_name:
+          type: string
+          example: User One
+        ssn:
+          type: string
+          description: SENSITIVE - Social Security Number
+          example: 222-22-2222
+        phone_number:
+          type: string
+          example: +1-555-0101
+        address:
+          type: string
+          example: 101 User Ave, Data Town
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        user_id:
+          type: integer
+          example: 2
+        product:
+          type: string
+          example: Basic Plan
+        amount:
+          type: number
+          format: float
+          example: 49.99
+        status:
+          type: string
+          enum: [pending, completed, cancelled]
+          example: completed
+        created_at:
+          type: string
+          format: date-time
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        user_id:
+          type: integer
+          example: 2
+        title:
+          type: string
+          example: User1 Private Doc
+        content:
+          type: string
+          example: User1's private information
+        is_private:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: resource not found
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: authentication failed
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: insufficient permissions
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: resource not found

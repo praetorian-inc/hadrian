@@ -28,7 +28,7 @@ func TestExecuteMutation_TracksRequestIDs(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			w.Write([]byte(`{"id": "video123"}`))
 		case "/api/videos/video123":
-			if r.Header.Get("Authorization") == "attacker-token" {
+			if r.Header.Get("Authorization") == "Bearer attacker-token" {
 				attackRequestID = requestID
 				// Attack succeeds (BOLA vulnerability)
 				w.WriteHeader(http.StatusOK)
@@ -77,12 +77,6 @@ func TestExecuteMutation_TracksRequestIDs(t *testing.T) {
 		},
 	}
 
-	// Create auth tokens
-	authTokens := map[string]string{
-		"victim":   "victim-token",
-		"attacker": "attacker-token",
-	}
-
 	// Execute mutation test
 	executor := NewMutationExecutor(http.DefaultClient)
 	result, err := executor.ExecuteMutation(
@@ -91,7 +85,7 @@ func TestExecuteMutation_TracksRequestIDs(t *testing.T) {
 		"create",
 		"attacker",
 		"victim",
-		authTokens,
+		makeAuthInfos("attacker-token", "victim-token"),
 		server.URL,
 	)
 
@@ -163,7 +157,7 @@ func TestExecuteMutation_NoRequestIDsWhenNoPhases(t *testing.T) {
 		"read",
 		"attacker",
 		"victim",
-		map[string]string{},
+		makeAuthInfos("", ""),
 		server.URL,
 	)
 

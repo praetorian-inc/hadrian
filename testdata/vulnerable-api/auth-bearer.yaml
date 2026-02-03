@@ -1,0 +1,9 @@
+method: bearer
+
+roles:
+  admin:
+    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Njk3ODg3NzMsInJvbGUiOiJhZG1pbiIsInVzZXJfaWQiOjEsInVzZXJuYW1lIjoiYWRtaW4ifQ.P2o1tX2WUHyK3IED0k9VVQLAY-DvTy-Z84d0_yLsnIQ"
+  user1:
+    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Njk3ODg3NzQsInJvbGUiOiJ1c2VyIiwidXNlcl9pZCI6MiwidXNlcm5hbWUiOiJ1c2VyMSJ9.ahFOwGosGC-I7lM2WewnJuDl7GGgq4yL9Hn-SH1VsgM"
+  user2:
+    token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Njk3ODg3NzQsInJvbGUiOiJ1c2VyIiwidXNlcl9pZCI6MywidXNlcm5hbWUiOiJ1c2VyMiJ9.14KWFp02Md04Ama9Mr95p4HURT3CgrWqTcz74XQTj_c"

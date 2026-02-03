@@ -1,0 +1,44 @@
+# Template: BOLA Profile Write Test
+# Tests PUT /api/profiles/{id} for unauthorized profile modification
+# Detects if users can modify profile data (including SSN) belonging to other users
+id: 12-api1-bola-profile-write
+
+info:
+  name: "BOLA - Profile Resource Modification (Write)"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "profile", "write", "pii"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select PUT /api/profiles/{id} endpoints specifically
+endpoint_selector:
+  path_pattern: "/api/profiles/.*"
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["PUT"]
+
+# Vertical escalation: lower user modifying higher user's profile
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to modify victim's profile data using attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      Content-Type: "application/json"
+    body: '{"full_name": "Attacker Modified", "phone_number": "555-9999"}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+
+# Detection: If PUT succeeds (200/201/204), attacker can modify victim's profile (including sensitive PII)
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_modified_victim_profile"

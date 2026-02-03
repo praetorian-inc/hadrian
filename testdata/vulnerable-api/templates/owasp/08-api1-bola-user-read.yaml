@@ -1,0 +1,42 @@
+# Template: BOLA User Read Test
+# Tests GET /api/users/{id} for unauthorized cross-user resource access
+# Detects if lower-privileged users can access user data belonging to higher-privileged users
+id: 08-api1-bola-user-read
+
+info:
+  name: "BOLA - User Resource Access (Read)"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "user"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select /api/users/{id} endpoints specifically
+endpoint_selector:
+  path_pattern: "/api/users/.*"
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+
+# Vertical escalation: lower user accessing higher user's data
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to access victim's user data using attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+    matchers:
+      - type: status
+        status: [200, 201]
+
+# Detection: If we get 200, attacker accessed victim's user data
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_accessed_victim_user_data"

@@ -5,16 +5,19 @@ objects:
 
 roles:
   - name: admin
+    level: 100
     permissions:
       - "*:*:*"
 
   - name: moderator
+    level: 50
     permissions:
       - "read:*:all"
       - "write:posts:all"
       - "delete:comments:all"
 
   - name: user
+    level: 10
     permissions:
       - "read:users:own"
       - "write:users:own"

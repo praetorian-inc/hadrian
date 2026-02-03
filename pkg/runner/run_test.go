@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -72,4 +74,93 @@ func TestRun_NoError(t *testing.T) {
 		}
 		assert.Equal(t, "hadrian", rootCmd.Use)
 	})
+}
+
+func TestLoadTemplateFiles_DeterministicOrder(t *testing.T) {
+	// Create temp dir with templates in non-alphabetical filesystem order
+	tmpDir := t.TempDir()
+	owaspDir := filepath.Join(tmpDir, "owasp")
+	err := os.MkdirAll(owaspDir, 0755)
+	assert.NoError(t, err)
+
+	// Create templates with names that would be out of order if not sorted
+	templates := []struct {
+		name    string
+		content string
+	}{
+		{
+			name: "03-c.yaml",
+			content: `id: 03-c
+info:
+  name: "Test C"
+  category: "owasp"
+  severity: "HIGH"
+  test_pattern: "simple"
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`,
+		},
+		{
+			name: "01-a.yaml",
+			content: `id: 01-a
+info:
+  name: "Test A"
+  category: "owasp"
+  severity: "HIGH"
+  test_pattern: "simple"
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`,
+		},
+		{
+			name: "02-b.yaml",
+			content: `id: 02-b
+info:
+  name: "Test B"
+  category: "owasp"
+  severity: "HIGH"
+  test_pattern: "simple"
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`,
+		},
+	}
+
+	for _, tmpl := range templates {
+		err := os.WriteFile(filepath.Join(owaspDir, tmpl.name), []byte(tmpl.content), 0644)
+		assert.NoError(t, err)
+	}
+
+	// Load templates multiple times and verify order is always the same
+	for i := 0; i < 5; i++ {
+		loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
+		assert.NoError(t, err)
+		assert.Len(t, loaded, 3)
+
+		// Should always be in alphabetical order by filepath
+		assert.Equal(t, "01-a", loaded[0].ID)
+		assert.Equal(t, "02-b", loaded[1].ID)
+		assert.Equal(t, "03-c", loaded[2].ID)
+	}
 }

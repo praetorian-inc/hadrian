@@ -1,0 +1,45 @@
+# Template: Broken Function Level Authorization (API5:2023)
+# Tests admin endpoint protection
+# This template verifies that admin-only endpoints properly reject non-admin users
+# NOTE: This should NOT find a vulnerability if admin endpoints are properly protected
+id: 05-api5-function-level-authz
+
+info:
+  name: "BFLA - Admin Endpoint Protection"
+  category: "API5:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bfla", "owasp-api-top10", "api5", "admin"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Target admin endpoints that should be protected
+endpoint_selector:
+  has_path_parameter: false
+  requires_auth: true
+  methods: ["GET", "POST", "PUT", "DELETE"]
+  path_pattern: ".*/admin/.*"
+
+# Attacker (regular user) tries to access admin endpoints
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to access admin endpoint with regular user's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+    matchers:
+      - type: status
+        status: [200, 201]
+
+# Detection: If regular user can access admin endpoints, it's BFLA
+# Properly secured APIs should return 403 (Forbidden) or 401 (Unauthorized)
+# A 200/201 response indicates broken function level authorization
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "non_admin_accessed_admin_endpoint"

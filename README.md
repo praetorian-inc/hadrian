@@ -105,6 +105,7 @@ objects:
 
 roles:
   - name: admin
+    level: 100          # Explicit privilege level (higher = more privilege)
     permissions:
       - "read:users:all"
       - "write:users:all"
@@ -114,6 +115,7 @@ roles:
       - "execute:admin:all"
 
   - name: moderator
+    level: 50           # Mid-level privilege
     permissions:
       - "read:users:all"
       - "read:posts:all"
@@ -121,12 +123,14 @@ roles:
       - "delete:posts:all"
 
   - name: user
+    level: 10           # Basic user privilege
     permissions:
       - "read:users:own"
       - "read:posts:all"
       - "write:posts:own"
 
   - name: guest
+    level: 0            # No privilege (unauthenticated)
     permissions: []
 
 endpoints:
@@ -143,6 +147,12 @@ endpoints:
 - **Actions**: `read`, `write`, `delete`, `execute`, `*`
 - **Objects**: Defined in the `objects` list
 - **Scopes**: `public`, `own`, `org`, `all`, `*`
+
+**Role Level**: The `level` field defines explicit privilege levels for BOLA testing:
+
+- Higher values indicate more privileged roles (e.g., admin: 100)
+- Used by `role_selector` to determine "lower" vs "higher" permission levels
+- Prevents incorrect classification when admins have fewer but more powerful permissions (e.g., `*:*:all`)
 
 ### Authentication Configuration (auth.yaml)
 
@@ -213,7 +223,9 @@ hadrian version
 
 ## Writing Custom Templates
 
-Create YAML templates in the `templates/owasp/` directory:
+Create YAML templates in the `templates/owasp/` directory.
+
+**Template Execution Order**: Templates are executed in **alphabetical order by filename**. To control execution order, prefix filenames with numbers (e.g., `01-read-tests.yaml`, `02-write-tests.yaml`, `03-delete-tests.yaml`). This is useful when some tests are destructive and should run last.
 
 ```yaml
 id: api1-bola-cross-user

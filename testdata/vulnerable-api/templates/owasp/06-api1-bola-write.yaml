@@ -1,0 +1,42 @@
+# Template: BOLA (Broken Object Level Authorization) Write Test
+# Tests PUT endpoints for unauthorized cross-user resource modification
+# This tests if an attacker can modify resources belonging to another user
+id: 06-api1-bola-write
+
+info:
+  name: "BOLA - Cross-User Resource Modification (Write)"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "write"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select PUT endpoints with path parameters that require auth
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["PUT"]
+
+# Same role configuration as read test
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to modify victim's resource using attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+      Content-Type: "application/json"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+
+# Detection: If PUT succeeds (200/201/204), attacker can modify victim's data
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_modified_victim_resource"
