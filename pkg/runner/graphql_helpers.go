@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"net/http"
 	"time"
 
+	internalhttp "github.com/praetorian-inc/hadrian/internal/http"
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -39,10 +39,14 @@ func loadConfigs(authPath, rolesPath string) (*AuthConfig, *RolesConfig, error) 
 }
 
 // fetchSchema retrieves GraphQL schema via introspection or SDL file
-func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient *http.Client) (*graphql.Schema, error) {
+func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient templates.HTTPClient) (*graphql.Schema, error) {
 	if config.Schema != "" {
-		// SDL file loading requested but not yet implemented
-		return nil, fmt.Errorf("SDL file loading not yet implemented - use introspection for now")
+		// Load schema from SDL file
+		schema, err := graphql.LoadSchemaFromFile(config.Schema)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load schema from file: %w", err)
+		}
+		return schema, nil
 	}
 
 	// Introspect endpoint
@@ -56,24 +60,69 @@ func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient *http.Cli
 	return schema, nil
 }
 
+// createGraphQLHTTPClient creates HTTP client with proxy, TLS, and timeout settings
+func createGraphQLHTTPClient(config GraphQLConfig) (templates.HTTPClient, error) {
+	httpConfig := &internalhttp.Config{
+		Proxy:    config.Proxy,
+		CACert:   config.CACert,
+		Insecure: config.Insecure,
+		Timeout:  time.Duration(config.Timeout) * time.Second,
+	}
+	return internalhttp.New(httpConfig)
+}
+
+// wrapWithRateLimiting wraps HTTP client with rate limiting
+func wrapWithRateLimiting(httpClient templates.HTTPClient, config GraphQLConfig) templates.HTTPClient {
+	// Create rate limiter
+	limiter := NewRateLimiter(config.RateLimit, config.RateLimit)
+
+	// Create rate limit config
+	rateLimitConfig := &RateLimitConfig{
+		Rate:           config.RateLimit,
+		Enabled:        config.RateLimit > 0,
+		BackoffType:    config.RateLimitBackoff,
+		BackoffInitial: 1 * time.Second,
+		BackoffMax:     config.RateLimitMaxWait,
+		MaxRetries:     config.RateLimitMaxRetries,
+		StatusCodes:    config.RateLimitStatusCodes,
+	}
+
+	// Wrap with rate limiting
+	return NewRateLimitingClient(httpClient, limiter, rateLimitConfig)
+}
+
+// graphqlVerboseLog prints message if verbose mode is enabled (GraphQL-specific version)
+func graphqlVerboseLog(verbose bool, format string, args ...interface{}) {
+	if verbose {
+		fmt.Printf(format+"\n", args...)
+	}
+}
+
+// graphqlDryRunLog prints message if dry run mode is enabled (GraphQL-specific version)
+func graphqlDryRunLog(dryRun bool, format string, args ...interface{}) {
+	if dryRun {
+		fmt.Printf("[DRY RUN] "+format+"\n", args...)
+	}
+}
+
 // reportSchemaInfo prints discovered schema statistics
-func reportSchemaInfo(schema *graphql.Schema) {
-	fmt.Println("Schema loaded successfully")
-	fmt.Printf("  Queries: %d\n", len(schema.Queries))
-	fmt.Printf("  Mutations: %d\n", len(schema.Mutations))
-	fmt.Printf("  Types: %d\n", len(schema.Types))
+func reportSchemaInfo(schema *graphql.Schema, verbose bool) {
+	graphqlVerboseLog(verbose, "Schema loaded successfully")
+	graphqlVerboseLog(verbose, "  Queries: %d", len(schema.Queries))
+	graphqlVerboseLog(verbose, "  Mutations: %d", len(schema.Mutations))
+	graphqlVerboseLog(verbose, "  Types: %d", len(schema.Types))
 }
 
 // reportAuthConfigsLoaded prints auth configs status
-func reportAuthConfigsLoaded(authPath string, rolesPath string, authConfig *AuthConfig, rolesConfig *RolesConfig, authConfigs map[string]*graphql.AuthInfo) {
+func reportAuthConfigsLoaded(authPath string, rolesPath string, authConfig *AuthConfig, rolesConfig *RolesConfig, authConfigs map[string]*graphql.AuthInfo, verbose bool) {
 	if authConfig != nil {
-		fmt.Printf("Auth config loaded: %s\n", authPath)
+		graphqlVerboseLog(verbose, "Auth config loaded: %s", authPath)
 	}
 	if rolesConfig != nil {
-		fmt.Printf("Roles config loaded: %s (%d roles)\n", rolesPath, len(rolesConfig.Roles))
+		graphqlVerboseLog(verbose, "Roles config loaded: %s (%d roles)", rolesPath, len(rolesConfig.Roles))
 	}
 	if authConfigs != nil {
-		fmt.Printf("Auth configs loaded: %d roles available for BOLA/BFLA testing\n", len(authConfigs))
+		graphqlVerboseLog(verbose, "Auth configs loaded: %d roles available for BOLA/BFLA testing", len(authConfigs))
 	}
 }
 
@@ -197,45 +246,107 @@ func reportFindings(findings []*graphql.Finding) {
 	}
 }
 
-// runSecurityChecks executes scanner checks and template tests, returning all findings
-func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient *http.Client, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo) []*graphql.Finding {
-	// Create executor and scanner
-	executor := graphql.NewExecutor(httpClient, endpoint)
-	scanner := graphql.NewSecurityScanner(schema, executor, graphql.ScanConfig{
-		DepthLimit:      config.DepthLimit,
-		ComplexityLimit: config.ComplexityLimit,
-		BatchSize:       config.BatchSize,
-		Verbose:         config.Verbose,
-	})
+// runSecurityChecks executes scanner checks and template tests, returning all findings and template count
+func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo) ([]*graphql.Finding, int) {
+	var findings []*graphql.Finding
 
-	// Run scanner checks with timeout
-	fmt.Println("\n=== Running Security Checks ===")
-	checkCtx, cancel := context.WithTimeout(ctx, time.Duration(config.Timeout)*time.Second)
-	defer cancel()
+	// Run built-in security checks unless skip flag is set
+	if !config.SkipBuiltinChecks {
+		// Create executor and scanner
+		executor := graphql.NewExecutor(httpClient, endpoint)
+		scanner := graphql.NewSecurityScanner(schema, executor, graphql.ScanConfig{
+			DepthLimit:      config.DepthLimit,
+			ComplexityLimit: config.ComplexityLimit,
+			BatchSize:       config.BatchSize,
+			Verbose:         config.Verbose,
+		})
 
-	findings := scanner.RunAllChecks(checkCtx, authConfigs)
+		// Run scanner checks with timeout
+		graphqlVerboseLog(config.Verbose, "\n=== Running Security Checks ===")
+		checkCtx, cancel := context.WithTimeout(ctx, time.Duration(config.Timeout)*time.Second)
+		defer cancel()
 
-	// Execute GraphQL templates if provided
-	if config.Templates != "" {
-		templateFindings := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs)
-		findings = append(findings, templateFindings...)
+		findings = scanner.RunAllChecks(checkCtx, authConfigs)
+	} else {
+		graphqlVerboseLog(config.Verbose, "\n=== Skipping Built-in Security Checks ===")
+		findings = []*graphql.Finding{}
 	}
 
-	return findings
+	templateCount := 0
+	// Execute GraphQL templates if provided
+	if config.Templates != "" {
+		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs)
+		findings = append(findings, templateFindings...)
+		templateCount = count
+	}
+
+	return findings, templateCount
 }
 
-// runTemplateTests executes GraphQL templates and returns findings (converted from template results)
-func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient *http.Client, authConfigs map[string]*graphql.AuthInfo) []*graphql.Finding {
-	fmt.Println("\n=== Running GraphQL Templates ===")
+// filterGraphQLTemplatesByID filters GraphQL templates by ID patterns
+func filterGraphQLTemplatesByID(tmpls []*templates.Template, filters []string) []*templates.Template {
+	if len(filters) == 0 {
+		return tmpls
+	}
+
+	var filtered []*templates.Template
+	for _, tmpl := range tmpls {
+		for _, filter := range filters {
+			if tmpl.ID == filter {
+				filtered = append(filtered, tmpl)
+				break
+			}
+		}
+	}
+	return filtered
+}
+
+// filterGraphQLTemplatesByOWASP filters GraphQL templates by OWASP API Security categories
+func filterGraphQLTemplatesByOWASP(tmpls []*templates.Template, categories []string) []*templates.Template {
+	if len(categories) == 0 {
+		return tmpls
+	}
+
+	// Build category lookup map
+	categoryMap := make(map[string]bool)
+	for _, cat := range categories {
+		categoryMap[cat] = true
+	}
+
+	var filtered []*templates.Template
+	for _, tmpl := range tmpls {
+		// Check if template's category matches any filter
+		if categoryMap[tmpl.Info.Category] {
+			filtered = append(filtered, tmpl)
+		}
+	}
+	return filtered
+}
+
+// runTemplateTests executes GraphQL templates and returns findings and template count
+func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo) ([]*graphql.Finding, int) {
+	graphqlVerboseLog(config.Verbose, "\n=== Running GraphQL Templates ===")
 
 	// Load templates
 	tmplFiles, err := loadGraphQLTemplates(config.Templates)
 	if err != nil {
 		fmt.Printf("Error loading templates: %v\n", err)
-		return nil
+		return nil, 0
 	}
 
-	fmt.Printf("Loaded %d template(s) from: %s\n", len(tmplFiles), config.Templates)
+	// Apply filters
+	tmplFiles = filterGraphQLTemplatesByID(tmplFiles, config.TemplateFilters)
+	tmplFiles = filterGraphQLTemplatesByOWASP(tmplFiles, config.OWASPCategories)
+
+	templateCount := len(tmplFiles)
+	graphqlVerboseLog(config.Verbose, "Loaded %d template(s) from: %s", templateCount, config.Templates)
+
+	if len(config.TemplateFilters) > 0 {
+		graphqlVerboseLog(config.Verbose, "Filtered by templates: %v", config.TemplateFilters)
+	}
+	if len(config.OWASPCategories) > 0 {
+		graphqlVerboseLog(config.Verbose, "Filtered by OWASP categories: %v", config.OWASPCategories)
+	}
 
 	// Create template executor
 	tmplExecutor := templates.NewExecutor(httpClient)
@@ -272,18 +383,55 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 			continue
 		}
 
-		// Report findings from template
+		// Convert matched template results to graphql.Finding
 		if result.Matched {
-			fmt.Printf("🔴 [%s] %s\n", tmpl.Info.Severity, tmpl.Info.Name)
+			// Map template severity string to graphql.Severity
+			severity := mapTemplateSeverity(tmpl.Info.Severity)
+
+			// Build evidence string
+			evidence := tmpl.Info.Name
 			if len(result.Response.Body) > 0 {
-				fmt.Printf("   Evidence: %s\n", result.Response.Body)
+				evidence = fmt.Sprintf("%s - %s", tmpl.Info.Name, string(result.Response.Body))
 			}
-			// Note: Template results are printed directly but not converted to graphql.Finding
-			// This maintains existing behavior where template findings are separate from scanner findings
-		} else if config.Verbose {
-			fmt.Printf("✅ [%s] %s - No vulnerability detected\n", tmpl.Info.Severity, tmpl.Info.Name)
+
+			// Create finding using template ID as the type
+			finding := graphql.NewFinding(
+				graphql.FindingType(tmpl.ID),
+				severity,
+				evidence,
+			)
+
+			// Add template details
+			finding.WithDetails(map[string]interface{}{
+				"template_name": tmpl.Info.Name,
+				"category":      tmpl.Info.Category,
+				"description":   tmpl.Info.Description,
+				"endpoint":      endpoint,
+			})
+
+			findings = append(findings, finding)
+
+			// Verbose per-template status removed - findings are reported in summary
 		}
 	}
 
-	return findings
+	return findings, templateCount
+}
+
+// mapTemplateSeverity converts template severity string to graphql.Severity
+func mapTemplateSeverity(severity string) graphql.Severity {
+	switch severity {
+	case "CRITICAL":
+		return graphql.SeverityCritical
+	case "HIGH":
+		return graphql.SeverityHigh
+	case "MEDIUM":
+		return graphql.SeverityMedium
+	case "LOW":
+		return graphql.SeverityLow
+	case "INFO":
+		return graphql.SeverityInfo
+	default:
+		return graphql.SeverityMedium // Default to medium if unknown
+	}
 }

@@ -347,3 +347,100 @@ func TestReportFindings_WithFindings(t *testing.T) {
 	// Should not panic with valid findings
 	reportFindings(findings)
 }
+
+// TestRunTemplateTests_ReturnsTemplateCount tests that runTemplateTests returns the count of loaded templates
+func TestRunTemplateTests_ReturnsTemplateCount(t *testing.T) {
+	// Create a test server that returns a simple GraphQL response
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data": {"test": "value"}}`))
+	}))
+	defer server.Close()
+
+	config := GraphQLConfig{
+		Templates: "../../templates/graphql",
+		Timeout:   30,
+		Verbose:   false,
+	}
+
+	// Run template tests
+	findings, templateCount := runTemplateTests(
+		context.Background(),
+		config,
+		server.URL,
+		server.Client(),
+		nil,
+	)
+
+	// Verify findings are returned (may be 0 if no templates match)
+	assert.NotNil(t, findings)
+
+	// Verify template count is returned and matches loaded templates
+	assert.Greater(t, templateCount, 0, "should load at least one template")
+}
+
+// TestRunSecurityChecks_NoTemplates tests that runSecurityChecks returns 0 template count when no templates specified
+func TestRunSecurityChecks_NoTemplates(t *testing.T) {
+	// Create a minimal GraphQL schema
+	schema := &graphql.Schema{
+		Queries:   []*graphql.FieldDef{},
+		Mutations: []*graphql.FieldDef{},
+		Types:     map[string]*graphql.TypeDef{},
+	}
+
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"data": {}}`))
+	}))
+	defer server.Close()
+
+	config := GraphQLConfig{
+		Templates:       "", // No templates directory specified
+		DepthLimit:      10,
+		ComplexityLimit: 1000,
+		BatchSize:       100,
+		Timeout:         30,
+		Verbose:         false,
+	}
+
+	// Run security checks
+	findings, templateCount := runSecurityChecks(
+		context.Background(),
+		schema,
+		server.Client(),
+		server.URL,
+		config,
+		nil,
+	)
+
+	// Verify findings are returned
+	assert.NotNil(t, findings)
+
+	// Verify template count is 0 when no templates are specified
+	assert.Equal(t, 0, templateCount, "should have 0 templates when none specified")
+}
+
+// TestMapTemplateSeverity tests the severity mapping function
+func TestMapTemplateSeverity(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected graphql.Severity
+	}{
+		{"CRITICAL", graphql.SeverityCritical},
+		{"HIGH", graphql.SeverityHigh},
+		{"MEDIUM", graphql.SeverityMedium},
+		{"LOW", graphql.SeverityLow},
+		{"INFO", graphql.SeverityInfo},
+		{"UNKNOWN", graphql.SeverityMedium}, // Default
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := mapTemplateSeverity(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

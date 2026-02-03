@@ -4,7 +4,6 @@ package runner
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -35,27 +34,44 @@ func LoadRolesConfig(path string) (*RolesConfig, error) {
 // GraphQLConfig holds GraphQL-specific test configuration
 type GraphQLConfig struct {
 	// Common config (shared with REST)
-	Target        string
-	Endpoint      string // GraphQL endpoint path (default: /graphql)
-	Roles         string
-	Auth          string
-	Proxy         string
-	CACert        string
-	Insecure      bool
-	RateLimit     float64
-	Timeout       int
-	AllowInternal bool
-	Output        string
-	OutputFile    string
-	Verbose       bool
-	DryRun        bool
+	Target          string
+	Endpoint        string // GraphQL endpoint path (default: /graphql)
+	Roles           string
+	Auth            string
+	Proxy           string
+	CACert          string
+	Insecure        bool
+	RateLimit       float64
+	Timeout         int
+	AllowInternal   bool
+	AllowProduction bool // Allow testing production URLs
+	Output          string
+	OutputFile      string
+	RequestIDsLimit int // Limit request IDs in output (default 1)
+	Verbose         bool
+	DryRun          bool
+
+	// Rate limiting config (shared with REST)
+	RateLimitBackoff      string        // "exponential" or "fixed" (default: "exponential")
+	RateLimitMaxRetries   int           // Max retry attempts (default: 5)
+	RateLimitMaxWait      time.Duration // Max backoff wait time (default: 1m)
+	RateLimitStatusCodes  []int         // Status codes that trigger rate limiting (default: [429, 503])
 
 	// GraphQL-specific
-	Schema          string // SDL file path (optional, uses introspection if not provided)
-	DepthLimit      int    // Max query depth for DoS testing
-	ComplexityLimit int    // Max complexity score for DoS testing
-	BatchSize       int    // Number of queries in batch attack tests
-	Templates       string // GraphQL templates directory path
+	Schema            string   // SDL file path (optional, uses introspection if not provided)
+	DepthLimit        int      // Max query depth for DoS testing
+	ComplexityLimit   int      // Max complexity score for DoS testing
+	BatchSize         int      // Number of queries in batch attack tests
+	Templates         string   // GraphQL templates directory path
+	TemplateFilters   []string // Filter templates by ID
+	OWASPCategories   []string // Filter by OWASP API Security categories
+	SkipBuiltinChecks bool     // Skip built-in security checks (introspection, depth limit, batching)
+
+	// LLM triage (optional)
+	LLMHost    string // LLM service host
+	LLMModel   string // LLM model name
+	LLMTimeout int    // LLM request timeout (seconds)
+	LLMContext string // Additional context for LLM
 }
 
 // newTestGraphQLCmd creates the "test graphql" subcommand
@@ -85,6 +101,7 @@ func newTestGraphQLCmd() *cobra.Command {
 
 	// Template configuration
 	cmd.Flags().StringVar(&config.Templates, "templates", "", "GraphQL templates directory (e.g., templates/graphql)")
+	cmd.Flags().BoolVar(&config.SkipBuiltinChecks, "skip-builtin-checks", false, "Skip built-in security checks (introspection, depth limit, batching)")
 
 	// Security limits
 	cmd.Flags().IntVar(&config.DepthLimit, "depth-limit", 10, "Maximum query depth for DoS testing")
@@ -98,12 +115,30 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&config.RateLimit, "rate-limit", 5.0, "Rate limit (req/s)")
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
 	cmd.Flags().BoolVar(&config.AllowInternal, "allow-internal", false, "Allow internal IP addresses")
+	cmd.Flags().BoolVar(&config.AllowProduction, "allow-production", false, "Allow testing production URLs")
 
 	// Output options
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Output file path")
+	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids-limit", 1, "Limit request IDs in output (0 = show all)")
 	cmd.Flags().BoolVar(&config.Verbose, "verbose", false, "Verbose output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Dry run (don't execute tests)")
+
+	// Template filtering
+	cmd.Flags().StringSliceVar(&config.TemplateFilters, "template", []string{}, "Filter templates by ID (can specify multiple)")
+	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "Filter by OWASP API Security category (e.g., API1,API2,API5)")
+
+	// Rate limiting (advanced)
+	cmd.Flags().StringVar(&config.RateLimitBackoff, "rate-limit-backoff", "exponential", "Rate limit backoff strategy: exponential, fixed")
+	cmd.Flags().IntVar(&config.RateLimitMaxRetries, "rate-limit-max-retries", 5, "Maximum retry attempts on rate limit")
+	cmd.Flags().DurationVar(&config.RateLimitMaxWait, "rate-limit-max-wait", 1*time.Minute, "Maximum backoff wait time")
+	cmd.Flags().IntSliceVar(&config.RateLimitStatusCodes, "rate-limit-status-codes", []int{429, 503}, "HTTP status codes that trigger rate limiting")
+
+	// LLM triage (optional)
+	cmd.Flags().StringVar(&config.LLMHost, "llm-host", "", "LLM service host for finding triage")
+	cmd.Flags().StringVar(&config.LLMModel, "llm-model", "", "LLM model name for triage")
+	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 30, "LLM request timeout (seconds)")
+	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM triage")
 
 	return cmd
 }
@@ -149,8 +184,8 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	startTime := time.Now()
 
-	fmt.Println("Starting GraphQL security test")
-	fmt.Printf("Target: %s%s\n", config.Target, config.Endpoint)
+	graphqlVerboseLog(config.Verbose, "Starting GraphQL security test")
+	graphqlVerboseLog(config.Verbose, "Target: %s%s", config.Target, config.Endpoint)
 
 	// Load configs
 	authConfig, rolesConfig, err := loadConfigs(config.Auth, config.Roles)
@@ -158,21 +193,37 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 		return err
 	}
 
-	// Create HTTP client
-	httpClient := &http.Client{
-		Timeout: time.Duration(config.Timeout) * time.Second,
+	// Production safety checks (matching REST pattern at run.go:186-189)
+	targetURL := config.Target + config.Endpoint
+	if err := ConfirmProductionTesting(targetURL, config.AllowProduction); err != nil {
+		return err
+	}
+	if err := BlockInternalIPs(targetURL, config.AllowInternal); err != nil {
+		return err
 	}
 
+	// Create HTTP client with proxy, TLS, timeout (shared infrastructure)
+	httpClient, err := createGraphQLHTTPClient(config)
+	if err != nil {
+		return fmt.Errorf("failed to create HTTP client: %w", err)
+	}
+
+	// Wrap HTTP client with rate limiting
+	rateLimitedClient := wrapWithRateLimiting(httpClient, config)
+
 	// Get schema
-	schema, err := fetchSchema(ctx, config, httpClient)
+	schema, err := fetchSchema(ctx, config, rateLimitedClient)
 	if err != nil {
 		return err
 	}
 
-	reportSchemaInfo(schema)
+	reportSchemaInfo(schema, config.Verbose)
+
+	graphqlDryRunLog(config.DryRun, "Would run security checks against %d queries, %d mutations",
+		len(schema.Queries), len(schema.Mutations))
 
 	if config.DryRun {
-		fmt.Println("Dry run - skipping test execution")
+		graphqlDryRunLog(config.DryRun, "Dry run - skipping test execution")
 		return nil
 	}
 
@@ -182,18 +233,18 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 		return err
 	}
 
-	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs)
+	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs, config.Verbose)
 
 	// Create reporter based on output format (using REST reporter pattern)
-	reporter, err := createReporter(config.Output, config.OutputFile, 0)
+	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
 	defer reporter.Close()
 
-	// Run security checks
+	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint
-	gqlFindings := runSecurityChecks(ctx, schema, httpClient, endpoint, config, authConfigs)
+	gqlFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs)
 
 	// Convert GraphQL findings to model.Finding for consistent reporting
 	var modelFindings []*model.Finding
@@ -201,43 +252,37 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 		modelFinding := convertGraphQLFinding(gqlFinding)
 		modelFindings = append(modelFindings, modelFinding)
 
-		// Report each finding immediately (for terminal output)
-		if config.Output == "terminal" {
+		// Report each finding immediately (for terminal output, non-LLM mode)
+		if config.Output == "terminal" && config.LLMHost == "" {
 			reporter.ReportFinding(modelFinding)
 		}
 	}
 
-	// Calculate stats
-	stats := &Stats{
-		Findings:       len(modelFindings),
-		OperationCount: len(schema.Queries) + len(schema.Mutations),
-		RoleCount:      len(authConfigs),
-		Duration:       time.Since(startTime),
-	}
-
-	// Count severity levels
-	for _, f := range modelFindings {
-		switch f.Severity {
-		case model.SeverityCritical:
-			stats.Critical++
-		case model.SeverityHigh:
-			stats.High++
-		case model.SeverityMedium:
-			stats.Medium++
-		case model.SeverityLow:
-			stats.Low++
-		case model.SeverityInfo:
-			stats.Info++
+	// LLM triage if configured
+	if config.LLMHost != "" || config.LLMModel != "" {
+		if rolesConfig != nil {
+			graphqlVerboseLog(config.Verbose, "Running LLM triage on %d findings", len(modelFindings))
+			modelFindings, err = triageWithLLM(ctx, modelFindings, rolesConfig,
+				config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, reporter)
+			if err != nil {
+				// LLM is optional - continue without it
+				graphqlVerboseLog(config.Verbose, "LLM triage failed: %v", err)
+			}
+		} else {
+			graphqlVerboseLog(config.Verbose, "Skipping LLM triage: no roles config provided")
 		}
 	}
+
+	// Calculate stats using shared function
+	stats := calculateStats(modelFindings, startTime)
+	stats.OperationCount = len(schema.Queries) + len(schema.Mutations)
+	stats.RoleCount = len(authConfigs)
+	stats.TemplatesLoaded = templatesLoaded
 
 	// Generate final report
 	if err := reporter.GenerateReport(modelFindings, stats); err != nil {
 		return fmt.Errorf("failed to generate report: %w", err)
 	}
-
-	// Suppress unused variable warnings (roles will be used for authorization testing in future phases)
-	_ = rolesConfig
 
 	return nil
 }
