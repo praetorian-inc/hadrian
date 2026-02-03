@@ -51,6 +51,11 @@ type Config struct {
 	LLMModel              string // LLM model name (e.g., llama3.2:latest)
 	LLMTimeout            int    // LLM request timeout in seconds
 	LLMContext            string // Additional context for LLM prompts
+
+	// OOB detection (optional)
+	EnableOOB    bool   // Enable out-of-band detection
+	OOBServerURL string // interactsh server (default: oast.live)
+	OOBTimeout   int    // Poll timeout in seconds (default: 10)
 }
 
 // Run is the main entry point for the Hadrian CLI
@@ -132,6 +137,11 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.LLMModel, "llm-model", "", "LLM model name (e.g., llama3.2:latest)")
 	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 180, "LLM request timeout in seconds")
 	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM analysis (e.g., 'This API handles financial data')")
+
+	// OOB detection
+	cmd.Flags().BoolVar(&config.EnableOOB, "enable-oob", false, "Enable out-of-band detection for SSRF testing")
+	cmd.Flags().StringVar(&config.OOBServerURL, "oob-server", "oast.live", "Interactsh server URL")
+	cmd.Flags().IntVar(&config.OOBTimeout, "oob-timeout", 10, "OOB poll timeout in seconds")
 
 	return cmd
 }

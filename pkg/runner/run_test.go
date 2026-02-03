@@ -179,3 +179,13 @@ detection:
 		assert.Equal(t, "03-c", loaded[2].ID)
 	}
 }
+
+func TestRESTConfig_OOBEnabled(t *testing.T) {
+	config := Config{
+		API:        "http://localhost:8080/openapi.json",
+		EnableOOB:  true,
+		OOBTimeout: 15,
+	}
+	assert.True(t, config.EnableOOB)
+	assert.Equal(t, 15, config.OOBTimeout)
+}
