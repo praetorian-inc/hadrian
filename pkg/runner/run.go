@@ -41,6 +41,7 @@ type Config struct {
 	OWASPCategories  []string
 	Verbose          bool
 	DryRun           bool
+	RequestIDsLimit  int      // Number of request IDs to display per finding (0 = all)
 }
 
 // Run is the main entry point for the Hadrian CLI
@@ -96,6 +97,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "Enable verbose logging output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Show what would be tested without making requests")
+	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids", 1, "Number of request IDs to display per finding (0 = all)")
 
 	return cmd
 }
@@ -176,7 +178,7 @@ func runTest(ctx context.Context, config Config) error {
 	}
 
 	// 7. Create reporter based on output format
-	rep, err := createReporter(config.Output, config.OutputFile)
+	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
@@ -439,7 +441,8 @@ func executeTemplate(
 				Evidence: model.Evidence{
 					Response: result.Response,
 				},
-				Timestamp: time.Now(),
+				RequestIDs: result.RequestIDs,
+				Timestamp:  time.Now(),
 			}
 			findings = append(findings, finding)
 		}
@@ -507,7 +510,8 @@ func executeTemplate(
 					Evidence: model.Evidence{
 						Response: result.Response,
 					},
-					Timestamp: time.Now(),
+					RequestIDs: result.RequestIDs,
+					Timestamp:  time.Now(),
 				}
 
 				if victimRole != nil {
@@ -590,6 +594,16 @@ func executeMutationTemplate(
 						Response: *result.AttackResponse,
 					}
 				}
+
+				// Collect all request IDs from all phases
+				if result.RequestIDs != nil {
+					var allRequestIDs []string
+					allRequestIDs = append(allRequestIDs, result.RequestIDs.Setup...)
+					allRequestIDs = append(allRequestIDs, result.RequestIDs.Attack...)
+					allRequestIDs = append(allRequestIDs, result.RequestIDs.Verify...)
+					finding.RequestIDs = allRequestIDs
+				}
+
 				findings = append(findings, finding)
 			}
 		}

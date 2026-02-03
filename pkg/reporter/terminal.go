@@ -65,6 +65,11 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) error {
 	// Confidence
 	sb.WriteString(fmt.Sprintf("  Confidence: %.0f%%\n", finding.Confidence*100))
 
+	// Request IDs
+	if len(finding.RequestIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("  Request IDs: %s\n", strings.Join(finding.RequestIDs, ", ")))
+	}
+
 	// Redact and show response body summary if available
 	if finding.Evidence.Response.Body != "" {
 		body := r.redactor.Redact(finding.Evidence.Response.Body)

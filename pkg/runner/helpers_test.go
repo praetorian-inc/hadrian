@@ -118,28 +118,28 @@ func TestCreateHTTPClient_WithInsecure(t *testing.T) {
 // =============================================================================
 
 func TestCreateReporter_Terminal(t *testing.T) {
-	rep, err := createReporter("terminal", "")
+	rep, err := createReporter("terminal", "", 1)
 	require.NoError(t, err)
 	assert.NotNil(t, rep)
 	assert.NoError(t, rep.Close())
 }
 
 func TestCreateReporter_JSON(t *testing.T) {
-	rep, err := createReporter("json", "")
+	rep, err := createReporter("json", "", 1)
 	require.NoError(t, err)
 	assert.NotNil(t, rep)
 	assert.NoError(t, rep.Close())
 }
 
 func TestCreateReporter_Markdown(t *testing.T) {
-	rep, err := createReporter("markdown", "")
+	rep, err := createReporter("markdown", "", 1)
 	require.NoError(t, err)
 	assert.NotNil(t, rep)
 	assert.NoError(t, rep.Close())
 }
 
 func TestCreateReporter_InvalidFormat(t *testing.T) {
-	_, err := createReporter("invalid", "")
+	_, err := createReporter("invalid", "", 1)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported output format")
 }
@@ -196,7 +196,7 @@ func TestTerminalReporter_ReportFinding(t *testing.T) {
 	require.NoError(t, err)
 	defer tmpFile.Close()
 
-	rep := NewTerminalReporter(tmpFile)
+	rep := NewTerminalReporter(tmpFile, 1)
 	finding := &model.Finding{
 		Severity:        model.SeverityHigh,
 		Category:        "API1",
@@ -223,7 +223,7 @@ func TestTerminalReporter_GenerateReport(t *testing.T) {
 	require.NoError(t, err)
 	defer tmpFile.Close()
 
-	rep := NewTerminalReporter(tmpFile)
+	rep := NewTerminalReporter(tmpFile, 1)
 	stats := &Stats{
 		Findings:        5,
 		Critical:        1,
@@ -256,7 +256,7 @@ func TestTerminalReporter_GenerateReport(t *testing.T) {
 func TestJSONReporter_GenerateReport(t *testing.T) {
 	outputFile := filepath.Join(t.TempDir(), "report.json")
 
-	rep, err := NewJSONReporter(outputFile)
+	rep, err := NewJSONReporter(outputFile, 1)
 	require.NoError(t, err)
 
 	findings := []*model.Finding{
@@ -291,7 +291,7 @@ func TestJSONReporter_GenerateReport(t *testing.T) {
 func TestMarkdownReporter_GenerateReport(t *testing.T) {
 	outputFile := filepath.Join(t.TempDir(), "report.md")
 
-	rep, err := NewMarkdownReporter(outputFile)
+	rep, err := NewMarkdownReporter(outputFile, 1)
 	require.NoError(t, err)
 
 	findings := []*model.Finding{

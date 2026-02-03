@@ -3,7 +3,9 @@ package templates
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +15,23 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 )
+
+// generateRequestID creates a random UUID-style request ID
+func generateRequestID() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		// Fallback to a simple hex string if crypto/rand fails
+		return hex.EncodeToString(b)
+	}
+
+	// Format as UUID (8-4-4-4-12)
+	return hex.EncodeToString(b[0:4]) + "-" +
+		hex.EncodeToString(b[4:6]) + "-" +
+		hex.EncodeToString(b[6:8]) + "-" +
+		hex.EncodeToString(b[8:10]) + "-" +
+		hex.EncodeToString(b[10:16])
+}
 
 // hasUnresolvedPlaceholders checks if a path contains unresolved {placeholder} patterns.
 // Returns the first unresolved placeholder name if found, or empty string if all resolved.
@@ -37,12 +56,14 @@ type HTTPClient interface {
 type Executor struct {
 	httpClient HTTPClient
 	cache      *Cache
+	requestIDs []string
 }
 
 func NewExecutor(client HTTPClient) *Executor {
 	return &Executor{
 		httpClient: client,
 		cache:      NewCache(1000), // Cache 1000 compiled templates
+		requestIDs: make([]string, 0),
 	}
 }
 
@@ -54,6 +75,9 @@ func (e *Executor) Execute(
 	authHeader string,
 	variables map[string]string,
 ) (*ExecutionResult, error) {
+	// Clear request IDs for this execution
+	e.requestIDs = make([]string, 0)
+
 	result := &ExecutionResult{
 		TemplateID: tmpl.ID,
 		Operation:  operation,
@@ -132,6 +156,11 @@ func (e *Executor) Execute(
 				if err != nil {
 					return nil, fmt.Errorf("failed to build request: %w", err)
 				}
+
+				// Add request ID header and track it
+				requestID := generateRequestID()
+				req.Header.Set("X-Hadrian-Request-Id", requestID)
+				e.requestIDs = append(e.requestIDs, requestID)
 
 				// Execute HTTP request
 				resp, err = e.httpClient.Do(req)
@@ -293,6 +322,9 @@ func (e *Executor) Execute(
 			}
 		}
 	}
+
+	// Add tracked request IDs to result
+	result.RequestIDs = e.requestIDs
 
 	return result, nil
 }
@@ -483,6 +515,7 @@ type ExecutionResult struct {
 	Response      model.HTTPResponse
 	Findings      []model.Finding
 	RateLimitInfo *RateLimitInfo
+	RequestIDs    []string // X-Hadrian-Request-Id values from all requests
 }
 
 // RateLimitInfo contains results from rate limit testing

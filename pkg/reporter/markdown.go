@@ -152,6 +152,9 @@ func (r *MarkdownReporter) writeFinding(sb *strings.Builder, finding *model.Find
 	if finding.VictimRole != "" {
 		sb.WriteString(fmt.Sprintf("- **Victim Role:** %s\n", finding.VictimRole))
 	}
+	if len(finding.RequestIDs) > 0 {
+		sb.WriteString(fmt.Sprintf("- **Request IDs:** %s\n", strings.Join(finding.RequestIDs, ", ")))
+	}
 	sb.WriteString("\n")
 
 	// Evidence section

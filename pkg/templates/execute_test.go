@@ -492,3 +492,72 @@ func TestExecute_Integration_WithHTTPTest(t *testing.T) {
 		t.Errorf("StatusCode = %d, want 200", result.Response.StatusCode)
 	}
 }
+
+// TestExecute_RequestIDsTracked verifies that X-Hadrian-Request-Id header is added
+// to all requests and tracked in the ExecutionResult
+func TestExecute_RequestIDsTracked(t *testing.T) {
+	var capturedRequestID string
+
+	// Create test server that captures the request ID
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedRequestID = r.Header.Get("X-Hadrian-Request-Id")
+		w.WriteHeader(200)
+		w.Write([]byte(`{"status": "ok"}`))
+	}))
+	defer server.Close()
+
+	executor := NewExecutor(&http.Client{})
+
+	tmpl := &CompiledTemplate{
+		Template: &Template{
+			ID: "request-id-test",
+			HTTP: []HTTPTest{
+				{
+					Method: "GET",
+					Path:   server.URL + "/api/test",
+					Matchers: []Matcher{
+						{
+							Type:   "status",
+							Status: []int{200},
+						},
+					},
+				},
+			},
+		},
+		CompiledMatchers: []*CompiledMatcher{
+			{
+				Type:   "status",
+				Status: []int{200},
+			},
+		},
+	}
+
+	operation := &model.Operation{
+		Method: "GET",
+		Path:   "/api/test",
+	}
+
+	result, err := executor.Execute(context.Background(), tmpl, operation, "", nil)
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	// Verify request ID was sent in header
+	if capturedRequestID == "" {
+		t.Error("X-Hadrian-Request-Id header was not set")
+	}
+
+	// Verify request ID was tracked in result
+	if len(result.RequestIDs) != 1 {
+		t.Errorf("Expected 1 request ID, got %d", len(result.RequestIDs))
+	}
+
+	if len(result.RequestIDs) > 0 && result.RequestIDs[0] != capturedRequestID {
+		t.Errorf("Tracked request ID %q doesn't match sent ID %q", result.RequestIDs[0], capturedRequestID)
+	}
+
+	// Verify request ID format (should be UUID-like)
+	if len(capturedRequestID) < 32 {
+		t.Errorf("Request ID %q seems too short for a UUID", capturedRequestID)
+	}
+}

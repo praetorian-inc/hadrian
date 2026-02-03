@@ -20,6 +20,7 @@ type Finding struct {
 
 	Evidence    Evidence   `json:"evidence"`
 	LLMAnalysis *LLMTriage `json:"llm_analysis,omitempty"`
+	RequestIDs  []string   `json:"request_ids,omitempty"` // All request IDs from all phases
 
 	Timestamp   time.Time `json:"timestamp"`
 }

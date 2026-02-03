@@ -33,25 +33,36 @@ type HTTPClient interface {
 
 // MutationExecutor runs three-phase mutation tests
 type MutationExecutor struct {
-	httpClient HTTPClient
-	tracker    *Tracker
+	httpClient        HTTPClient
+	trackedHTTPClient *TrackedHTTPClient
+	tracker           *Tracker
+}
+
+// PhaseRequestIDs tracks request IDs from each phase
+type PhaseRequestIDs struct {
+	Setup  []string
+	Attack []string
+	Verify []string
 }
 
 // MutationResult contains results from a three-phase mutation test
 type MutationResult struct {
-	TemplateID    string
-	Matched       bool // true if vulnerability found (attack succeeded)
-	SetupResponse *model.HTTPResponse
+	TemplateID     string
+	Matched        bool // true if vulnerability found (attack succeeded)
+	SetupResponse  *model.HTTPResponse
 	AttackResponse *model.HTTPResponse
 	VerifyResponse *model.HTTPResponse
-	ResourceID    string
+	ResourceID     string
+	RequestIDs     *PhaseRequestIDs // NEW: tracks request IDs per phase
 }
 
 // NewMutationExecutor creates a new mutation executor
 func NewMutationExecutor(client HTTPClient) *MutationExecutor {
+	trackedClient := NewTrackedHTTPClient(client)
 	return &MutationExecutor{
-		httpClient: client,
-		tracker:    NewTracker(),
+		httpClient:        client,
+		trackedHTTPClient: trackedClient,
+		tracker:           NewTracker(),
 	}
 }
 
@@ -67,6 +78,7 @@ func (e *MutationExecutor) ExecuteMutation(
 ) (*MutationResult, error) {
 	result := &MutationResult{
 		TemplateID: tmpl.ID,
+		RequestIDs: &PhaseRequestIDs{},
 	}
 
 	if tmpl.TestPhases == nil {
@@ -75,11 +87,13 @@ func (e *MutationExecutor) ExecuteMutation(
 
 	// Phase 1: Setup (create resource)
 	if tmpl.TestPhases.Setup != nil {
+		e.trackedHTTPClient.ClearRequestIDs()
 		setupResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Setup, tmpl.TestPhases.Setup.Auth, authTokens)
 		if err != nil {
 			return result, fmt.Errorf("setup phase failed: %w", err)
 		}
 		result.SetupResponse = setupResp
+		result.RequestIDs.Setup = e.trackedHTTPClient.GetRequestIDs()
 
 		// Store resource ID if needed - store by field name for later lookup
 		if tmpl.TestPhases.Setup.StoreResponseField != "" && setupResp != nil {
@@ -93,11 +107,13 @@ func (e *MutationExecutor) ExecuteMutation(
 
 	// Phase 2: Attack (try to access with different role)
 	if tmpl.TestPhases.Attack != nil {
+		e.trackedHTTPClient.ClearRequestIDs()
 		attackResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Attack, tmpl.TestPhases.Attack.Auth, authTokens)
 		if err != nil {
 			return result, fmt.Errorf("attack phase failed: %w", err)
 		}
 		result.AttackResponse = attackResp
+		result.RequestIDs.Attack = e.trackedHTTPClient.GetRequestIDs()
 
 		// Check if attack succeeded (vulnerability found)
 		if matchesDetectionConditions(tmpl.TestPhases.Attack, attackResp.StatusCode, attackResp.Body) {
@@ -107,11 +123,13 @@ func (e *MutationExecutor) ExecuteMutation(
 
 	// Phase 3: Verify (confirm resource still accessible by victim)
 	if tmpl.TestPhases.Verify != nil {
+		e.trackedHTTPClient.ClearRequestIDs()
 		verifyResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Verify, tmpl.TestPhases.Verify.Auth, authTokens)
 		if err != nil {
 			return result, fmt.Errorf("verify phase failed: %w", err)
 		}
 		result.VerifyResponse = verifyResp
+		result.RequestIDs.Verify = e.trackedHTTPClient.GetRequestIDs()
 	}
 
 	return result, nil
@@ -182,8 +200,8 @@ func (e *MutationExecutor) executePhase(
 		req.Header.Set("Authorization", token)
 	}
 
-	// Execute request
-	resp, err := e.httpClient.Do(req)
+	// Execute request with tracked client
+	resp, err := e.trackedHTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
