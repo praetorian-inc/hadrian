@@ -106,26 +106,26 @@ func TestRunCategory(t *testing.T) {
 			},
 		}
 
-		// Use 4 roles with varying permission counts to ensure proper lower/higher split:
-		// guest: 1 perm, user: 2 perms, moderator: 3 perms, admin: 4 perms
-		// Median = (2+3)/2 = 2 (with 4 roles sorted: [1,2,3,4])
-		// lower (count < 2) = [guest]
-		// higher (count >= 2) = [user, moderator, admin]
+		// Use 4 roles with varying levels to ensure proper lower/higher split:
+		// guest: Level 10, user: Level 20, moderator: Level 30, admin: Level 40
+		// Median = (20+30)/2 = 25 (with 4 roles sorted: [10,20,30,40])
+		// lower (Level < 25) = [guest, user]
+		// higher (Level >= 25) = [moderator, admin]
 		rolesCfg := &roles.RoleConfig{
 			Roles: []*roles.Role{
-				{Name: "guest", Permissions: []roles.Permission{
+				{Name: "guest", Level: 10, Permissions: []roles.Permission{
 					{Action: "read", Object: "public", Scope: "all"},
 				}},
-				{Name: "user", Permissions: []roles.Permission{
+				{Name: "user", Level: 20, Permissions: []roles.Permission{
 					{Action: "read", Object: "users", Scope: "own"},
 					{Action: "write", Object: "users", Scope: "own"},
 				}},
-				{Name: "moderator", Permissions: []roles.Permission{
+				{Name: "moderator", Level: 30, Permissions: []roles.Permission{
 					{Action: "read", Object: "users", Scope: "all"},
 					{Action: "write", Object: "users", Scope: "all"},
 					{Action: "delete", Object: "posts", Scope: "all"},
 				}},
-				{Name: "admin", Permissions: []roles.Permission{
+				{Name: "admin", Level: 40, Permissions: []roles.Permission{
 					{Action: "read", Object: "users", Scope: "all"},
 					{Action: "write", Object: "users", Scope: "all"},
 					{Action: "delete", Object: "users", Scope: "all"},
@@ -139,8 +139,8 @@ func TestRunCategory(t *testing.T) {
 
 		// Assert
 		require.NoError(t, err)
-		// With 1 operation, 1 API1 template, 1 lower role (guest), 3 higher roles
-		// We expect 3 HTTP calls (guest vs user, guest vs moderator, guest vs admin)
+		// With 1 operation, 1 API1 template, 2 lower roles (guest, user), 2 higher roles (moderator, admin)
+		// We expect multiple HTTP calls for attacker-victim combinations
 		assert.GreaterOrEqual(t, callCount, 1, "should make at least 1 HTTP request")
 	})
 
