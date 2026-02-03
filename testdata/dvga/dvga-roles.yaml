@@ -1,0 +1,67 @@
+# DVGA (Damn Vulnerable GraphQL Application) - Roles Configuration
+# https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application
+
+objects:
+  - users
+  - pastes
+  - owners
+  - systemHealth
+  - audits
+
+roles:
+  - name: admin
+    level: 100
+    permissions:
+      - "*:*:*"
+    auth:
+      token: "${DVGA_ADMIN_TOKEN}"
+
+  - name: operator
+    level: 50
+    permissions:
+      - "read:users:all"
+      - "write:pastes:own"
+      - "read:pastes:all"
+      - "read:systemHealth:all"
+    auth:
+      token: "${DVGA_OPERATOR_TOKEN}"
+
+  - name: user
+    level: 20
+    permissions:
+      - "read:users:own"
+      - "write:pastes:own"
+      - "read:pastes:own"
+    auth:
+      token: "${DVGA_USER_TOKEN}"
+
+  - name: anonymous
+    level: 0
+    permissions:
+      - "read:pastes:public"
+    auth:
+      token: ""
+
+# GraphQL specific mappings
+graphql_mappings:
+  queries:
+    - operation: "users"
+      object: users
+    - operation: "user"
+      object: users
+    - operation: "pastes"
+      object: pastes
+    - operation: "paste"
+      object: pastes
+    - operation: "systemHealth"
+      object: systemHealth
+
+  mutations:
+    - operation: "createPaste"
+      object: pastes
+    - operation: "editPaste"
+      object: pastes
+    - operation: "deletePaste"
+      object: pastes
+    - operation: "createUser"
+      object: users

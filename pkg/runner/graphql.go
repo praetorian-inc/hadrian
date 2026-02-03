@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
+	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -146,6 +147,8 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 
 // runGraphQLTest executes GraphQL security tests
 func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
+	startTime := time.Now()
+
 	fmt.Println("Starting GraphQL security test")
 	fmt.Printf("Target: %s%s\n", config.Target, config.Endpoint)
 
@@ -181,12 +184,57 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs)
 
+	// Create reporter based on output format (using REST reporter pattern)
+	reporter, err := createReporter(config.Output, config.OutputFile, 0)
+	if err != nil {
+		return fmt.Errorf("failed to create reporter: %w", err)
+	}
+	defer reporter.Close()
+
 	// Run security checks
 	endpoint := config.Target + config.Endpoint
-	findings := runSecurityChecks(ctx, schema, httpClient, endpoint, config, authConfigs)
+	gqlFindings := runSecurityChecks(ctx, schema, httpClient, endpoint, config, authConfigs)
 
-	// Report findings
-	reportFindings(findings)
+	// Convert GraphQL findings to model.Finding for consistent reporting
+	var modelFindings []*model.Finding
+	for _, gqlFinding := range gqlFindings {
+		modelFinding := convertGraphQLFinding(gqlFinding)
+		modelFindings = append(modelFindings, modelFinding)
+
+		// Report each finding immediately (for terminal output)
+		if config.Output == "terminal" {
+			reporter.ReportFinding(modelFinding)
+		}
+	}
+
+	// Calculate stats
+	stats := &Stats{
+		Findings:       len(modelFindings),
+		OperationCount: len(schema.Queries) + len(schema.Mutations),
+		RoleCount:      len(authConfigs),
+		Duration:       time.Since(startTime),
+	}
+
+	// Count severity levels
+	for _, f := range modelFindings {
+		switch f.Severity {
+		case model.SeverityCritical:
+			stats.Critical++
+		case model.SeverityHigh:
+			stats.High++
+		case model.SeverityMedium:
+			stats.Medium++
+		case model.SeverityLow:
+			stats.Low++
+		case model.SeverityInfo:
+			stats.Info++
+		}
+	}
+
+	// Generate final report
+	if err := reporter.GenerateReport(modelFindings, stats); err != nil {
+		return fmt.Errorf("failed to generate report: %w", err)
+	}
 
 	// Suppress unused variable warnings (roles will be used for authorization testing in future phases)
 	_ = rolesConfig

@@ -1,0 +1,61 @@
+# Template: BOLA (Broken Object Level Authorization) Read Test
+# Tests GET endpoints for unauthorized cross-user resource access
+# This is a simple test pattern that attempts to access resources
+# belonging to a higher-privileged user using a lower-privileged attacker's token
+
+id: 01-api1-bola-read
+
+info:
+  name: "BOLA - Cross-User Resource Access (Read)"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  description: |
+    Tests for Broken Object Level Authorization (BOLA) vulnerabilities on GET endpoints.
+    Attempts to read resources belonging to a victim user using an attacker's credentials.
+    A successful test indicates the API does not properly validate object-level permissions.
+  tags: ["bola", "owasp-api-top10", "api1", "authorization"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select endpoints that are vulnerable to BOLA:
+# - Have path parameters (e.g., /users/{id}, /posts/{postId})
+# - Require authentication
+# - Use GET method (read operations)
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+
+# Role configuration:
+# - Attacker: lower permission level user (e.g., regular user)
+# - Victim: higher permission level user (e.g., admin or another user)
+# The test checks if attacker can access victim's resources
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Simple test: Make a GET request with attacker's token
+# to an endpoint that should only be accessible to the victim
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Authorization: "Bearer {{attacker_token}}"
+    matchers:
+      - type: status
+        status: [200, 201]
+
+# Detection logic:
+# If we get a 200/201 status, the attacker successfully accessed
+# the victim's resource, indicating a BOLA vulnerability
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  failure_indicators:
+    - type: status_code
+      status_code: 403
+    - type: status_code
+      status_code: 404
+  vulnerability_pattern: "attacker_accessed_victim_resource"

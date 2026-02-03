@@ -33,6 +33,7 @@ type TemplateInfo struct {
 	Category          string   `yaml:"category"`
 	Severity          string   `yaml:"severity"`
 	Author            string   `yaml:"author"`
+	Description       string   `yaml:"description"`
 	Tags              []string `yaml:"tags"`
 	RequiresLLMTriage bool     `yaml:"requires_llm_triage"`
 	TestPattern       string   `yaml:"test_pattern"`
@@ -130,9 +131,9 @@ type HTTPTest struct {
 
 // GraphQLTest defines a GraphQL query/mutation test
 type GraphQLTest struct {
-	Query         string            `yaml:"query"`
-	Variables     map[string]string `yaml:"variables,omitempty"`
-	OperationName string            `yaml:"operation_name,omitempty"`
+	Query         string      `yaml:"query"`
+	Variables     interface{} `yaml:"variables,omitempty"` // Accepts any JSON-compatible structure
+	OperationName string      `yaml:"operation_name,omitempty"`
 
 	// Auth
 	Auth string `yaml:"auth,omitempty"` // attacker, victim
@@ -168,10 +169,12 @@ type Detection struct {
 }
 
 type Indicator struct {
-	Type       string      `yaml:"type,omitempty"`        // status_code, body_field
+	Type       string      `yaml:"type,omitempty"`        // status_code, body_field, regex_match, sensitive_fields_exposed
 	StatusCode interface{} `yaml:"status_code,omitempty"` // Can be int or "{{var}}"
 	BodyField  string      `yaml:"body_field,omitempty"`
 	Value      interface{} `yaml:"value,omitempty"`
+	Pattern    string      `yaml:"pattern,omitempty"`     // For regex_match type indicators
+	Fields     []string    `yaml:"fields,omitempty"`      // For sensitive_fields_exposed type indicators
 	Exists     *bool       `yaml:"exists,omitempty"`
 }
 

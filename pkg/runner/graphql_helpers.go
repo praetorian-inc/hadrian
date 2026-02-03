@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
+	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
@@ -123,7 +124,55 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 	return authConfigs, nil
 }
 
+// convertGraphQLFinding converts a graphql.Finding to model.Finding for consistent reporting
+func convertGraphQLFinding(gqlFinding *graphql.Finding) *model.Finding {
+	// Map graphql severity to model severity (they use the same string values)
+	severity := model.Severity(gqlFinding.Severity)
+
+	// Create model.Finding with mapped fields
+	finding := &model.Finding{
+		ID:              gqlFinding.ID,
+		Category:        string(gqlFinding.Type), // Use finding type as category
+		Name:            string(gqlFinding.Type), // Use finding type as name
+		Description:     gqlFinding.Evidence,     // GraphQL evidence becomes description
+		Severity:        severity,
+		Confidence:      1.0, // GraphQL findings have full confidence (not LLM-triaged)
+		IsVulnerability: true,
+
+		// Endpoint info - GraphQL always uses POST /graphql (or configured endpoint)
+		Endpoint: "GraphQL Endpoint",
+		Method:   "POST",
+
+		// Evidence structure
+		Evidence: model.Evidence{
+			// Note: GraphQL findings don't have full HTTP request/response details yet
+			// This can be enhanced in future when GraphQL scanner tracks full evidence
+			Request: model.HTTPRequest{
+				Method: "POST",
+			},
+			Response: model.HTTPResponse{},
+		},
+
+		Timestamp: time.Now(),
+	}
+
+	// Add GraphQL-specific details if present
+	if len(gqlFinding.Details) > 0 {
+		// Details could include attack parameters, etc.
+		// For now, we can add them to the description
+		finding.Description = fmt.Sprintf("%s (Details: %v)", gqlFinding.Evidence, gqlFinding.Details)
+	}
+
+	if gqlFinding.Remediation != "" {
+		// Add remediation to description for now
+		finding.Description = fmt.Sprintf("%s\nRemediation: %s", finding.Description, gqlFinding.Remediation)
+	}
+
+	return finding
+}
+
 // reportFindings prints security findings to stdout with color-coded severity
+// DEPRECATED: Use Reporter pattern (createReporter) for consistent output
 func reportFindings(findings []*graphql.Finding) {
 	if len(findings) == 0 {
 		fmt.Println("\nNo security issues found.")

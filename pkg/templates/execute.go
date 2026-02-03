@@ -368,27 +368,34 @@ func (e *Executor) ExecuteGraphQL(
 			query = strings.ReplaceAll(query, "{{"+key+"}}", value)
 		}
 
-		// Substitute variables in Variables map
-		testVariables := make(map[string]string)
-		for key, value := range test.Variables {
-			substituted := value
-			if variables != nil {
-				for vKey, vValue := range variables {
-					substituted = strings.ReplaceAll(substituted, "{{"+vKey+"}}", vValue)
-				}
-			}
-			for sKey, sValue := range storedFields {
-				substituted = strings.ReplaceAll(substituted, "{{"+sKey+"}}", sValue)
-			}
-			testVariables[key] = substituted
-		}
-
 		// Build GraphQL request body
 		reqBody := map[string]interface{}{
 			"query": query,
 		}
-		if len(testVariables) > 0 {
-			reqBody["variables"] = testVariables
+
+		// Handle Variables field (supports both old map[string]string and new arbitrary JSON)
+		if test.Variables != nil {
+			// Check if it's the old string map format for backwards compatibility
+			if stringMap, ok := test.Variables.(map[string]string); ok {
+				// Old behavior: substitute placeholders in string values
+				testVariables := make(map[string]string)
+				for key, value := range stringMap {
+					substituted := value
+					if variables != nil {
+						for vKey, vValue := range variables {
+							substituted = strings.ReplaceAll(substituted, "{{"+vKey+"}}", vValue)
+						}
+					}
+					for sKey, sValue := range storedFields {
+						substituted = strings.ReplaceAll(substituted, "{{"+sKey+"}}", sValue)
+					}
+					testVariables[key] = substituted
+				}
+				reqBody["variables"] = testVariables
+			} else {
+				// New behavior: use variables as-is (arbitrary JSON structure)
+				reqBody["variables"] = test.Variables
+			}
 		}
 		if test.OperationName != "" {
 			reqBody["operationName"] = test.OperationName
