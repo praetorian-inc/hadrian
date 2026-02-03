@@ -47,12 +47,19 @@ func (s Severity) String() string {
 
 // Finding represents a security finding from GraphQL testing
 type Finding struct {
-	ID          string
-	Type        FindingType
-	Severity    Severity
-	Evidence    string
-	Remediation string
-	Details     map[string]interface{}
+	ID           string
+	Type         FindingType
+	Severity     Severity
+	Evidence     string
+	Remediation  string
+	Details      map[string]interface{}
+	Description  string   // Explanation of the vulnerability
+	RequestIDs   []string // Request IDs for correlation
+	AttackerRole string   // For BOLA/BFLA tests
+	VictimRole   string   // For BOLA/BFLA tests
+	Endpoint     string   // The endpoint tested
+	Method       string   // HTTP method (POST for GraphQL)
+	Category     string   // OWASP category (e.g., "API1", "API5")
 }
 
 // NewFinding creates a new Finding with a unique ID
@@ -91,8 +98,58 @@ func generateID() string {
 }
 
 // Format returns a formatted string for terminal display
+// Output format matches REST runner:
+// [SEVERITY] Category - Name METHOD Endpoint
+//   Description: explanation text
+//   Roles: attacker=user, victim=admin (if applicable)
+//   Request IDs: req-abc123 (if available)
 func (f *Finding) Format() string {
-	return fmt.Sprintf("[%s] %s: %s", f.Severity, f.Type, f.Evidence)
+	// Build category-name prefix
+	categoryName := string(f.Type)
+	if f.Category != "" {
+		categoryName = fmt.Sprintf("%s - %s", f.Category, f.Type)
+	}
+
+	// Build method-endpoint suffix
+	methodEndpoint := ""
+	if f.Method != "" && f.Endpoint != "" {
+		methodEndpoint = fmt.Sprintf(" %s %s", f.Method, f.Endpoint)
+	}
+
+	// First line: [SEVERITY] Category - Name METHOD Endpoint
+	result := fmt.Sprintf("[%s] %s%s", f.Severity, categoryName, methodEndpoint)
+
+	// Add description if available (otherwise fall back to Evidence)
+	if f.Description != "" {
+		result += fmt.Sprintf("\n  Description: %s", f.Description)
+	} else if f.Evidence != "" {
+		result += fmt.Sprintf("\n  Description: %s", f.Evidence)
+	}
+
+	// Add roles if applicable (for BOLA/BFLA tests)
+	if f.AttackerRole != "" || f.VictimRole != "" {
+		rolesLine := "  Roles:"
+		if f.AttackerRole != "" {
+			rolesLine += fmt.Sprintf(" attacker=%s", f.AttackerRole)
+		}
+		if f.VictimRole != "" {
+			if f.AttackerRole != "" {
+				rolesLine += ","
+			}
+			rolesLine += fmt.Sprintf(" victim=%s", f.VictimRole)
+		}
+		result += "\n" + rolesLine
+	}
+
+	// Add request IDs if available
+	if len(f.RequestIDs) > 0 {
+		result += fmt.Sprintf("\n  Request IDs: %s", f.RequestIDs[0])
+		for i := 1; i < len(f.RequestIDs); i++ {
+			result += fmt.Sprintf(", %s", f.RequestIDs[i])
+		}
+	}
+
+	return result
 }
 
 // FormatFindings returns formatted output for multiple findings
