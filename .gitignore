@@ -1,5 +1,5 @@
 # Binary
-hadrian
+/hadrian
 
 # Environment files with secrets
 .env

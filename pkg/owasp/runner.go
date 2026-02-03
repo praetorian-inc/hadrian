@@ -118,6 +118,12 @@ func (r *Runner) executeTest(
 		"victim_role":   victim.Name,
 	}
 
+	// Add placeholder values for path parameters
+	// In real usage, these would be discovered values from setup phases
+	for _, param := range operation.PathParams {
+		variables[param.Name] = fmt.Sprintf("test_%s", param.Name)
+	}
+
 	// Generate auth header for attacker (placeholder - in real impl would get actual token)
 	authHeader := fmt.Sprintf("Bearer token_%s", attacker.Name)
 
