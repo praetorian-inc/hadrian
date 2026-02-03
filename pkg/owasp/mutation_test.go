@@ -548,56 +548,8 @@ func TestExecutePhase_ReturnsErrorForMissingPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "path is required")
 }
 
-func TestHasUnresolvedPlaceholders(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		expected string
-	}{
-		{
-			name:     "no placeholders",
-			path:     "/api/v1/resources",
-			expected: "",
-		},
-		{
-			name:     "single placeholder",
-			path:     "/api/v1/resources/{id}",
-			expected: "id",
-		},
-		{
-			name:     "multiple placeholders returns first",
-			path:     "/api/v1/resources/{id}/items/{item_id}",
-			expected: "id",
-		},
-		{
-			name:     "placeholder at start",
-			path:     "{version}/resources",
-			expected: "version",
-		},
-		{
-			name:     "unclosed brace",
-			path:     "/api/v1/resources/{id",
-			expected: "",
-		},
-		{
-			name:     "empty string",
-			path:     "",
-			expected: "",
-		},
-		{
-			name:     "resolved placeholder",
-			path:     "/api/v1/resources/resource123",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := hasUnresolvedPlaceholders(tt.path)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
+// NOTE: TestHasUnresolvedPlaceholders moved to pkg/util/placeholder_test.go
+// since hasUnresolvedPlaceholders is now util.HasUnresolvedPlaceholders
 
 func TestExecutePhase_ReturnsErrorForUnresolvedPlaceholder(t *testing.T) {
 	client := &MockHTTPClient{}

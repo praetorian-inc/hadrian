@@ -18,7 +18,6 @@ Hadrian is a security testing framework for REST APIs that tests for OWASP API v
 
 ```bash
 # Build from source
-cd modules/hadrian
 go build -o hadrian ./cmd/hadrian
 
 # Or install directly
