@@ -29,7 +29,7 @@ func Compile(tmpl *Template) (*CompiledTemplate, error) {
 		CompiledMatchers: make([]*CompiledMatcher, 0, len(tmpl.HTTP)),
 	}
 
-	// Compile all matchers
+	// Compile matchers from HTTP tests
 	for i, test := range tmpl.HTTP {
 		for j, matcher := range test.Matchers {
 			cm := &CompiledMatcher{
@@ -47,6 +47,33 @@ func Compile(tmpl *Template) (*CompiledTemplate, error) {
 					re, err := regexp.Compile(pattern)
 					if err != nil {
 						return nil, fmt.Errorf("HTTP[%d].matchers[%d]: invalid regex %q: %w", i, j, pattern, err)
+					}
+					cm.CompiledRegex = append(cm.CompiledRegex, re)
+				}
+			}
+
+			compiled.CompiledMatchers = append(compiled.CompiledMatchers, cm)
+		}
+	}
+
+	// Compile matchers from GraphQL tests
+	for i, test := range tmpl.GraphQL {
+		for j, matcher := range test.Matchers {
+			cm := &CompiledMatcher{
+				Type:      matcher.Type,
+				Words:     matcher.Words,
+				Status:    matcher.Status,
+				Part:      matcher.Part,
+				Condition: matcher.Condition,
+			}
+
+			// Pre-compile regex patterns
+			if matcher.Type == "regex" {
+				cm.CompiledRegex = make([]*regexp.Regexp, 0, len(matcher.Regex))
+				for _, pattern := range matcher.Regex {
+					re, err := regexp.Compile(pattern)
+					if err != nil {
+						return nil, fmt.Errorf("GraphQL[%d].matchers[%d]: invalid regex %q: %w", i, j, pattern, err)
 					}
 					cm.CompiledRegex = append(cm.CompiledRegex, re)
 				}

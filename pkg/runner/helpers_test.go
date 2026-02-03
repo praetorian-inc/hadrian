@@ -780,7 +780,8 @@ func TestVerboseLog_Disabled(t *testing.T) {
 }
 
 func TestNewTestCmd_VerboseFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Find the verbose flag
 	flag := cmd.Flags().Lookup("verbose")
@@ -794,7 +795,8 @@ func TestNewTestCmd_VerboseFlag(t *testing.T) {
 // =============================================================================
 
 func TestNewTestCmd_DryRunFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Find the dry-run flag
 	flag := cmd.Flags().Lookup("dry-run")
@@ -807,7 +809,8 @@ func TestNewTestCmd_DryRunFlag(t *testing.T) {
 // =============================================================================
 
 func TestNewTestCmd_TemplateDirFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Find the template-dir flag
 	flag := cmd.Flags().Lookup("template-dir")

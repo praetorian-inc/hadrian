@@ -68,14 +68,29 @@ func Run() error {
 	return rootCmd.Execute()
 }
 
-// newTestCmd creates the test command
+// newTestCmd creates the test command with subcommands
 func newTestCmd() *cobra.Command {
-	var config Config
-
 	cmd := &cobra.Command{
 		Use:   "test",
 		Short: "Run security tests against an API",
-		Long:  `Run security tests against an API using the provided specification and roles configuration.`,
+		Long:  `Run security tests against an API. Use 'test rest' for REST APIs or 'test graphql' for GraphQL APIs.`,
+	}
+
+	// Add subcommands
+	cmd.AddCommand(newTestRestCmd())
+	cmd.AddCommand(newTestGraphQLCmd())
+
+	return cmd
+}
+
+// newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
+func newTestRestCmd() *cobra.Command {
+	var config Config
+
+	cmd := &cobra.Command{
+		Use:   "rest",
+		Short: "Run security tests against a REST API",
+		Long:  `Run security tests against a REST API using OpenAPI/Swagger specification.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTest(cmd.Context(), config)
 		},

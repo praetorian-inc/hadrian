@@ -1,0 +1,86 @@
+id: graphql-batching-attack
+info:
+  name: "GraphQL Query Batching Attack"
+  category: "API4:2023 Unrestricted Resource Consumption"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["graphql", "dos", "batching", "aliasing"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query BatchQuery {
+        q1: user(id: "1") { id name }
+        q2: user(id: "2") { id name }
+        q3: user(id: "3") { id name }
+        q4: user(id: "4") { id name }
+        q5: user(id: "5") { id name }
+        q6: user(id: "6") { id name }
+        q7: user(id: "7") { id name }
+        q8: user(id: "8") { id name }
+        q9: user(id: "9") { id name }
+        q10: user(id: "10") { id name }
+        q11: user(id: "11") { id name }
+        q12: user(id: "12") { id name }
+        q13: user(id: "13") { id name }
+        q14: user(id: "14") { id name }
+        q15: user(id: "15") { id name }
+        q16: user(id: "16") { id name }
+        q17: user(id: "17") { id name }
+        q18: user(id: "18") { id name }
+        q19: user(id: "19") { id name }
+        q20: user(id: "20") { id name }
+        q21: user(id: "21") { id name }
+        q22: user(id: "22") { id name }
+        q23: user(id: "23") { id name }
+        q24: user(id: "24") { id name }
+        q25: user(id: "25") { id name }
+        q26: user(id: "26") { id name }
+        q27: user(id: "27") { id name }
+        q28: user(id: "28") { id name }
+        q29: user(id: "29") { id name }
+        q30: user(id: "30") { id name }
+        q31: user(id: "31") { id name }
+        q32: user(id: "32") { id name }
+        q33: user(id: "33") { id name }
+        q34: user(id: "34") { id name }
+        q35: user(id: "35") { id name }
+        q36: user(id: "36") { id name }
+        q37: user(id: "37") { id name }
+        q38: user(id: "38") { id name }
+        q39: user(id: "39") { id name }
+        q40: user(id: "40") { id name }
+        q41: user(id: "41") { id name }
+        q42: user(id: "42") { id name }
+        q43: user(id: "43") { id name }
+        q44: user(id: "44") { id name }
+        q45: user(id: "45") { id name }
+        q46: user(id: "46") { id name }
+        q47: user(id: "47") { id name }
+        q48: user(id: "48") { id name }
+        q49: user(id: "49") { id name }
+        q50: user(id: "50") { id name }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "graphql_missing_batching_limits"

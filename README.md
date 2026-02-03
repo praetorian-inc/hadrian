@@ -2,7 +2,7 @@
 
 **API Security Testing Framework**
 
-Hadrian is a security testing framework for REST APIs that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing.
+Hadrian is a security testing framework for REST and GraphQL APIs that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing.
 
 ## Features
 
@@ -14,6 +14,34 @@ Hadrian is a security testing framework for REST APIs that tests for OWASP API v
 - **Adaptive Rate Limiting**: Proactive request throttling with reactive backoff on 429/503 responses
 - **Proxy Support**: Route traffic through Burp Suite or other proxies
 - **LLM Triage**: Optional AI-powered finding analysis (Anthropic, OpenAI, Ollama)
+- **GraphQL Support**: Security testing for GraphQL APIs with 12 built-in templates
+
+## GraphQL Testing
+
+Hadrian supports GraphQL API security testing including introspection detection, DoS vulnerability testing, and authorization bypass detection.
+
+```bash
+# Basic GraphQL security scan
+hadrian test graphql --target https://api.example.com
+
+# With SDL schema (when introspection is disabled)
+hadrian test graphql --target https://api.example.com --schema schema.graphql
+
+# With authentication for BOLA/BFLA testing
+hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml
+```
+
+**GraphQL Security Checks:**
+- Introspection disclosure detection
+- Query depth limit testing
+- Query batching limit testing
+- BOLA (Broken Object Level Authorization)
+- BFLA (Broken Function Level Authorization)
+- Alias-based DoS attacks
+- Error information disclosure
+- And more...
+
+See [docs/graphql.md](docs/graphql.md) for complete documentation.
 
 ## Installation
 

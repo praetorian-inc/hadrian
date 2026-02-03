@@ -1,0 +1,233 @@
+feature_name: "GraphQL API Security Testing Module"
+feature_slug: "graphql-security-testing"
+orchestration_skill: "orchestrating-feature-development"
+created_at: "2026-02-02T00:00:00Z"
+description: |
+  Extend the API security testing framework to support comprehensive GraphQL API security testing.
+  GraphQL APIs present unique security challenges due to their query-based nature, introspection
+  capabilities, nested query structures, and different authorization patterns compared to REST APIs.
+
+  This module must integrate seamlessly with the existing core framework, utilizing the same AAV
+  (Assess-Attack-Verify) engine, LLM integration, proxy support, and reporting infrastructure while
+  handling GraphQL-specific protocols and attack vectors.
+
+status: "in-progress"
+current_phase: 7
+current_phase_name: "architecture_plan"
+work_type: "LARGE"
+
+phases:
+  1_setup:
+    status: "complete"
+    started_at: "2026-02-02T00:00:00Z"
+    completed_at: "2026-02-02T00:05:00Z"
+    output_dir: ".feature-development"
+  2_triage:
+    status: "complete"
+    completed_at: "2026-02-02T00:06:00Z"
+    classification_method: "signal_parsing"
+    work_type: "LARGE"
+    phases_to_execute: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    output_file: "triage.md"
+  3_codebase_discovery:
+    status: "complete"
+    completed_at: "2026-02-02T00:15:00Z"
+    output_file: "discovery.md"
+    compaction_gate: true
+    agents_spawned: ["Explore"]
+  4_skill_discovery:
+    status: "complete"
+    completed_at: "2026-02-02T02:00:00Z"
+  5_complexity:
+    status: "complete"
+    completed_at: "2026-02-02T00:20:00Z"
+    output_file: "complexity.md"
+    complexity_score: 21.5
+    complexity_tier: "COMPLEX"
+  6_brainstorming:
+    status: "complete"
+    completed_at: "2026-02-02T00:30:00Z"
+    output_file: "brainstorming.md"
+    conditional: false  # LARGE - all phases execute
+  7_architecture_plan:
+    status: "complete"
+    completed_at: "2026-02-02T02:30:00Z"
+    output_file: "architecture.md"
+    conditional: false
+    tasks_defined: 20
+    batches_defined: 7
+    estimated_loc: "3000-4000 code + 1500-2000 tests"
+  8_implementation:
+    status: "pending"
+  9_design_verification:
+    status: "pending"
+    conditional: false
+  10_domain_compliance:
+    status: "pending"
+  11_code_quality:
+    status: "pending"
+    retry_count: 0
+  12_test_planning:
+    status: "pending"
+    conditional: false
+  13_testing:
+    status: "pending"
+  14_coverage_verification:
+    status: "pending"
+  15_test_quality:
+    status: "pending"
+    retry_count: 0
+  16_completion:
+    status: "pending"
+
+# Feature-specific tracking
+feature_type: "backend"  # Go-based security testing tool
+
+technologies_detected:
+  backend:
+    - "Go 1.24.0"
+    - "Cobra CLI"
+    - "kin-openapi"
+    - "gopkg.in/yaml.v3"
+    - "golang.org/x/time/rate"
+    - "github.com/vektah/gqlparser/v2"  # NEW - for GraphQL SDL parsing
+  testing:
+    - "stretchr/testify"
+    - "httptest"
+
+skills_mapped:
+  - "structuring-go-projects"
+  - "go-best-practices"
+  - "implementing-graphql-clients"
+
+# Discovery summary (compacted from Gate 1)
+codebase_discovery:
+  completed_at: "2026-02-02T00:15:00Z"
+  summary: |
+    Hadrian is a plugin-based API security testing framework (~5,725 LOC).
+    GraphQL protocol placeholder already exists in pkg/plugins/plugin.go.
+    REST plugin in pkg/plugins/rest/ serves as reference implementation.
+    Core infrastructure (templates, matchers, reporters, rate limiting) is reusable.
+  key_patterns:
+    - "Plugin self-registration via init()"
+    - "Template-driven test execution"
+    - "Role-based authorization testing"
+    - "Three-phase mutation testing"
+  extension_points:
+    - "pkg/plugins/graphql/ (new)"
+    - "pkg/graphql/ (new)"
+    - "templates/graphql/ (new)"
+  files_to_modify: 4
+  files_to_create: 20
+  full_details: ".feature-development/discovery.md"
+
+# Security assessment
+security_assessment:
+  completed_at: "2026-02-02T01:00:00Z"
+  output_file: "security-assessment.md"
+  risk_rating: "MEDIUM-HIGH (unmitigated) / LOW (with controls)"
+  key_recommendations:
+    - "Use parameterized queries with variables map, never string concatenation"
+    - "Validate schema size, type count, and field count on introspection"
+    - "Apply existing production safety checks to GraphQL endpoints"
+    - "Use gqlparser for SDL parsing (no eval/exec)"
+    - "All logging must pass through existing Redactor"
+  attack_templates_recommended:
+    - "graphql-alias-bombing.yaml"
+    - "graphql-graphiql-disclosure.yaml"
+    - "graphql-persisted-query-bypass.yaml"
+
+# Architecture plan summary
+architecture_plan:
+  completed_at: "2026-02-02T02:30:00Z"
+  output_file: "architecture.md"
+  summary: |
+    Plugin-based extension implementing existing Plugin interface, reusing core
+    runner/template/matcher infrastructure. Adds GraphQL-specific schema parsing
+    (SDL via gqlparser, introspection JSON), query construction, and attack patterns.
+  key_decisions:
+    - "Self-register via init() - matches REST plugin pattern"
+    - "gqlparser/v2 for SDL parsing - battle-tested library"
+    - "One Operation per Query/Mutation field - aligns with REST model"
+    - "CLI subcommands: test rest, test graphql - explicit, extensible"
+    - "Permission format: <action>:<Type.field>:<scope> - extends existing"
+  tasks:
+    total: 20
+    batches: 7
+    batch_1: "T001-T002: Core Plugin Infrastructure"
+    batch_2: "T003-T004: Schema Parsing (SDL + Introspection)"
+    batch_3: "T005-T006: Operation Conversion + Plugin Complete"
+    batch_4: "T007-T008: Query Construction & Execution"
+    batch_5: "T009-T010: Attack Patterns"
+    batch_6: "T011-T018: CLI, Templates, Model Extensions"
+    batch_7: "T019-T020: Test Infrastructure (DVGA)"
+
+# User requirement noted
+user_requirements:
+  - "Need vulnerable GraphQL application for dynamic testing (like crAPI for REST)"
+
+# Tracking
+agents_contributed:
+  - agent: "Explore"
+    phase: 3
+    timestamp: "2026-02-02T00:15:00Z"
+    artifact: "discovery.md"
+    status: "complete"
+  - agent: "security-lead"
+    phase: "security-assessment"
+    timestamp: "2026-02-02T01:00:00Z"
+    artifact: "security-assessment.md"
+    status: "complete"
+  - agent: "backend-lead"
+    phase: 7
+    timestamp: "2026-02-02T02:30:00Z"
+    artifact: "architecture.md"
+    status: "complete"
+
+artifacts:
+  - path: "triage.md"
+    type: "triage"
+    agent: "orchestrator"
+  - path: "discovery.md"
+    type: "codebase-discovery"
+    agent: "Explore"
+  - path: "brainstorming.md"
+    type: "design"
+    agent: "orchestrator"
+  - path: "security-assessment.md"
+    type: "security-assessment"
+    agent: "security-lead"
+  - path: "complexity.md"
+    type: "complexity-assessment"
+    agent: "orchestrator"
+  - path: "architecture.md"
+    type: "architecture-plan"
+    agent: "backend-lead"
+
+feedback_iterations: 0
+
+# Branch info (no worktree - using existing branch)
+worktree:
+  opted_out: true
+  reason: "User created branch directly"
+  branch: "feature/graphql-security-testing"
+  pre_feature_commit: "bdbb8b733951632abb625ea87645a5c8ac04b054"
+
+# Linear ticket reference
+linear_ticket: "ENG-1172"
+linear_url: "https://linear.app/praetorianlabs/issue/ENG-1172/implement-graphql-api-security-testing-module-with-introspection-query"
+
+# Checkpoints (human approval required)
+checkpoints:
+  - phase: 6
+    type: "human_approval"
+    description: "Brainstorming design review"
+  - phase: 7
+    type: "human_approval"
+    description: "Architecture plan review"
+  - phase: 8
+    type: "human_approval"
+    description: "Implementation review"
+  - phase: 16
+    type: "human_approval"
+    description: "Completion review"

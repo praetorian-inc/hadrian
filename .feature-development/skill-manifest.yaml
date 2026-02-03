@@ -1,0 +1,92 @@
+# Skill Manifest
+# Generated: 2026-02-02
+# Source: Phase 4 Skill Discovery
+
+# Gateways relevant to this feature
+relevant_gateways:
+  - gateway: gateway-backend
+    reason: "Go 1.24, Cobra CLI, plugin architecture"
+  - gateway: gateway-testing
+    reason: "stretchr/testify, httptest for Go testing"
+  - gateway: gateway-security
+    reason: "Security testing patterns, auth patterns"
+
+# Skills by domain (for agent prompt injection in later phases)
+skills_by_domain:
+  backend:
+    core_skills:
+      - developing-with-tdd
+      - adhering-to-dry
+      - adhering-to-yagni
+      - verifying-before-completion
+    library_skills:
+      - path: ".claude/skill-library/development/backend/go-best-practices/SKILL.md"
+        trigger: "Go CLI development in cmd/hadrian/"
+      - path: ".claude/skill-library/development/backend/structuring-go-projects/SKILL.md"
+        trigger: "New pkg/graphql/ and pkg/plugins/graphql/ packages"
+      - path: ".claude/skill-library/development/backend/implementing-graphql-clients/SKILL.md"
+        trigger: "GraphQL client implementation patterns"
+      - path: ".claude/skill-library/development/backend/go-errgroup-concurrency/SKILL.md"
+        trigger: "Concurrent query execution"
+      - path: ".claude/skill-library/development/error-handling-patterns/SKILL.md"
+        trigger: "Error handling in plugin system"
+      - path: ".claude/skill-library/development/capabilities/yaml-master/SKILL.md"
+        trigger: "GraphQL template YAML parsing"
+
+  testing:
+    core_skills:
+      - developing-with-tdd
+      - verifying-before-completion
+    library_skills:
+      - path: ".claude/skill-library/testing/backend/implementing-golang-tests/SKILL.md"
+        trigger: "Go test implementation"
+      - path: ".claude/skill-library/testing/testing-anti-patterns/SKILL.md"
+        trigger: "Mandatory for all testing"
+      - path: ".claude/skill-library/testing/avoiding-low-value-tests/SKILL.md"
+        trigger: "Mandatory for all testing"
+      - path: ".claude/skill-library/testing/behavior-vs-implementation-testing/SKILL.md"
+        trigger: "Mandatory for all testing"
+
+  security:
+    core_skills:
+      - verifying-before-completion
+    library_skills:
+      - path: ".claude/skill-library/security/auth-implementation-patterns/SKILL.md"
+        trigger: "GraphQL authorization testing"
+
+# Phase-specific skill requirements
+phase_skills:
+  phase_6_brainstorming:
+    - brainstorming
+  phase_7_architecture_plan:
+    - brainstorming
+    - writing-plans
+    - enforcing-evidence-based-analysis
+  phase_8_implementation:
+    - developing-with-tdd
+    - adhering-to-dry
+    - adhering-to-yagni
+    - structuring-go-projects
+    - implementing-graphql-clients
+  phase_11_code_quality:
+    - verifying-before-completion
+    - reviewing-backend-implementations
+  phase_13_testing:
+    - developing-with-tdd
+    - implementing-golang-tests
+    - avoiding-low-value-tests
+    - verifying-before-completion
+
+# GraphQL-specific considerations
+graphql_specific:
+  patterns_to_follow:
+    - "Variable binding (never string interpolation) for query construction"
+    - "Schema introspection handling"
+    - "Field-level permission testing"
+    - "Query depth/complexity analysis"
+  dependencies_needed:
+    - "github.com/vektah/gqlparser/v2 (GraphQL SDL parsing)"
+  test_data_needed:
+    - "Vulnerable GraphQL application (DVGA or custom)"
+    - "GraphQL schemas with various permission patterns"
+    - "Introspection JSON responses"

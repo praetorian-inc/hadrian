@@ -1,0 +1,59 @@
+id: graphql-field-duplication-attack
+info:
+  name: "GraphQL Field Duplication Attack"
+  category: "API4:2023 Unrestricted Resource Consumption"
+  severity: "MEDIUM"
+  author: "hadrian"
+  description: "Tests for GraphQL field duplication attacks where the same field is requested multiple times with different aliases. This can amplify database queries and processing overhead while appearing as a simple query."
+  tags: ["graphql", "dos", "field-duplication", "resource-exhaustion"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query FieldDuplication {
+        user(id: "1") {
+          f1: email
+          f2: email
+          f3: email
+          f4: email
+          f5: email
+          f6: email
+          f7: email
+          f8: email
+          f9: email
+          f10: email
+          n1: name
+          n2: name
+          n3: name
+          n4: name
+          n5: name
+          p1: posts { title }
+          p2: posts { title }
+          p3: posts { title }
+          p4: posts { title }
+          p5: posts { title }
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "graphql_field_duplication_allowed"

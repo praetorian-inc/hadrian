@@ -1,0 +1,50 @@
+id: graphql-introspection-disclosure
+info:
+  name: "GraphQL Introspection Enabled"
+  category: "API8:2023 Security Misconfiguration"
+  severity: "MEDIUM"
+  author: "hadrian"
+  tags: ["graphql", "introspection", "information-disclosure"]
+  requires_llm_triage: false
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query IntrospectionQuery {
+        __schema {
+          types {
+            name
+            kind
+            fields {
+              name
+              type {
+                name
+                kind
+              }
+            }
+          }
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["__schema", "types"]
+        part: body
+        condition: and
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.__schema"
+      exists: true
+  vulnerability_pattern: "graphql_introspection_publicly_enabled"

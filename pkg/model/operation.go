@@ -1,9 +1,12 @@
 package model
 
-// Protocol-agnostic API operation (extracted from OpenAPI/Swagger)
+// Protocol-agnostic API operation (extracted from OpenAPI/Swagger or GraphQL)
 type Operation struct {
-	Method             string            // GET, POST, PUT, DELETE
-	Path               string            // /api/users/{id}
+	Method             string            // GET, POST, PUT, DELETE (REST) or POST (GraphQL)
+	Path               string            // /api/users/{id} (REST) or "query user" (GraphQL)
+	Protocol           string            // "rest" or "graphql"
+	GraphQLOperation   string            // "query" or "mutation" (GraphQL only)
+	GraphQLField       string            // Field name like "user", "deleteUser" (GraphQL only)
 	PathParams         []Parameter       // {id}, {userId}, etc.
 	QueryParams        []Parameter
 	HeaderParams       []Parameter

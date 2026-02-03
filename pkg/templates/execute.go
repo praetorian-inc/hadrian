@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -325,6 +326,169 @@ func (e *Executor) Execute(
 	return result, nil
 }
 
+// ExecuteGraphQL runs GraphQL template tests against a GraphQL endpoint
+func (e *Executor) ExecuteGraphQL(
+	ctx context.Context,
+	tmpl *CompiledTemplate,
+	endpoint string,
+	authInfos interface{}, // Can be *AuthInfo or map[string]*AuthInfo
+	variables map[string]string,
+) (*ExecutionResult, error) {
+	// Clear request IDs for this execution
+	e.requestIDs = make([]string, 0)
+
+	result := &ExecutionResult{
+		TemplateID: tmpl.ID,
+		Matched:    false,
+		Findings:   []model.Finding{},
+	}
+
+	// Storage for multi-phase tests
+	storedFields := make(map[string]string)
+
+	// Execute each GraphQL test in template
+	for _, test := range tmpl.GraphQL {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		default:
+		}
+
+		// Substitute variables in query
+		query := test.Query
+		if variables != nil {
+			for key, value := range variables {
+				query = strings.ReplaceAll(query, "{{"+key+"}}", value)
+			}
+		}
+
+		// Substitute stored fields from previous phases
+		for key, value := range storedFields {
+			query = strings.ReplaceAll(query, "{{"+key+"}}", value)
+		}
+
+		// Substitute variables in Variables map
+		testVariables := make(map[string]string)
+		for key, value := range test.Variables {
+			substituted := value
+			if variables != nil {
+				for vKey, vValue := range variables {
+					substituted = strings.ReplaceAll(substituted, "{{"+vKey+"}}", vValue)
+				}
+			}
+			for sKey, sValue := range storedFields {
+				substituted = strings.ReplaceAll(substituted, "{{"+sKey+"}}", sValue)
+			}
+			testVariables[key] = substituted
+		}
+
+		// Build GraphQL request body
+		reqBody := map[string]interface{}{
+			"query": query,
+		}
+		if len(testVariables) > 0 {
+			reqBody["variables"] = testVariables
+		}
+		if test.OperationName != "" {
+			reqBody["operationName"] = test.OperationName
+		}
+
+		bodyBytes, err := json.Marshal(reqBody)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal GraphQL request body: %w", err)
+		}
+
+		// Create HTTP request
+		req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create GraphQL request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+
+		// Add request ID header and track it
+		requestID := generateRequestID()
+		req.Header.Set("X-Hadrian-Request-Id", requestID)
+		e.requestIDs = append(e.requestIDs, requestID)
+
+		// Determine which auth to use
+		var authInfo *AuthInfo
+		switch a := authInfos.(type) {
+		case *AuthInfo:
+			authInfo = a
+		case map[string]*AuthInfo:
+			if test.Auth != "" {
+				authInfo = a[test.Auth]
+			}
+		}
+
+		// Apply authentication
+		if authInfo != nil && authInfo.Value != "" {
+			switch authInfo.Method {
+			case "bearer", "basic":
+				req.Header.Set("Authorization", authInfo.Value)
+			case "api_key":
+				if authInfo.Location == "header" {
+					req.Header.Set(authInfo.KeyName, authInfo.Value)
+				} else if authInfo.Location == "query" {
+					q := req.URL.Query()
+					q.Set(authInfo.KeyName, authInfo.Value)
+					req.URL.RawQuery = q.Encode()
+				}
+			}
+		}
+
+		// Execute HTTP request
+		resp, err := e.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("GraphQL request failed: %w", err)
+		}
+
+		// Read response body
+		bodyBytes, err = io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read GraphQL response body: %w", err)
+		}
+		bodyStr := string(bodyBytes)
+
+		// Store response fields if specified
+		if len(test.StoreResponseFields) > 0 {
+			var responseData map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &responseData); err == nil {
+				for alias, jsonPath := range test.StoreResponseFields {
+					value := extractJSONPath(responseData, jsonPath)
+					if value != "" {
+						storedFields[alias] = value
+					}
+				}
+			}
+		}
+
+		// Evaluate matchers
+		matched := evaluateMatchers(tmpl.CompiledMatchers, resp, bodyStr)
+
+		if matched {
+			result.Matched = true
+			hash := sha256.Sum256(bodyBytes)
+			result.Response = model.HTTPResponse{
+				StatusCode: resp.StatusCode,
+				Headers:    flattenHeaders(resp.Header),
+				Body:       bodyStr,
+				BodyHash:   fmt.Sprintf("%x", hash),
+				Size:       len(bodyBytes),
+				Truncated:  false,
+			}
+		}
+	}
+
+	// Add tracked request IDs to result
+	result.RequestIDs = e.requestIDs
+
+	return result, nil
+}
+
 // buildRequest constructs HTTP request with variable substitution
 func buildRequest(
 	ctx context.Context,
@@ -535,4 +699,34 @@ type RateLimitInfo struct {
 	RequestCount   int
 	RateLimitCount int
 	Threshold      int
+}
+
+// extractJSONPath extracts a value from a JSON object using a dot-separated path
+// Example: "data.user.id" extracts value from {"data":{"user":{"id":"123"}}}
+func extractJSONPath(data map[string]interface{}, path string) string {
+	parts := strings.Split(path, ".")
+	current := interface{}(data)
+
+	for _, part := range parts {
+		switch v := current.(type) {
+		case map[string]interface{}:
+			current = v[part]
+		default:
+			return ""
+		}
+	}
+
+	// Convert final value to string
+	switch v := current.(type) {
+	case string:
+		return v
+	case float64:
+		return fmt.Sprintf("%v", v)
+	case bool:
+		return fmt.Sprintf("%v", v)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }

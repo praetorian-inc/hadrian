@@ -1,0 +1,61 @@
+id: graphql-depth-attack
+info:
+  name: "GraphQL Query Depth Attack"
+  category: "API4:2023 Unrestricted Resource Consumption"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["graphql", "dos", "depth-limit"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query DeepQuery {
+        user {
+          posts {
+            comments {
+              author {
+                posts {
+                  comments {
+                    author {
+                      posts {
+                        comments {
+                          author {
+                            posts {
+                              comments {
+                                text
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "graphql_missing_depth_limiting"

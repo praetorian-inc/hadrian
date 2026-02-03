@@ -21,6 +21,9 @@ type Template struct {
 	// Simple single-phase test (for non-mutation tests)
 	HTTP []HTTPTest `yaml:"http,omitempty"`
 
+	// GraphQL test execution (for GraphQL APIs)
+	GraphQL []GraphQLTest `yaml:"graphql,omitempty"`
+
 	// Detection logic
 	Detection Detection `yaml:"detection"`
 }
@@ -123,6 +126,28 @@ type HTTPTest struct {
 	Backoff *Backoff `yaml:"backoff,omitempty"`
 
 	Matchers []Matcher `yaml:"matchers"`
+}
+
+// GraphQLTest defines a GraphQL query/mutation test
+type GraphQLTest struct {
+	Query         string            `yaml:"query"`
+	Variables     map[string]string `yaml:"variables,omitempty"`
+	OperationName string            `yaml:"operation_name,omitempty"`
+
+	// Auth
+	Auth string `yaml:"auth,omitempty"` // attacker, victim
+
+	// Matchers
+	Matchers []Matcher `yaml:"matchers,omitempty"`
+
+	// For attack testing
+	Repeat    int        `yaml:"repeat,omitempty"`
+	RateLimit *RateLimit `yaml:"rate_limit,omitempty"`
+	Backoff   *Backoff   `yaml:"backoff,omitempty"`
+
+	// Store/Use fields for multi-phase
+	StoreResponseFields map[string]string `yaml:"store_response_fields,omitempty"`
+	UseStoredField      string            `yaml:"use_stored_field,omitempty"`
 }
 
 type Matcher struct {

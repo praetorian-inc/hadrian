@@ -10,7 +10,8 @@ import (
 )
 
 func TestNewTestCmd_FlagDefaults(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand, not "test" parent
+	cmd := newTestRestCmd()
 
 	// Verify default values (Cobra stores defaults as strings)
 	assert.Equal(t, "1", cmd.Flags().Lookup("concurrency").DefValue)
@@ -24,7 +25,8 @@ func TestNewTestCmd_FlagDefaults(t *testing.T) {
 }
 
 func TestNewTestCmd_LLMContextFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Verify llm-context flag exists and has correct properties
 	llmContextFlag := cmd.Flags().Lookup("llm-context")
@@ -34,7 +36,8 @@ func TestNewTestCmd_LLMContextFlag(t *testing.T) {
 }
 
 func TestNewTestCmd_RequiredFlags(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Execute without required flags should fail
 	err := cmd.Execute()
@@ -63,7 +66,8 @@ func TestNewVersionCmd(t *testing.T) {
 
 func TestNewTestCmd_ConcurrencyHardcoded(t *testing.T) {
 	// Verify concurrency max is hardcoded in help text (HR-1: DoS prevention)
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	concurrencyFlag := cmd.Flags().Lookup("concurrency")
 	assert.NotNil(t, concurrencyFlag)
