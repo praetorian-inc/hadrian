@@ -4,10 +4,13 @@ DVGA (Damn Vulnerable GraphQL Application) is an intentionally vulnerable GraphQ
 
 ## Quick Start
 
-### 1. Start DVGA
+### 1. Clone and Start DVGA
+
+Clone the official DVGA repository:
 
 ```bash
-cd testdata/dvga
+git clone https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git
+cd Damn-Vulnerable-GraphQL-Application
 docker-compose up -d
 ```
 
@@ -111,20 +114,19 @@ DVGA contains intentional vulnerabilities that Hadrian should detect:
 
 - `dvga-roles.yaml` - Role definitions and permissions for BOLA testing
 - `dvga-auth.yaml` - Authentication configuration for Hadrian
-- `docker-compose.yaml` - Docker setup for DVGA
 
 ## Troubleshooting
 
 ### Port Already in Use
 
 ```bash
-# Stop DVGA
+# Stop DVGA (from the DVGA repository directory)
 docker-compose down
 
 # Check what's using port 5013
 lsof -i :5013
 
-# Kill the process or change the port in docker-compose.yaml
+# Kill the process or change the port in DVGA's docker-compose.yaml
 ```
 
 ### DVGA Not Responding
