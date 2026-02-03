@@ -10,8 +10,8 @@ import (
 	"time"
 
 	http "github.com/praetorian-inc/hadrian/internal/http"
-	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/llm"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
 	_ "github.com/praetorian-inc/hadrian/pkg/plugins/rest" // Register REST plugin
@@ -89,9 +89,23 @@ func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, e
 	}
 }
 
-// triageWithLLM runs LLM triage on findings
-func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig) ([]*model.Finding, error) {
-	client, err := llm.NewClient(ctx)
+// triageWithLLM runs LLM triage on findings and reports each finding immediately after analysis
+func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig, llmHost, llmModel string, llmTimeout int, llmContext string, rep Reporter) ([]*model.Finding, error) {
+	log.Debug("Starting LLM triage for %d findings", len(findings))
+
+	var client llm.Client
+	var err error
+
+	// Convert timeout from seconds to time.Duration
+	timeout := time.Duration(llmTimeout) * time.Second
+
+	// Use explicit config if provided, otherwise fall back to env vars
+	if llmHost != "" || llmModel != "" {
+		client, err = llm.NewClientWithConfig(ctx, llmHost, llmModel, timeout, llmContext)
+	} else {
+		client, err = llm.NewClient(ctx)
+	}
+
 	if err != nil {
 		// LLM is optional - return findings without triage
 		log.Warn("LLM triage disabled: %v", err)
@@ -100,7 +114,8 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 
 	redactor := reporter.NewRedactor()
 
-	for _, finding := range findings {
+	for i, finding := range findings {
+		log.Debug("Triaging finding %d/%d: %s", i+1, len(findings), finding.ID)
 		// Skip already-triaged findings
 		if finding.LLMAnalysis != nil {
 			continue
@@ -132,8 +147,12 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 		result, err := client.Triage(ctx, req)
 		if err != nil {
 			log.Warn("LLM triage failed for %s: %v", finding.ID, err)
+			// Still report the finding even without LLM analysis
+			rep.ReportFinding(finding)
 			continue
 		}
+
+		log.Debug("Triage complete for %s: vulnerability=%v, confidence=%.2f", finding.ID, result.IsVulnerability, result.Confidence)
 
 		finding.LLMAnalysis = &model.LLMTriage{
 			Provider:        result.Provider,
@@ -144,7 +163,19 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 		}
 		finding.Confidence = result.Confidence
 		finding.IsVulnerability = result.IsVulnerability
+
+		// Print finding immediately after LLM analysis completes
+		rep.ReportFinding(finding)
 	}
+
+	// Count triaged findings
+	triaged := 0
+	for _, f := range findings {
+		if f.LLMAnalysis != nil {
+			triaged++
+		}
+	}
+	log.Debug("LLM triage complete: %d/%d findings analyzed", triaged, len(findings))
 
 	return findings, nil
 }
@@ -183,6 +214,7 @@ type TerminalReporter struct {
 	writer          *os.File
 	redactor        *reporter.Redactor
 	requestIDsLimit int
+	llmMode         bool // Track if LLM mode was enabled (findings should be deferred to final report)
 }
 
 func NewTerminalReporter(w *os.File, requestIDsLimit int) *TerminalReporter {
@@ -190,7 +222,13 @@ func NewTerminalReporter(w *os.File, requestIDsLimit int) *TerminalReporter {
 		writer:          w,
 		redactor:        reporter.NewRedactor(),
 		requestIDsLimit: requestIDsLimit,
+		llmMode:         false,
 	}
+}
+
+// SetLLMMode sets whether LLM mode is enabled (findings deferred to final report)
+func (r *TerminalReporter) SetLLMMode(enabled bool) {
+	r.llmMode = enabled
 }
 
 func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
@@ -207,8 +245,11 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 		fmt.Fprintf(r.writer, "  Role: %s\n", finding.AttackerRole)
 	}
 
-	if finding.IsVulnerability {
-		fmt.Fprintf(r.writer, "  Vulnerability confirmed (confidence: %.0f%%)\n", finding.Confidence*100)
+	if finding.LLMAnalysis != nil {
+		fmt.Fprintf(r.writer, "  LLM Analysis: Confidence %.0f%%\n", finding.LLMAnalysis.Confidence*100)
+		if finding.LLMAnalysis.Reasoning != "" {
+			fmt.Fprintf(r.writer, "  Reasoning: %s\n", finding.LLMAnalysis.Reasoning)
+		}
 	}
 
 	// Show request IDs if available (limited by requestIDsLimit)
@@ -223,6 +264,9 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 }
 
 func (r *TerminalReporter) GenerateReport(findings []*model.Finding, stats *Stats) error {
+	// Findings are now printed in real-time during triage (in LLM mode) or
+	// immediately after detection (in non-LLM mode), so we just print the summary
+
 	fmt.Fprintf(r.writer, "\n=== Hadrian Security Test Results ===\n\n")
 
 	fmt.Fprintf(r.writer, "Duration: %s\n", stats.Duration.Round(time.Second))

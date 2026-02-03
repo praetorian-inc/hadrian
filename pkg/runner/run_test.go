@@ -20,6 +20,17 @@ func TestNewTestCmd_FlagDefaults(t *testing.T) {
 	assert.Equal(t, "terminal", cmd.Flags().Lookup("output").DefValue)
 	assert.Equal(t, "false", cmd.Flags().Lookup("insecure").DefValue)
 	assert.Equal(t, ".hadrian/audit.log", cmd.Flags().Lookup("audit-log").DefValue)
+	assert.Equal(t, "", cmd.Flags().Lookup("llm-context").DefValue)
+}
+
+func TestNewTestCmd_LLMContextFlag(t *testing.T) {
+	cmd := newTestCmd()
+
+	// Verify llm-context flag exists and has correct properties
+	llmContextFlag := cmd.Flags().Lookup("llm-context")
+	assert.NotNil(t, llmContextFlag, "llm-context flag should exist")
+	assert.Equal(t, "", llmContextFlag.DefValue, "llm-context should default to empty string")
+	assert.Contains(t, llmContextFlag.Usage, "Additional context for LLM analysis")
 }
 
 func TestNewTestCmd_RequiredFlags(t *testing.T) {

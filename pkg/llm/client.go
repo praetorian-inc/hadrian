@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -35,28 +36,31 @@ type TriageResult struct {
 
 // NewClient creates LLM client with fallback chain
 func NewClient(ctx context.Context) (Client, error) {
-	// Try Claude first (best for auth: 23% better)
-	if apiKey := os.Getenv("ANTHROPIC_API_KEY"); apiKey != "" {
-		return NewClaudeClient(apiKey), nil
-	}
-
-	// Fallback to OpenAI
-	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
-		return NewOpenAIClient(apiKey), nil
-	}
-
-	// Fallback to Ollama (local)
+	// Try Ollama (local)
 	if IsOllamaRunning(ctx) {
 		return NewOllamaClient(), nil
 	}
 
-	return nil, fmt.Errorf("no LLM provider available (set ANTHROPIC_API_KEY, OPENAI_API_KEY, or run Ollama)")
+	return nil, fmt.Errorf("no LLM provider available (run Ollama)")
 }
 
-func IsOllamaRunning(ctx context.Context) bool {
-	// Check if Ollama is reachable
+// NewClientWithConfig creates LLM client with explicit configuration
+func NewClientWithConfig(ctx context.Context, host, model string, timeout time.Duration, customContext string) (Client, error) {
+	// If host is specified, assume Ollama at that host
+	if host != "" {
+		if IsOllamaRunningAt(ctx, host) {
+			return NewOllamaClientWithConfig(host, model, timeout, customContext), nil
+		}
+		return nil, fmt.Errorf("Ollama not reachable at %s", host)
+	}
+	// Fall back to existing env var logic
+	return NewClient(ctx)
+}
+
+// IsOllamaRunningAt checks if Ollama is reachable at the given URL
+func IsOllamaRunningAt(ctx context.Context, baseURL string) bool {
 	client := &http.Client{Timeout: 2 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://localhost:11434/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", baseURL+"/api/tags", nil)
 	if err != nil {
 		return false
 	}
@@ -67,4 +71,36 @@ func IsOllamaRunning(ctx context.Context) bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == 200
+}
+
+// IsOllamaRunning checks if Ollama is reachable
+func IsOllamaRunning(ctx context.Context) bool {
+	baseURL := os.Getenv("OLLAMA_HOST")
+	if baseURL == "" {
+		baseURL = "http://localhost:11434"
+	}
+	return IsOllamaRunningAt(ctx, baseURL)
+}
+
+// Helper functions for building prompts
+func formatPermissions(perms []roles.Permission) string {
+	strs := make([]string, len(perms))
+	for i, p := range perms {
+		strs[i] = p.Raw
+	}
+	return strings.Join(strs, ", ")
+}
+
+func getVictimRoleName(role *roles.Role) string {
+	if role == nil {
+		return "(none)"
+	}
+	return role.Name
+}
+
+func getVictimRolePermissions(role *roles.Role) string {
+	if role == nil {
+		return "(none)"
+	}
+	return formatPermissions(role.Permissions)
 }
