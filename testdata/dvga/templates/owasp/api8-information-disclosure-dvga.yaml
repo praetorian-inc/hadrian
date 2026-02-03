@@ -1,0 +1,56 @@
+id: api8-information-disclosure-dvga
+info:
+  name: "DVGA - Information Disclosure via System Queries"
+  category: "API8:2023"
+  severity: "MEDIUM"
+  author: "hadrian"
+  description: "Tests for information disclosure vulnerabilities in DVGA's system query endpoints. The systemHealth query exposes sensitive system information without proper authentication. Uses introspection to detect if debug endpoints are exposed in the schema."
+  tags: ["graphql", "dvga", "information-disclosure", "debug-endpoints"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query SystemHealthDisclosure {
+        systemHealth
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["systemHealth"]
+        part: body
+
+  - query: |
+      query IntrospectionDebugEndpoint {
+        __type(name: "Query") {
+          fields {
+            name
+          }
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["systemDebug", "systemHealth"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data"
+      exists: true
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "dvga_information_disclosure_system_queries"
