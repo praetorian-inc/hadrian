@@ -123,7 +123,7 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create templates directory with a simple template
-	templatesDir := filepath.Join(tmpDir, "templates", "owasp")
+	templatesDir := filepath.Join(tmpDir, "templates", "rest")
 	err = os.MkdirAll(templatesDir, 0755)
 	require.NoError(t, err)
 
@@ -311,7 +311,7 @@ func TestIntegration_OWASPCategoryFiltering(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create templates directory with multiple category templates
-	templatesDir := filepath.Join(tmpDir, "templates", "owasp")
+	templatesDir := filepath.Join(tmpDir, "templates", "rest")
 	err = os.MkdirAll(templatesDir, 0755)
 	require.NoError(t, err)
 	os.Setenv("HADRIAN_TEMPLATES", templatesDir)

@@ -94,8 +94,8 @@ func TestRun_NoError(t *testing.T) {
 func TestLoadTemplateFiles_DeterministicOrder(t *testing.T) {
 	// Create temp dir with templates in non-alphabetical filesystem order
 	tmpDir := t.TempDir()
-	owaspDir := filepath.Join(tmpDir, "owasp")
-	err := os.MkdirAll(owaspDir, 0755)
+	restDir := filepath.Join(tmpDir, "rest")
+	err := os.MkdirAll(restDir, 0755)
 	assert.NoError(t, err)
 
 	// Create templates with names that would be out of order if not sorted
@@ -163,13 +163,13 @@ detection:
 	}
 	
 	for _, tmpl := range templates {
-		err := os.WriteFile(filepath.Join(owaspDir, tmpl.name), []byte(tmpl.content), 0644)
+		err := os.WriteFile(filepath.Join(restDir, tmpl.name), []byte(tmpl.content), 0644)
 		assert.NoError(t, err)
 	}
 
 	// Load templates multiple times and verify order is always the same
 	for i := 0; i < 5; i++ {
-		loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
+		loaded, err := loadTemplateFiles(tmpDir, []string{"rest"})
 		assert.NoError(t, err)
 		assert.Len(t, loaded, 3)
 		

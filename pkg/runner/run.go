@@ -119,7 +119,7 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
 	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Test categories (owasp, custom)")
-	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/owasp)")
+	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)")
 	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 	cmd.Flags().StringVar(&config.AuditLog, "audit-log", ".hadrian/audit.log", "Audit log file")
 	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
@@ -358,8 +358,8 @@ func getTemplateDir() string {
 		return dir
 	}
 
-	// Default to ./templates/owasp/ relative to current directory
-	return "./templates/owasp"
+	// Default to ./templates/rest/ relative to current directory
+	return "./templates/rest"
 }
 
 // loadTemplateFiles loads and compiles templates from directory
@@ -467,7 +467,7 @@ func hasLLMConfig() bool {
 // Matching is case-insensitive. Supports:
 //   - Template ID (e.g., "bola-idor-basic")
 //   - Filename with or without extension (e.g., "bola-idor-basic.yaml" or "bola-idor-basic")
-//   - Path suffix (e.g., "templates/owasp/bola-idor-basic.yaml")
+//   - Path suffix (e.g., "templates/rest/bola-idor-basic.yaml")
 //
 // If templateFilters is empty, returns all templates unchanged.
 func filterByTemplates(tmpls []*templates.CompiledTemplate, templateFilters []string) []*templates.CompiledTemplate {

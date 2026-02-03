@@ -235,7 +235,7 @@ make test-basic     # Basic Auth only
 AUTH_METHOD=api_key ./vulnerable-api &
 
 # Run Hadrian with templates
-HADRIAN_TEMPLATES=./templates/owasp hadrian test \
+HADRIAN_TEMPLATES=./templates/rest hadrian test \
   --api openapi.yaml \
   --roles roles.yaml \
   --auth auth-apikey.yaml \
