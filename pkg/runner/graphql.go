@@ -56,6 +56,11 @@ type GraphQLConfig struct {
 	ComplexityLimit int    // Max complexity score for DoS testing
 	BatchSize       int    // Number of queries in batch attack tests
 	Templates       string // GraphQL templates directory path
+
+	// OOB detection (optional)
+	EnableOOB    bool   // Enable OOB detection for SSRF testing
+	OOBServerURL string // interactsh server (default: oast.live)
+	OOBTimeout   int    // Poll timeout in seconds (default: 10)
 }
 
 // newTestGraphQLCmd creates the "test graphql" subcommand
@@ -98,6 +103,11 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().Float64Var(&config.RateLimit, "rate-limit", 5.0, "Rate limit (req/s)")
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
 	cmd.Flags().BoolVar(&config.AllowInternal, "allow-internal", false, "Allow internal IP addresses")
+
+	// OOB detection
+	cmd.Flags().BoolVar(&config.EnableOOB, "enable-oob", false, "Enable out-of-band detection for SSRF testing")
+	cmd.Flags().StringVar(&config.OOBServerURL, "oob-server", "oast.live", "Interactsh server URL")
+	cmd.Flags().IntVar(&config.OOBTimeout, "oob-timeout", 10, "OOB poll timeout in seconds")
 
 	// Output options
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")

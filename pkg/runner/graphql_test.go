@@ -129,3 +129,14 @@ func TestLoadGraphQLTemplates_ValidDirectory(t *testing.T) {
 		assert.NotEmpty(t, tmpl.Info.Category)
 	}
 }
+
+func TestGraphQLConfig_OOBEnabled(t *testing.T) {
+	config := GraphQLConfig{
+		Target:     "http://localhost:5013",
+		Endpoint:   "/graphql",
+		EnableOOB:  true,
+		OOBTimeout: 10,
+	}
+	assert.True(t, config.EnableOOB)
+	assert.Equal(t, 10, config.OOBTimeout)
+}

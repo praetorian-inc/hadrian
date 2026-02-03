@@ -10,6 +10,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/oob"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
@@ -237,8 +238,26 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 
 	fmt.Printf("Loaded %d template(s) from: %s\n", len(tmplFiles), config.Templates)
 
-	// Create template executor
-	tmplExecutor := templates.NewExecutor(httpClient)
+	// Initialize OOB client if enabled
+	var oobClient *oob.Client
+	if config.EnableOOB {
+		oobCfg := oob.Config{
+			ServerURL:   config.OOBServerURL,
+			PollTimeout: time.Duration(config.OOBTimeout) * time.Second,
+		}
+		oobClient, err = oob.NewClient(oobCfg)
+		if err != nil {
+			fmt.Printf("Failed to create OOB client: %v\n", err)
+			return nil
+		}
+		defer oobClient.Close()
+		if config.Verbose {
+			fmt.Printf("OOB detection enabled: %s\n", oobClient.GenerateURL())
+		}
+	}
+
+	// Create template executor with OOB support
+	tmplExecutor := templates.NewExecutor(httpClient, templates.WithOOBClient(oobClient))
 
 	var findings []*graphql.Finding
 
