@@ -256,15 +256,15 @@ func perIPHandler(w http.ResponseWriter, r *http.Request, limiter *RateLimiter) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"status":   "ok",
-		"endpoint": r.URL.Path,
+		"status":    "ok",
+		"endpoint":  r.URL.Path,
 		"client_ip": clientIP,
 	})
 }
 
 // parseLimitParams extracts limit and window from query parameters
 func parseLimitParams(r *http.Request) (int, time.Duration) {
-	limit := 5 // default
+	limit := 5                 // default
 	window := 60 * time.Second // default
 
 	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
