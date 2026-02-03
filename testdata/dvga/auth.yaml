@@ -1,0 +1,19 @@
+# DVGA Authentication Configuration
+# For testing against Damn Vulnerable GraphQL Application
+
+auth_method: bearer_token
+
+roles:
+  admin:
+    # Admin user with full access
+    # Create via DVGA UI or mutation: createUser(username: "admin", password: "admin123")
+    token: ""  # Populate after login via: mutation { login(username: "admin", password: "admin123") { accessToken } }
+
+  user:
+    # Regular user with limited access
+    # Create via DVGA UI or mutation: createUser(username: "user1", password: "user123")
+    token: ""  # Populate after login
+
+  guest:
+    # Unauthenticated user
+    token: ""
