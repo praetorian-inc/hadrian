@@ -34,7 +34,6 @@ func generateRequestID() string {
 		hex.EncodeToString(b[10:16])
 }
 
-
 // HTTPClient interface for dependency injection
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)

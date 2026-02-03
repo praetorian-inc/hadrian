@@ -146,7 +146,7 @@ detection:
 `,
 		},
 	}
-	
+
 	for _, tmpl := range templates {
 		err := os.WriteFile(filepath.Join(owaspDir, tmpl.name), []byte(tmpl.content), 0644)
 		assert.NoError(t, err)
@@ -157,7 +157,7 @@ detection:
 		loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
 		assert.NoError(t, err)
 		assert.Len(t, loaded, 3)
-		
+
 		// Should always be in alphabetical order by filepath
 		assert.Equal(t, "01-a", loaded[0].ID)
 		assert.Equal(t, "02-b", loaded[1].ID)

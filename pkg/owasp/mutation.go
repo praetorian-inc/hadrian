@@ -14,7 +14,6 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/util"
 )
 
-
 // HTTPClient interface for making HTTP requests
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)

@@ -224,11 +224,11 @@ func TestExtractField(t *testing.T) {
 
 func TestMatchesDetectionConditions(t *testing.T) {
 	tests := []struct {
-		name      string
-		phase     *templates.Phase
+		name       string
+		phase      *templates.Phase
 		statusCode int
-		body      string
-		expected  bool
+		body       string
+		expected   bool
 	}{
 		{
 			name: "status matches",

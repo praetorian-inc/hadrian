@@ -29,7 +29,7 @@ func TestAPIKeyAuth_UsesCustomHeader(t *testing.T) {
 		"user": {
 			Method:   "api_key",
 			Location: "header",
-			KeyName:  "X-API-Key",        // Custom header, not Authorization
+			KeyName:  "X-API-Key", // Custom header, not Authorization
 			Value:    "test-api-key-12345",
 		},
 	}
@@ -83,7 +83,7 @@ func TestAPIKeyAuth_InQueryParameter(t *testing.T) {
 		"user": {
 			Method:   "api_key",
 			Location: "query",
-			KeyName:  "api_key",     // Query parameter name
+			KeyName:  "api_key", // Query parameter name
 			Value:    "test-key-67890",
 		},
 	}
@@ -221,4 +221,3 @@ func TestBasicAuth_StillUsesAuthorizationHeader(t *testing.T) {
 	assert.Equal(t, "Basic dGVzdDpwYXNzd29yZA==", req.Header.Get("Authorization"),
 		"Should use Authorization header for Basic auth")
 }
-
