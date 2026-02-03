@@ -1,0 +1,17 @@
+feature_name: "OOB Detection for SSRF Testing"
+feature_slug: "oob-detection"
+created_at: "2026-02-03T18:55:24Z"
+created_by: "claude"
+description: |
+  Implement Out-of-Band (OOB) detection for SSRF and other callback-based
+  vulnerability testing. Uses interactsh for callback verification.
+  Works for both GraphQL and REST API testing.
+
+status: "pending"
+
+agents_contributed: []
+
+artifacts:
+  - path: "implementation-plan.md"
+    type: "implementation-plan"
+    agent: "claude"
