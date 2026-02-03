@@ -86,8 +86,8 @@ func detectHardcodedSecret(value string) bool {
 
 	patterns := []string{
 		`^eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$`, // JWT
-		`^sk-[A-Za-z0-9]{32,}$`,                                    // OpenAI API key
-		`^[A-Za-z0-9]{40,}$`,                                       // Generic long key
+		`^sk-[A-Za-z0-9]{32,}$`,                                  // OpenAI API key
+		`^[A-Za-z0-9]{40,}$`,                                     // Generic long key
 	}
 
 	for _, pattern := range patterns {

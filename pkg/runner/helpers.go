@@ -10,8 +10,8 @@ import (
 	"time"
 
 	http "github.com/praetorian-inc/hadrian/internal/http"
-	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/llm"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
 	_ "github.com/praetorian-inc/hadrian/pkg/plugins/rest" // Register REST plugin

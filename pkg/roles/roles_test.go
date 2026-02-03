@@ -355,8 +355,8 @@ func TestMatches_AllCombinations(t *testing.T) {
 func TestGetRolesByPermissionLevel_Lower(t *testing.T) {
 	config := &RoleConfig{
 		Roles: []*Role{
-			{Name: "limited", Level: 10, Permissions: []Permission{{}, {}}},          // Low privilege
-			{Name: "moderate", Level: 50, Permissions: []Permission{{}, {}, {}}},     // Medium privilege
+			{Name: "limited", Level: 10, Permissions: []Permission{{}, {}}},           // Low privilege
+			{Name: "moderate", Level: 50, Permissions: []Permission{{}, {}, {}}},      // Medium privilege
 			{Name: "powerful", Level: 100, Permissions: []Permission{{}, {}, {}, {}}}, // High privilege
 		},
 	}
@@ -371,8 +371,8 @@ func TestGetRolesByPermissionLevel_Lower(t *testing.T) {
 func TestGetRolesByPermissionLevel_Higher(t *testing.T) {
 	config := &RoleConfig{
 		Roles: []*Role{
-			{Name: "limited", Level: 10, Permissions: []Permission{{}, {}}},          // Low privilege
-			{Name: "moderate", Level: 50, Permissions: []Permission{{}, {}, {}}},     // Medium privilege
+			{Name: "limited", Level: 10, Permissions: []Permission{{}, {}}},           // Low privilege
+			{Name: "moderate", Level: 50, Permissions: []Permission{{}, {}, {}}},      // Medium privilege
 			{Name: "powerful", Level: 100, Permissions: []Permission{{}, {}, {}, {}}}, // High privilege
 		},
 	}
@@ -404,10 +404,10 @@ func TestGetRolesByPermissionLevel_BOLAScenario(t *testing.T) {
 	// users have 11 permissions but are lower privilege
 	config := &RoleConfig{
 		Roles: []*Role{
-			{Name: "admin", Level: 100, Permissions: []Permission{{}}},          // 1 perm, level 100
-			{Name: "user1", Level: 10, Permissions: make([]Permission, 11)},      // 11 perms, level 10
-			{Name: "user2", Level: 10, Permissions: make([]Permission, 11)},      // 11 perms, level 10
-			{Name: "anonymous", Level: 0, Permissions: []Permission{{}}},         // 1 perm, level 0
+			{Name: "admin", Level: 100, Permissions: []Permission{{}}},      // 1 perm, level 100
+			{Name: "user1", Level: 10, Permissions: make([]Permission, 11)}, // 11 perms, level 10
+			{Name: "user2", Level: 10, Permissions: make([]Permission, 11)}, // 11 perms, level 10
+			{Name: "anonymous", Level: 0, Permissions: []Permission{{}}},    // 1 perm, level 0
 		},
 	}
 

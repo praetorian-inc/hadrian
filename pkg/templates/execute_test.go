@@ -65,7 +65,7 @@ func TestExecute_MatchedResponse(t *testing.T) {
 					Path:   "/api/users/1",
 					Matchers: []Matcher{
 						{
-							Type:  "status",
+							Type:   "status",
 							Status: []int{200},
 						},
 					},

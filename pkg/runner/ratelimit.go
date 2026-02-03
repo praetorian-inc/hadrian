@@ -10,14 +10,14 @@ import (
 
 // RateLimitConfig configures rate limiting behavior including reactive backoff
 type RateLimitConfig struct {
-	Rate            float64       // Requests per second (default 5.0)
-	Enabled         bool          // Whether rate limiting is active (default true)
-	BackoffType     string        // "exponential" or "fixed" (default "exponential")
-	BackoffInitial  time.Duration // Initial backoff duration (default 1s)
-	BackoffMax      time.Duration // Maximum backoff duration (default 60s)
-	MaxRetries      int           // Maximum retry attempts on rate limit (default 5)
-	StatusCodes     []int         // HTTP status codes that trigger rate limiting (default [429, 503])
-	BodyPatterns    []string      // Optional body patterns to detect rate limiting
+	Rate           float64       // Requests per second (default 5.0)
+	Enabled        bool          // Whether rate limiting is active (default true)
+	BackoffType    string        // "exponential" or "fixed" (default "exponential")
+	BackoffInitial time.Duration // Initial backoff duration (default 1s)
+	BackoffMax     time.Duration // Maximum backoff duration (default 60s)
+	MaxRetries     int           // Maximum retry attempts on rate limit (default 5)
+	StatusCodes    []int         // HTTP status codes that trigger rate limiting (default [429, 503])
+	BodyPatterns   []string      // Optional body patterns to detect rate limiting
 }
 
 // DefaultRateLimitConfig returns the default rate limiting configuration
