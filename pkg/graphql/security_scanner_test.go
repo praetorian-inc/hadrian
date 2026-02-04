@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,9 +38,9 @@ func TestSecurityScanner_CheckIntrospection(t *testing.T) {
 
 		// Assert finding exists with correct properties
 		assert.NotNil(t, finding)
-		assert.Equal(t, FindingTypeIntrospectionDisclosure, finding.Type)
-		assert.Equal(t, SeverityMedium, finding.Severity)
-		assert.Equal(t, "API3", finding.Category)
+		assert.Equal(t, FindingTypeIntrospectionDisclosure.String(), finding.Name)
+		assert.Equal(t, model.SeverityMedium, finding.Severity)
+		assert.Equal(t, CategoryAPI3, finding.Category)
 	})
 
 	t.Run("returns nil when schema is nil", func(t *testing.T) {
@@ -105,9 +106,9 @@ func TestSecurityScanner_CheckDepthLimit(t *testing.T) {
 
 		// Assert finding exists with correct properties
 		assert.NotNil(t, finding)
-		assert.Equal(t, FindingTypeNoDepthLimit, finding.Type)
-		assert.Equal(t, SeverityHigh, finding.Severity)
-		assert.Equal(t, "API4", finding.Category)
+		assert.Equal(t, FindingTypeNoDepthLimit.String(), finding.Name)
+		assert.Equal(t, model.SeverityHigh, finding.Severity)
+		assert.Equal(t, CategoryAPI4, finding.Category)
 
 		// Verify generator is being used
 		assert.NotNil(t, gen)
@@ -203,9 +204,9 @@ func TestSecurityScanner_CheckBatchingLimit(t *testing.T) {
 
 		// Assert finding exists with correct properties
 		assert.NotNil(t, finding)
-		assert.Equal(t, FindingTypeNoBatchingLimit, finding.Type)
-		assert.Equal(t, SeverityMedium, finding.Severity)
-		assert.Equal(t, "API4", finding.Category)
+		assert.Equal(t, FindingTypeNoBatchingLimit.String(), finding.Name)
+		assert.Equal(t, model.SeverityMedium, finding.Severity)
+		assert.Equal(t, CategoryAPI4, finding.Category)
 
 		// Verify generator is being used
 		assert.NotNil(t, gen)
@@ -302,7 +303,7 @@ func TestSecurityScanner_CheckDepthLimit_UsesSchemaFields(t *testing.T) {
 
 		// Assert finding exists (no depth limit enforced)
 		assert.NotNil(t, finding)
-		assert.Equal(t, FindingTypeNoDepthLimit, finding.Type)
+		assert.Equal(t, FindingTypeNoDepthLimit.String(), finding.Name)
 	})
 }
 
@@ -373,9 +374,9 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 
 		// Should detect BOLA vulnerability
 		assert.NotNil(t, finding)
-		assert.Equal(t, FindingTypeBOLA, finding.Type)
-		assert.Equal(t, SeverityCritical, finding.Severity)
-		assert.Contains(t, finding.Evidence, "unauthorized access")
+		assert.Equal(t, FindingTypeBOLA.String(), finding.Name)
+		assert.Equal(t, model.SeverityCritical, finding.Severity)
+		assert.Contains(t, finding.Description, "unauthorized access")
 	})
 
 	t.Run("returns nil when BOLA protected", func(t *testing.T) {
@@ -510,10 +511,10 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 
 		// Should detect BOLA with real victim ID (not hardcoded)
 		assert.NotNil(t, finding)
-		assert.Equal(t, FindingTypeBOLA, finding.Type)
+		assert.Equal(t, FindingTypeBOLA.String(), finding.Name)
 
 		// Verify the finding references the real ID, not the hardcoded one
-		assert.Contains(t, finding.Evidence, "victim-real-id-456")
+		assert.Contains(t, finding.Description, "victim-real-id-456")
 	})
 }
 
@@ -579,9 +580,9 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 
 		// Should detect BFLA vulnerability
 		assert.NotNil(t, finding)
-		assert.Equal(t, FindingTypeBFLA, finding.Type)
-		assert.Equal(t, SeverityCritical, finding.Severity)
-		assert.Contains(t, finding.Evidence, "privilege escalation")
+		assert.Equal(t, FindingTypeBFLA.String(), finding.Name)
+		assert.Equal(t, model.SeverityCritical, finding.Severity)
+		assert.Contains(t, finding.Description, "privilege escalation")
 	})
 
 	t.Run("returns nil when BFLA protected", func(t *testing.T) {
@@ -686,7 +687,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			finding := scanner.CheckBFLA(context.Background(), authConfigs)
 
 			assert.NotNil(t, finding, "Should detect BFLA for %s operation", op)
-			assert.Equal(t, FindingTypeBFLA, finding.Type)
+			assert.Equal(t, FindingTypeBFLA.String(), finding.Name)
 		}
 	})
 }
@@ -719,7 +720,7 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 
 		// Should return slice of findings
 		assert.NotNil(t, findings)
-		assert.IsType(t, []*Finding{}, findings)
+		assert.IsType(t, []*model.Finding{}, findings)
 
 		// Should have at least introspection finding
 		assert.GreaterOrEqual(t, len(findings), 1)
@@ -727,7 +728,7 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 		// Verify introspection finding exists
 		hasIntrospectionFinding := false
 		for _, f := range findings {
-			if f.Type == FindingTypeIntrospectionDisclosure {
+			if f.Name == FindingTypeIntrospectionDisclosure.String() {
 				hasIntrospectionFinding = true
 				break
 			}

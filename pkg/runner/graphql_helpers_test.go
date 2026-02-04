@@ -11,6 +11,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
+	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -325,23 +326,27 @@ func TestFetchSchema_IntrospectionFailure(t *testing.T) {
 // TestReportFindings_Empty tests reporting with no findings
 func TestReportFindings_Empty(t *testing.T) {
 	// Should not panic with empty findings
-	findings := []*graphql.Finding{}
+	findings := []*model.Finding{}
 	reportFindings(findings) // Just verify it doesn't crash
 }
 
 // TestReportFindings_WithFindings tests reporting with actual findings
 func TestReportFindings_WithFindings(t *testing.T) {
-	findings := []*graphql.Finding{
-		graphql.NewFinding(
-			graphql.FindingTypeIntrospectionDisclosure,
-			graphql.SeverityHigh,
-			"GraphQL introspection is enabled",
-		).WithRemediation("Disable introspection in production"),
-		graphql.NewFinding(
-			graphql.FindingTypeNoDepthLimit,
-			graphql.SeverityMedium,
-			"Query allows excessive depth",
-		),
+	findings := []*model.Finding{
+		{
+			ID:          "test-1",
+			Category:    "API3",
+			Name:        graphql.FindingTypeIntrospectionDisclosure.String(),
+			Description: "GraphQL introspection is enabled\nRemediation: Disable introspection in production",
+			Severity:    model.SeverityHigh,
+		},
+		{
+			ID:          "test-2",
+			Category:    "API4",
+			Name:        graphql.FindingTypeNoDepthLimit.String(),
+			Description: "Query allows excessive depth",
+			Severity:    model.SeverityMedium,
+		},
 	}
 
 	// Should not panic with valid findings
@@ -427,14 +432,14 @@ func TestRunSecurityChecks_NoTemplates(t *testing.T) {
 func TestMapTemplateSeverity(t *testing.T) {
 	tests := []struct {
 		input    string
-		expected graphql.Severity
+		expected model.Severity
 	}{
-		{"CRITICAL", graphql.SeverityCritical},
-		{"HIGH", graphql.SeverityHigh},
-		{"MEDIUM", graphql.SeverityMedium},
-		{"LOW", graphql.SeverityLow},
-		{"INFO", graphql.SeverityInfo},
-		{"UNKNOWN", graphql.SeverityMedium}, // Default
+		{"CRITICAL", model.SeverityCritical},
+		{"HIGH", model.SeverityHigh},
+		{"MEDIUM", model.SeverityMedium},
+		{"LOW", model.SeverityLow},
+		{"INFO", model.SeverityInfo},
+		{"UNKNOWN", model.SeverityMedium}, // Default
 	}
 
 	for _, tt := range tests {

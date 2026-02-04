@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
-	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -244,17 +243,12 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint
-	gqlFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs)
+	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs)
 
-	// Convert GraphQL findings to model.Finding for consistent reporting
-	var modelFindings []*model.Finding
-	for _, gqlFinding := range gqlFindings {
-		modelFinding := convertGraphQLFinding(gqlFinding)
-		modelFindings = append(modelFindings, modelFinding)
-
-		// Report each finding immediately (for terminal output, non-LLM mode)
-		if config.Output == "terminal" && config.LLMHost == "" {
-			reporter.ReportFinding(modelFinding)
+	// Report each finding immediately (for terminal output, non-LLM mode)
+	if config.Output == "terminal" && config.LLMHost == "" {
+		for _, finding := range modelFindings {
+			reporter.ReportFinding(finding)
 		}
 	}
 

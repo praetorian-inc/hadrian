@@ -3,7 +3,9 @@ package runner
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -173,63 +175,10 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 	return authConfigs, nil
 }
 
-// convertGraphQLFinding converts a graphql.Finding to model.Finding for consistent reporting
-func convertGraphQLFinding(gqlFinding *graphql.Finding) *model.Finding {
-	// Map graphql severity to model severity (they use the same string values)
-	severity := model.Severity(gqlFinding.Severity)
-
-	// Create model.Finding with mapped fields
-	finding := &model.Finding{
-		ID:              gqlFinding.ID,
-		Category:        gqlFinding.Category,     // Use OWASP category if set
-		Name:            string(gqlFinding.Type), // Use finding type as name
-		Description:     gqlFinding.Evidence,     // GraphQL evidence becomes description
-		Severity:        severity,
-		Confidence:      1.0, // GraphQL findings have full confidence (not LLM-triaged)
-		IsVulnerability: true,
-
-		// Endpoint info - GraphQL always uses POST /graphql (or configured endpoint)
-		Endpoint: "GraphQL Endpoint",
-		Method:   "POST",
-
-		// Role information for BOLA/BFLA findings
-		AttackerRole: gqlFinding.AttackerRole,
-		VictimRole:   gqlFinding.VictimRole,
-
-		// Evidence structure
-		Evidence: model.Evidence{
-			// Note: GraphQL findings don't have full HTTP request/response details yet
-			// This can be enhanced in future when GraphQL scanner tracks full evidence
-			Request: model.HTTPRequest{
-				Method: "POST",
-			},
-			Response: model.HTTPResponse{},
-		},
-
-		// Request correlation
-		RequestIDs: gqlFinding.RequestIDs,
-
-		Timestamp: time.Now(),
-	}
-
-	// Add GraphQL-specific details if present
-	if len(gqlFinding.Details) > 0 {
-		// Details could include attack parameters, etc.
-		// For now, we can add them to the description
-		finding.Description = fmt.Sprintf("%s (Details: %v)", gqlFinding.Evidence, gqlFinding.Details)
-	}
-
-	if gqlFinding.Remediation != "" {
-		// Add remediation to description for now
-		finding.Description = fmt.Sprintf("%s\nRemediation: %s", finding.Description, gqlFinding.Remediation)
-	}
-
-	return finding
-}
-
 // reportFindings prints security findings to stdout with color-coded severity
 // DEPRECATED: Use Reporter pattern (createReporter) for consistent output
-func reportFindings(findings []*graphql.Finding) {
+// NOTE: This function is deprecated and kept for backward compatibility only
+func reportFindings(findings []*model.Finding) {
 	if len(findings) == 0 {
 		fmt.Println("\nNo security issues found.")
 		return
@@ -239,23 +188,20 @@ func reportFindings(findings []*graphql.Finding) {
 	for _, f := range findings {
 		// Color-coded output based on severity
 		switch f.Severity {
-		case graphql.SeverityCritical, graphql.SeverityHigh:
-			fmt.Printf("🔴 %s\n", f.Format())
-		case graphql.SeverityMedium:
-			fmt.Printf("🟡 %s\n", f.Format())
+		case model.SeverityCritical, model.SeverityHigh:
+			fmt.Printf("🔴 [%s] %s - %s\n  Description: %s\n", f.Severity, f.Category, f.Name, f.Description)
+		case model.SeverityMedium:
+			fmt.Printf("🟡 [%s] %s - %s\n  Description: %s\n", f.Severity, f.Category, f.Name, f.Description)
 		default:
-			fmt.Printf("🟢 %s\n", f.Format())
-		}
-		if f.Remediation != "" {
-			fmt.Printf("   Remediation: %s\n", f.Remediation)
+			fmt.Printf("🟢 [%s] %s - %s\n  Description: %s\n", f.Severity, f.Category, f.Name, f.Description)
 		}
 		fmt.Println()
 	}
 }
 
 // runSecurityChecks executes scanner checks and template tests, returning all findings and template count
-func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo) ([]*graphql.Finding, int) {
-	var findings []*graphql.Finding
+func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo) ([]*model.Finding, int) {
+	var findings []*model.Finding
 
 	// Run built-in security checks unless skip flag is set
 	if !config.SkipBuiltinChecks {
@@ -276,7 +222,7 @@ func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient t
 		findings = scanner.RunAllChecks(checkCtx, authConfigs)
 	} else {
 		graphqlVerboseLog(config.Verbose, "\n=== Skipping Built-in Security Checks ===")
-		findings = []*graphql.Finding{}
+		findings = []*model.Finding{}
 	}
 
 	templateCount := 0
@@ -331,7 +277,7 @@ func filterGraphQLTemplatesByOWASP(tmpls []*templates.Template, categories []str
 }
 
 // runTemplateTests executes GraphQL templates and returns findings and template count
-func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo) ([]*graphql.Finding, int) {
+func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo) ([]*model.Finding, int) {
 	graphqlVerboseLog(config.Verbose, "\n=== Running GraphQL Templates ===")
 
 	// Load templates
@@ -358,7 +304,7 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 	// Create template executor
 	tmplExecutor := templates.NewExecutor(httpClient)
 
-	var findings []*graphql.Finding
+	var findings []*model.Finding
 
 	// Execute each template
 	for _, tmpl := range tmplFiles {
@@ -390,31 +336,33 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 			continue
 		}
 
-		// Convert matched template results to graphql.Finding
+		// Convert matched template results to model.Finding
 		if result.Matched {
-			// Map template severity string to graphql.Severity
+			// Map template severity string to model.Severity
 			severity := mapTemplateSeverity(tmpl.Info.Severity)
 
 			// Build evidence string
-			evidence := tmpl.Info.Name
+			description := tmpl.Info.Name
 			if len(result.Response.Body) > 0 {
-				evidence = fmt.Sprintf("%s - %s", tmpl.Info.Name, string(result.Response.Body))
+				description = fmt.Sprintf("%s - %s", tmpl.Info.Name, string(result.Response.Body))
+			}
+			if tmpl.Info.Description != "" {
+				description = fmt.Sprintf("%s\n%s", description, tmpl.Info.Description)
 			}
 
-			// Create finding using template ID as the type
-			finding := graphql.NewFinding(
-				graphql.FindingType(tmpl.ID),
-				severity,
-				evidence,
-			)
-
-			// Add template details
-			finding.WithDetails(map[string]interface{}{
-				"template_name": tmpl.Info.Name,
-				"category":      tmpl.Info.Category,
-				"description":   tmpl.Info.Description,
-				"endpoint":      endpoint,
-			})
+			// Create model.Finding using template ID as the name
+			finding := &model.Finding{
+				ID:              generateGraphQLID(),
+				Category:        tmpl.Info.Category,
+				Name:            tmpl.ID,
+				Description:     description,
+				Severity:        severity,
+				Confidence:      1.0,
+				IsVulnerability: true,
+				Endpoint:        endpoint,
+				Method:          "POST",
+				Timestamp:       time.Now(),
+			}
 
 			findings = append(findings, finding)
 
@@ -425,20 +373,30 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 	return findings, templateCount
 }
 
-// mapTemplateSeverity converts template severity string to graphql.Severity
-func mapTemplateSeverity(severity string) graphql.Severity {
+// generateGraphQLID generates a unique hexadecimal ID for GraphQL findings
+func generateGraphQLID() string {
+	b := make([]byte, 16)
+	_, err := rand.Read(b)
+	if err != nil {
+		panic(fmt.Sprintf("failed to generate random ID: %v", err))
+	}
+	return hex.EncodeToString(b)
+}
+
+// mapTemplateSeverity converts template severity string to model.Severity
+func mapTemplateSeverity(severity string) model.Severity {
 	switch severity {
 	case "CRITICAL":
-		return graphql.SeverityCritical
+		return model.SeverityCritical
 	case "HIGH":
-		return graphql.SeverityHigh
+		return model.SeverityHigh
 	case "MEDIUM":
-		return graphql.SeverityMedium
+		return model.SeverityMedium
 	case "LOW":
-		return graphql.SeverityLow
+		return model.SeverityLow
 	case "INFO":
-		return graphql.SeverityInfo
+		return model.SeverityInfo
 	default:
-		return graphql.SeverityMedium // Default to medium if unknown
+		return model.SeverityMedium // Default to medium if unknown
 	}
 }
