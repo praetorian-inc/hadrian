@@ -15,6 +15,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/oob"
 	"github.com/praetorian-inc/hadrian/pkg/util"
 )
 
@@ -33,6 +34,14 @@ func generateRequestID() string {
 		hex.EncodeToString(b[6:8]) + "-" +
 		hex.EncodeToString(b[8:10]) + "-" +
 		hex.EncodeToString(b[10:16])
+}
+
+// substituteInteractsh replaces {{interactsh}} placeholder with OOB URL
+func substituteInteractsh(query string, oobURL string) string {
+	if oobURL == "" {
+		return query
+	}
+	return strings.ReplaceAll(query, "{{interactsh}}", oobURL)
 }
 
 
@@ -54,14 +63,61 @@ type Executor struct {
 	httpClient HTTPClient
 	cache      *Cache
 	requestIDs []string
+	oobClient  *oob.Client // OOB detection client (optional)
+	oobURL     string      // Cached interactsh URL for this session
 }
 
-func NewExecutor(client HTTPClient) *Executor {
-	return &Executor{
+// ExecutorOption configures Executor
+type ExecutorOption func(*Executor)
+
+// WithOOBClient enables OOB detection
+func WithOOBClient(c *oob.Client) ExecutorOption {
+	return func(e *Executor) {
+		e.oobClient = c
+		if c != nil {
+			e.oobURL = c.GenerateURL()
+		}
+	}
+}
+
+func NewExecutor(client HTTPClient, opts ...ExecutorOption) *Executor {
+	e := &Executor{
 		httpClient: client,
 		cache:      NewCache(1000), // Cache 1000 compiled templates
 		requestIDs: make([]string, 0),
 	}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
+}
+
+// checkOOBIndicator polls for OOB callbacks and returns matched interactions
+func (e *Executor) checkOOBIndicator(ctx context.Context, indicator Indicator) (bool, []model.OOBInteraction, error) {
+	if e.oobClient == nil {
+		return false, nil, nil
+	}
+
+	interactions, err := e.oobClient.Poll(ctx)
+	if err != nil {
+		return false, nil, err
+	}
+
+	// Collect matching interactions
+	var matched []model.OOBInteraction
+	for _, interaction := range interactions {
+		if indicator.Protocol == "" || interaction.Protocol == indicator.Protocol {
+			matched = append(matched, model.OOBInteraction{
+				Protocol:  interaction.Protocol,
+				URL:       interaction.URL,
+				Timestamp: interaction.Timestamp,
+				RemoteIP:  interaction.RemoteIP,
+				RawData:   interaction.RawData,
+			})
+		}
+	}
+
+	return len(matched) > 0, matched, nil
 }
 
 // Execute runs template against operation
@@ -320,6 +376,22 @@ func (e *Executor) Execute(
 		}
 	}
 
+	// Check for OOB indicators if OOB client is configured
+	if e.oobClient != nil && tmpl.Detection.SuccessIndicators != nil {
+		for _, indicator := range tmpl.Detection.SuccessIndicators {
+			if indicator.Type == "oob_callback" {
+				matched, interactions, err := e.checkOOBIndicator(ctx, indicator)
+				if err != nil {
+					return nil, fmt.Errorf("OOB check failed: %w", err)
+				}
+				if matched {
+					result.Matched = true
+					result.OOBInteractions = append(result.OOBInteractions, interactions...)
+				}
+			}
+		}
+	}
+
 	// Add tracked request IDs to result
 	result.RequestIDs = e.requestIDs
 
@@ -357,6 +429,10 @@ func (e *Executor) ExecuteGraphQL(
 
 		// Substitute variables in query
 		query := test.Query
+
+		// Substitute {{interactsh}} with OOB URL first
+		query = substituteInteractsh(query, e.oobURL)
+
 		if variables != nil {
 			for key, value := range variables {
 				query = strings.ReplaceAll(query, "{{"+key+"}}", value)
@@ -486,6 +562,22 @@ func (e *Executor) ExecuteGraphQL(
 				BodyHash:   fmt.Sprintf("%x", hash),
 				Size:       len(bodyBytes),
 				Truncated:  false,
+			}
+		}
+	}
+
+	// Check for OOB indicators if OOB client is configured
+	if e.oobClient != nil && tmpl.Detection.SuccessIndicators != nil {
+		for _, indicator := range tmpl.Detection.SuccessIndicators {
+			if indicator.Type == "oob_callback" {
+				matched, interactions, err := e.checkOOBIndicator(ctx, indicator)
+				if err != nil {
+					return nil, fmt.Errorf("OOB check failed: %w", err)
+				}
+				if matched {
+					result.Matched = true
+					result.OOBInteractions = append(result.OOBInteractions, interactions...)
+				}
 			}
 		}
 	}
@@ -699,6 +791,7 @@ type ExecutionResult struct {
 	Findings      []model.Finding
 	RateLimitInfo *RateLimitInfo
 	RequestIDs    []string // X-Hadrian-Request-Id values from all requests
+	OOBInteractions []model.OOBInteraction // OOB callbacks received
 }
 
 // RateLimitInfo contains results from rate limit testing

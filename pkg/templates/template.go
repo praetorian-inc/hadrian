@@ -169,13 +169,15 @@ type Detection struct {
 }
 
 type Indicator struct {
-	Type       string      `yaml:"type,omitempty"`        // status_code, body_field, regex_match, sensitive_fields_exposed
+	Type       string      `yaml:"type,omitempty"`        // status_code, body_field, regex_match, sensitive_fields_exposed, oob_callback
 	StatusCode interface{} `yaml:"status_code,omitempty"` // Can be int or "{{var}}"
 	BodyField  string      `yaml:"body_field,omitempty"`
 	Value      interface{} `yaml:"value,omitempty"`
 	Pattern    string      `yaml:"pattern,omitempty"`     // For regex_match type indicators
 	Fields     []string    `yaml:"fields,omitempty"`      // For sensitive_fields_exposed type indicators
 	Exists     *bool       `yaml:"exists,omitempty"`
+	// OOB detection fields
+	Protocol   string      `yaml:"protocol,omitempty"`    // http, dns, smtp (for oob_callback type)
 }
 
 type Condition struct {

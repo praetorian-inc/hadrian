@@ -44,6 +44,18 @@ type Evidence struct {
 	AttackResponse *HTTPResponse `json:"attack_response,omitempty"`
 	VerifyResponse *HTTPResponse `json:"verify_response,omitempty"`
 	ResourceID     string        `json:"resource_id,omitempty"`
+
+	// For OOB detection
+	OOBInteractions []OOBInteraction `json:"oob_interactions,omitempty"`
+}
+
+// OOBInteraction represents an out-of-band callback received
+type OOBInteraction struct {
+	Protocol  string    `json:"protocol"`            // http, dns, smtp
+	URL       string    `json:"url"`                 // callback URL accessed
+	Timestamp time.Time `json:"timestamp"`           // when interaction occurred
+	RemoteIP  string    `json:"remote_ip"`           // source IP of callback
+	RawData   string    `json:"raw_data,omitempty"`  // raw request data
 }
 
 type HTTPRequest struct {

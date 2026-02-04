@@ -44,6 +44,25 @@ func TestParse_ValidTemplate(t *testing.T) {
 	assert.Equal(t, "test", tmpl.Detection.VulnerabilityPattern)
 }
 
+func TestTemplate_OOBIndicator(t *testing.T) {
+	yamlContent := `
+id: oob-test
+info:
+  name: "OOB Test"
+  severity: HIGH
+detection:
+  success_indicators:
+    - type: oob_callback
+      protocol: http
+`
+	var tmpl Template
+	err := yaml.Unmarshal([]byte(yamlContent), &tmpl)
+	require.NoError(t, err)
+	require.Len(t, tmpl.Detection.SuccessIndicators, 1)
+	assert.Equal(t, "oob_callback", tmpl.Detection.SuccessIndicators[0].Type)
+	assert.Equal(t, "http", tmpl.Detection.SuccessIndicators[0].Protocol)
+}
+
 func TestParse_FileNotFound(t *testing.T) {
 	_, err := Parse("testdata/nonexistent.yaml")
 	require.Error(t, err)

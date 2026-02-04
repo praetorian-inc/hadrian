@@ -145,6 +145,33 @@ func TestEvidence(t *testing.T) {
 			t.Errorf("expected ResourceID=123, got %s", evidence.ResourceID)
 		}
 	})
+
+	t.Run("OOB interaction evidence", func(t *testing.T) {
+		now := time.Now()
+		evidence := Evidence{
+			Request:  HTTPRequest{Method: "POST", URL: "/graphql"},
+			Response: HTTPResponse{StatusCode: 200},
+			OOBInteractions: []OOBInteraction{
+				{
+					Protocol:  "http",
+					URL:       "abc123.oast.live",
+					Timestamp: now,
+					RemoteIP:  "1.2.3.4",
+					RawData:   "GET / HTTP/1.1\r\nHost: abc123.oast.live\r\n",
+				},
+			},
+		}
+
+		if len(evidence.OOBInteractions) != 1 {
+			t.Errorf("expected 1 OOB interaction, got %d", len(evidence.OOBInteractions))
+		}
+		if evidence.OOBInteractions[0].Protocol != "http" {
+			t.Errorf("expected Protocol=http, got %s", evidence.OOBInteractions[0].Protocol)
+		}
+		if evidence.OOBInteractions[0].RemoteIP != "1.2.3.4" {
+			t.Errorf("expected RemoteIP=1.2.3.4, got %s", evidence.OOBInteractions[0].RemoteIP)
+		}
+	})
 }
 
 func TestHTTPRequest(t *testing.T) {

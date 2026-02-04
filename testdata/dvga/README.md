@@ -162,6 +162,34 @@ set -a && source testdata/dvga/.env && set +a && \
   --output-file dvga-results.json
 ```
 
+### OOB Detection for SSRF Testing
+
+For proper SSRF detection, enable Out-of-Band (OOB) detection which uses interactsh
+to verify the server actually makes outbound requests:
+
+```bash
+./hadrian test graphql \
+  --target http://localhost:5013 \
+  --endpoint /graphql \
+  --templates testdata/dvga/templates/owasp \
+  --template api7-ssrf-dvga \
+  --enable-oob \
+  --oob-timeout 15 \
+  --allow-internal \
+  --verbose
+```
+
+**How OOB Detection Works:**
+1. Hadrian generates a unique callback URL via interactsh
+2. The `{{interactsh}}` variable in templates gets replaced with this URL
+3. If the target server is vulnerable, it will make a request to the callback URL
+4. Hadrian polls for these callbacks to confirm the vulnerability
+
+**OOB Options:**
+- `--enable-oob` - Enable out-of-band detection
+- `--oob-server` - Interactsh server URL (default: oast.live)
+- `--oob-timeout` - Callback polling timeout in seconds (default: 10)
+
 ## Expected Vulnerabilities
 
 DVGA is intentionally vulnerable. Hadrian should detect:
