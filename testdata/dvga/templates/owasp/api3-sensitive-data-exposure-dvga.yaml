@@ -1,7 +1,7 @@
 id: api3-sensitive-data-exposure-dvga
 info:
   name: "DVGA - Sensitive Data Exposure via UserObject.password"
-  category: "API3:2023"
+  category: "API3:2023 Broken Object Property Level Authorization"
   severity: "HIGH"
   author: "hadrian"
   description: "Tests for sensitive data exposure in DVGA's UserObject type. The password field is directly exposed in the GraphQL schema, allowing any authenticated user to query and retrieve plaintext or hashed passwords for all users in the system."

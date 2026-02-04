@@ -27,8 +27,9 @@ func TestFindingType_String(t *testing.T) {
 }
 
 func TestCategoryConstants(t *testing.T) {
-	assert.Equal(t, "API3", CategoryAPI3)
-	assert.Equal(t, "API4", CategoryAPI4)
-	assert.Equal(t, "API5", CategoryAPI5)
-	assert.Equal(t, "API1", CategoryAPI1)
+	// Categories use OWASP API Security 2023 format with full descriptions to match template output
+	assert.Equal(t, "API1:2023 Broken Object Level Authorization", CategoryAPI1)
+	assert.Equal(t, "API4:2023 Unrestricted Resource Consumption", CategoryAPI4)
+	assert.Equal(t, "API5:2023 Broken Function Level Authorization", CategoryAPI5)
+	assert.Equal(t, "API8:2023 Security Misconfiguration", CategoryAPI8)
 }

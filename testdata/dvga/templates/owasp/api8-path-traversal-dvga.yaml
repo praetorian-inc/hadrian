@@ -1,7 +1,7 @@
 id: api8-path-traversal-dvga
 info:
   name: "DVGA - Path Traversal via uploadPaste"
-  category: "API8:2023"
+  category: "API8:2023 Security Misconfiguration"
   severity: "HIGH"
   author: "hadrian"
   description: "Tests for path traversal vulnerabilities in DVGA's uploadPaste mutation. The filename parameter is not properly sanitized, allowing attackers to write files to arbitrary locations on the filesystem using directory traversal sequences."

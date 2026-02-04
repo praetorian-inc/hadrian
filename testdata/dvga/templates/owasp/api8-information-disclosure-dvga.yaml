@@ -1,7 +1,7 @@
 id: api8-information-disclosure-dvga
 info:
   name: "DVGA - Information Disclosure via System Queries"
-  category: "API8:2023"
+  category: "API8:2023 Security Misconfiguration"
   severity: "MEDIUM"
   author: "hadrian"
   description: "Tests for information disclosure vulnerabilities in DVGA's system query endpoints. The systemHealth query exposes sensitive system information without proper authentication. Uses introspection to detect if debug endpoints are exposed in the schema."

@@ -1,7 +1,7 @@
 id: api8-command-injection-dvga
 info:
   name: "DVGA - Command Injection via systemDiagnostics"
-  category: "API8:2023"
+  category: "API8:2023 Security Misconfiguration"
   severity: "CRITICAL"
   author: "hadrian"
   description: "Tests for OS command injection in DVGA's systemDiagnostics query. The cmd parameter is vulnerable to command injection when authentication is bypassed or weak. Attackers can execute arbitrary system commands."

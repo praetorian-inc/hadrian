@@ -11,6 +11,7 @@ import (
 
 	internalhttp "github.com/praetorian-inc/hadrian/internal/http"
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
@@ -200,7 +201,7 @@ func reportFindings(findings []*model.Finding) {
 }
 
 // runSecurityChecks executes scanner checks and template tests, returning all findings and template count
-func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo) ([]*model.Finding, int) {
+func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo, reporter Reporter) ([]*model.Finding, int) {
 	var findings []*model.Finding
 
 	// Run built-in security checks unless skip flag is set
@@ -212,14 +213,23 @@ func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient t
 			ComplexityLimit: config.ComplexityLimit,
 			BatchSize:       config.BatchSize,
 			Verbose:         config.Verbose,
+			Endpoint:        endpoint,
 		})
+
+		// Create callback that uses reporter for real-time output
+		var onFinding graphql.FindingCallback
+		if config.Verbose && reporter != nil {
+			onFinding = func(f *model.Finding) {
+				reporter.ReportFinding(f)
+			}
+		}
 
 		// Run scanner checks with timeout
 		graphqlVerboseLog(config.Verbose, "\n=== Running Security Checks ===")
 		checkCtx, cancel := context.WithTimeout(ctx, time.Duration(config.Timeout)*time.Second)
 		defer cancel()
 
-		findings = scanner.RunAllChecks(checkCtx, authConfigs)
+		findings = scanner.RunAllChecks(checkCtx, authConfigs, onFinding)
 	} else {
 		graphqlVerboseLog(config.Verbose, "\n=== Skipping Built-in Security Checks ===")
 		findings = []*model.Finding{}
@@ -228,7 +238,7 @@ func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient t
 	templateCount := 0
 	// Execute GraphQL templates if provided
 	if config.Templates != "" {
-		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs)
+		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs, reporter)
 		findings = append(findings, templateFindings...)
 		templateCount = count
 	}
@@ -277,7 +287,7 @@ func filterGraphQLTemplatesByOWASP(tmpls []*templates.Template, categories []str
 }
 
 // runTemplateTests executes GraphQL templates and returns findings and template count
-func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo) ([]*model.Finding, int) {
+func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo, reporter Reporter) ([]*model.Finding, int) {
 	graphqlVerboseLog(config.Verbose, "\n=== Running GraphQL Templates ===")
 
 	// Load templates
@@ -311,12 +321,14 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 		// Compile template
 		compiled, err := templates.Compile(tmpl)
 		if err != nil {
-			fmt.Printf("Error compiling template %s: %v\n", tmpl.ID, err)
+			// Use log.Warn for consistent warning output
+			log.Warn("Failed to compile GraphQL template %s: %v", tmpl.ID, err)
 			continue
 		}
 
 		// Convert authConfigs to templates.AuthInfo map
 		var tmplAuthInfos map[string]*templates.AuthInfo
+		var attackerRole, victimRole string
 		if authConfigs != nil {
 			tmplAuthInfos = make(map[string]*templates.AuthInfo)
 			for role, info := range authConfigs {
@@ -326,13 +338,20 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 					Location: info.Location,
 					KeyName:  info.KeyName,
 				}
+				// Track roles for reporting
+				if role == "attacker" {
+					attackerRole = role
+				} else if role == "victim" {
+					victimRole = role
+				}
 			}
 		}
 
 		// Execute template
 		result, err := tmplExecutor.ExecuteGraphQL(ctx, compiled, endpoint, tmplAuthInfos, nil)
 		if err != nil {
-			fmt.Printf("Error executing template %s: %v\n", tmpl.ID, err)
+			// Use log.Warn for consistent warning output
+			log.Warn("GraphQL template execution failed [template=%s, endpoint=%s]: %v", tmpl.ID, endpoint, err)
 			continue
 		}
 
@@ -361,12 +380,24 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 				IsVulnerability: true,
 				Endpoint:        endpoint,
 				Method:          "POST",
+				RequestIDs:      result.RequestIDs,
 				Timestamp:       time.Now(),
+			}
+
+			// Populate roles if they were used in the template
+			if attackerRole != "" {
+				finding.AttackerRole = attackerRole
+			}
+			if victimRole != "" {
+				finding.VictimRole = victimRole
 			}
 
 			findings = append(findings, finding)
 
-			// Verbose per-template status removed - findings are reported in summary
+			// Report finding in verbose mode via reporter
+			if config.Verbose && reporter != nil {
+				reporter.ReportFinding(finding)
+			}
 		}
 	}
 

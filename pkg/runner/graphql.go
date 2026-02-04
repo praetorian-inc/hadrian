@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -183,6 +184,9 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	startTime := time.Now()
 
+	// Enable verbose logging if requested
+	log.SetVerbose(config.Verbose)
+
 	graphqlVerboseLog(config.Verbose, "Starting GraphQL security test")
 	graphqlVerboseLog(config.Verbose, "Target: %s%s", config.Target, config.Endpoint)
 
@@ -243,10 +247,10 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint
-	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs)
+	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter)
 
-	// Report each finding immediately (for terminal output, non-LLM mode)
-	if config.Output == "terminal" && config.LLMHost == "" {
+	// Only report findings if not already reported via callback (non-verbose mode)
+	if config.Output == "terminal" && config.LLMHost == "" && !config.Verbose {
 		for _, finding := range modelFindings {
 			reporter.ReportFinding(finding)
 		}

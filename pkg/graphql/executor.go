@@ -15,6 +15,7 @@ import (
 type Executor struct {
 	httpClient HTTPClient
 	endpoint   string
+	requestIDs []string // Track all request IDs for this executor session
 }
 
 // NewExecutor creates a new GraphQL executor
@@ -22,7 +23,20 @@ func NewExecutor(client HTTPClient, endpoint string) *Executor {
 	return &Executor{
 		httpClient: client,
 		endpoint:   endpoint,
+		requestIDs: make([]string, 0),
 	}
+}
+
+// GetRequestIDs returns all tracked request IDs
+func (e *Executor) GetRequestIDs() []string {
+	ids := make([]string, len(e.requestIDs))
+	copy(ids, e.requestIDs)
+	return ids
+}
+
+// ClearRequestIDs clears the tracked request IDs
+func (e *Executor) ClearRequestIDs() {
+	e.requestIDs = make([]string, 0)
 }
 
 // GraphQLRequest is the standard request format
@@ -97,6 +111,9 @@ func (e *Executor) Execute(
 	// Generate request ID
 	requestID := generateRequestID()
 	req.Header.Set("X-Hadrian-Request-Id", requestID)
+
+	// Track request ID
+	e.requestIDs = append(e.requestIDs, requestID)
 
 	// Execute
 	resp, err := e.httpClient.Do(req)

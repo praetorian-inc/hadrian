@@ -376,6 +376,7 @@ func TestRunTemplateTests_ReturnsTemplateCount(t *testing.T) {
 		server.URL,
 		server.Client(),
 		nil,
+		nil, // reporter
 	)
 
 	// Verify findings are returned (may be 0 if no templates match)
@@ -419,6 +420,7 @@ func TestRunSecurityChecks_NoTemplates(t *testing.T) {
 		server.URL,
 		config,
 		nil,
+		nil, // No reporter for this test
 	)
 
 	// Verify findings are returned

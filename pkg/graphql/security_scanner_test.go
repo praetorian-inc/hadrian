@@ -40,7 +40,7 @@ func TestSecurityScanner_CheckIntrospection(t *testing.T) {
 		assert.NotNil(t, finding)
 		assert.Equal(t, FindingTypeIntrospectionDisclosure.String(), finding.Name)
 		assert.Equal(t, model.SeverityMedium, finding.Severity)
-		assert.Equal(t, CategoryAPI3, finding.Category)
+		assert.Equal(t, CategoryAPI8, finding.Category)
 	})
 
 	t.Run("returns nil when schema is nil", func(t *testing.T) {
@@ -714,9 +714,9 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 			BatchSize:  10,
 		})
 
-		// Run all checks (no auth configs)
+		// Run all checks (no auth configs, no callback)
 		ctx := context.Background()
-		findings := scanner.RunAllChecks(ctx, nil)
+		findings := scanner.RunAllChecks(ctx, nil, nil)
 
 		// Should return slice of findings
 		assert.NotNil(t, findings)
@@ -750,7 +750,7 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 		scanner := NewSecurityScanner(nil, executor, ScanConfig{})
 
 		ctx := context.Background()
-		findings := scanner.RunAllChecks(ctx, nil)
+		findings := scanner.RunAllChecks(ctx, nil, nil)
 
 		assert.NotNil(t, findings)
 		assert.Equal(t, 0, len(findings))

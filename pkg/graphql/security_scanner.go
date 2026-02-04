@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 )
 
@@ -26,6 +27,7 @@ type ScanConfig struct {
 	ComplexityLimit int
 	BatchSize       int
 	Verbose         bool
+	Endpoint        string // GraphQL endpoint URL for findings
 }
 
 // NewSecurityScanner creates a new security scanner
@@ -50,21 +52,35 @@ func (s *SecurityScanner) CheckIntrospection(ctx context.Context) *model.Finding
 		return nil
 	}
 
-	// If we have a schema, introspection was successful
-	finding := &model.Finding{
-		ID:              generateID(),
-		Category:        CategoryAPI3,
-		Name:            FindingTypeIntrospectionDisclosure.String(),
-		Description:     "GraphQL introspection is enabled, allowing attackers to discover the full schema\nRemediation: Disable introspection in production environments",
-		Severity:        model.SeverityMedium,
-		Confidence:      1.0, // Built-in checks have full confidence
-		IsVulnerability: true,
-		Endpoint:        "GraphQL Endpoint",
-		Method:          "POST",
-		Timestamp:       time.Now(),
+	// Clear request IDs before test
+	s.executor.ClearRequestIDs()
+
+	// Make a simple introspection query to capture request ID
+	introspectionQuery := `{ __schema { queryType { name } } }`
+	result, err := s.executor.Execute(ctx, introspectionQuery, nil, "", nil)
+	if err != nil {
+		return nil
 	}
 
-	return finding
+	// If introspection succeeds, it's a finding
+	if result.IsSuccess() {
+		finding := &model.Finding{
+			ID:              generateID(),
+			Category:        CategoryAPI8,
+			Name:            FindingTypeIntrospectionDisclosure.String(),
+			Description:     "GraphQL introspection is enabled, allowing attackers to discover the full schema\nRemediation: Disable introspection in production environments",
+			Severity:        model.SeverityMedium,
+			Confidence:      1.0,
+			IsVulnerability: true,
+			Endpoint:        s.config.Endpoint,
+			Method:          "POST",
+			RequestIDs:      s.executor.GetRequestIDs(),
+			Timestamp:       time.Now(),
+		}
+		return finding
+	}
+
+	return nil
 }
 
 // generateID generates a unique hexadecimal ID for findings
@@ -107,6 +123,9 @@ func (s *SecurityScanner) CheckDepthLimit(ctx context.Context) *model.Finding {
 		return nil
 	}
 
+	// Clear request IDs before test
+	s.executor.ClearRequestIDs()
+
 	// Execute the deep query
 	result, err := s.executor.Execute(ctx, deepQuery, nil, "", nil)
 	if err != nil {
@@ -124,8 +143,9 @@ func (s *SecurityScanner) CheckDepthLimit(ctx context.Context) *model.Finding {
 			Severity:        model.SeverityHigh,
 			Confidence:      1.0,
 			IsVulnerability: true,
-			Endpoint:        "GraphQL Endpoint",
+			Endpoint:        s.config.Endpoint,
 			Method:          "POST",
+			RequestIDs:      s.executor.GetRequestIDs(),
 			Timestamp:       time.Now(),
 		}
 
@@ -165,6 +185,9 @@ func (s *SecurityScanner) CheckBatchingLimit(ctx context.Context) *model.Finding
 		}
 	}
 
+	// Clear request IDs before test
+	s.executor.ClearRequestIDs()
+
 	// Execute the batched query
 	result, err := s.executor.Execute(ctx, batchedQuery, nil, "", nil)
 	if err != nil {
@@ -182,8 +205,9 @@ func (s *SecurityScanner) CheckBatchingLimit(ctx context.Context) *model.Finding
 			Severity:        model.SeverityMedium,
 			Confidence:      1.0,
 			IsVulnerability: true,
-			Endpoint:        "GraphQL Endpoint",
+			Endpoint:        s.config.Endpoint,
 			Method:          "POST",
+			RequestIDs:      s.executor.GetRequestIDs(),
 			Timestamp:       time.Now(),
 		}
 
@@ -223,17 +247,23 @@ func (s *SecurityScanner) CheckBOLA(ctx context.Context, authConfigs map[string]
 
 	// Get victim and attacker auth configs
 	var victimAuth, attackerAuth *AuthInfo
+	var victimRole, attackerRole string
 	for role, auth := range authConfigs {
 		if role == "victim" {
 			victimAuth = auth
+			victimRole = role
 		} else if role == "attacker" {
 			attackerAuth = auth
+			attackerRole = role
 		}
 	}
 
 	if victimAuth == nil || attackerAuth == nil {
 		return nil
 	}
+
+	// Clear request IDs before starting test
+	s.executor.ClearRequestIDs()
 
 	// Step 1: Query as victim to get a real ID
 	victimQuery := fmt.Sprintf(`query { %s { id } }`, targetQuery.Name)
@@ -280,10 +310,11 @@ func (s *SecurityScanner) CheckBOLA(ctx context.Context, authConfigs map[string]
 			Severity:        model.SeverityCritical,
 			Confidence:      1.0,
 			IsVulnerability: true,
-			Endpoint:        "GraphQL Endpoint",
+			Endpoint:        s.config.Endpoint,
 			Method:          "POST",
-			AttackerRole:    "attacker",
-			VictimRole:      "victim",
+			AttackerRole:    attackerRole,
+			VictimRole:      victimRole,
+			RequestIDs:      s.executor.GetRequestIDs(),
 			Timestamp:       time.Now(),
 		}
 
@@ -331,17 +362,23 @@ func (s *SecurityScanner) CheckBFLA(ctx context.Context, authConfigs map[string]
 
 	// Get admin and user auth configs
 	var adminAuth, userAuth *AuthInfo
+	var adminRole, userRole string
 	for role, auth := range authConfigs {
 		if role == "admin" {
 			adminAuth = auth
+			adminRole = role
 		} else if role == "user" {
 			userAuth = auth
+			userRole = role
 		}
 	}
 
 	if adminAuth == nil || userAuth == nil {
 		return nil
 	}
+
+	// Clear request IDs before starting test
+	s.executor.ClearRequestIDs()
 
 	// Generate mutation query
 	var queryArgs string
@@ -376,10 +413,11 @@ func (s *SecurityScanner) CheckBFLA(ctx context.Context, authConfigs map[string]
 			Severity:        model.SeverityCritical,
 			Confidence:      1.0,
 			IsVulnerability: true,
-			Endpoint:        "GraphQL Endpoint",
+			Endpoint:        s.config.Endpoint,
 			Method:          "POST",
-			AttackerRole:    "user",
-			VictimRole:      "admin",
+			AttackerRole:    userRole,
+			VictimRole:      adminRole,
+			RequestIDs:      s.executor.GetRequestIDs(),
 			Timestamp:       time.Now(),
 		}
 
@@ -389,34 +427,57 @@ func (s *SecurityScanner) CheckBFLA(ctx context.Context, authConfigs map[string]
 	return nil
 }
 
+// FindingCallback is called when a finding is discovered (for real-time reporting)
+type FindingCallback func(*model.Finding)
+
 // RunAllChecks runs all security checks and returns findings
-// authConfigs is optional - when provided, enables BOLA/BFLA testing
-func (s *SecurityScanner) RunAllChecks(ctx context.Context, authConfigs map[string]*AuthInfo) []*model.Finding {
+// onFinding callback is called for each finding (can be nil)
+func (s *SecurityScanner) RunAllChecks(ctx context.Context, authConfigs map[string]*AuthInfo, onFinding FindingCallback) []*model.Finding {
 	findings := make([]*model.Finding, 0)
 
 	// Check introspection
+	log.Debug("Checking introspection...")
 	if finding := s.CheckIntrospection(ctx); finding != nil {
+		if onFinding != nil {
+			onFinding(finding)
+		}
 		findings = append(findings, finding)
 	}
 
 	// Check depth limit
+	log.Debug("Checking depth limit...")
 	if finding := s.CheckDepthLimit(ctx); finding != nil {
+		if onFinding != nil {
+			onFinding(finding)
+		}
 		findings = append(findings, finding)
 	}
 
 	// Check batching limit
+	log.Debug("Checking batching limit...")
 	if finding := s.CheckBatchingLimit(ctx); finding != nil {
+		if onFinding != nil {
+			onFinding(finding)
+		}
 		findings = append(findings, finding)
 	}
 
 	// Check BOLA (if auth configs provided)
 	if authConfigs != nil && len(authConfigs) >= 2 {
+		log.Debug("Checking BOLA...")
 		if finding := s.CheckBOLA(ctx, authConfigs); finding != nil {
+			if onFinding != nil {
+				onFinding(finding)
+			}
 			findings = append(findings, finding)
 		}
 
 		// Check BFLA (if auth configs provided)
+		log.Debug("Checking BFLA...")
 		if finding := s.CheckBFLA(ctx, authConfigs); finding != nil {
+			if onFinding != nil {
+				onFinding(finding)
+			}
 			findings = append(findings, finding)
 		}
 	}

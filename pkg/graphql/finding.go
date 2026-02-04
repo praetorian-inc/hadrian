@@ -24,10 +24,10 @@ func (f FindingType) String() string {
 	return string(f)
 }
 
-// OWASP Category mappings for GraphQL finding types
+// OWASP Category mappings for GraphQL finding types (2023 format with descriptions)
 const (
-	CategoryAPI3 = "API3" // Excessive Data Exposure (introspection)
-	CategoryAPI4 = "API4" // Lack of Resources & Rate Limiting (depth/batch limits)
-	CategoryAPI5 = "API5" // BFLA
-	CategoryAPI1 = "API1" // BOLA
+	CategoryAPI1 = "API1:2023 Broken Object Level Authorization"
+	CategoryAPI4 = "API4:2023 Unrestricted Resource Consumption"
+	CategoryAPI5 = "API5:2023 Broken Function Level Authorization"
+	CategoryAPI8 = "API8:2023 Security Misconfiguration"
 )

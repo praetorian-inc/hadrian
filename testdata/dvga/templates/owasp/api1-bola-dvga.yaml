@@ -1,7 +1,7 @@
 id: api1-bola-dvga
 info:
   name: "DVGA - BOLA via editPaste/deletePaste"
-  category: "API1:2023"
+  category: "API1:2023 Broken Object Level Authorization"
   severity: "HIGH"
   author: "hadrian"
   description: "Tests for Broken Object Level Authorization (BOLA) in DVGA's editPaste and deletePaste mutations. These mutations do not properly check if the authenticated user is the owner of the paste, allowing attackers to modify or delete pastes owned by other users."
