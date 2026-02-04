@@ -49,11 +49,13 @@ func Example_requestIDTracking() {
 			Severity: "HIGH",
 		},
 		TestPhases: &templates.TestPhases{
-			Setup: &templates.Phase{
-				Operation:          "create",
-				Path:               "/api/videos",
-				Auth:               "victim",
-				StoreResponseField: "id",
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Operation:          "create",
+					Path:               "/api/videos",
+					Auth:               "victim",
+					StoreResponseField: "id",
+				},
 			},
 			Attack: &templates.Phase{
 				Operation:      "read",

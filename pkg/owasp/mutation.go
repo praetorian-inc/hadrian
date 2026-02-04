@@ -73,22 +73,48 @@ func (e *MutationExecutor) ExecuteMutation(
 		return result, fmt.Errorf("template has no test phases")
 	}
 
-	// Phase 1: Setup (create resource)
-	if tmpl.TestPhases.Setup != nil {
-		e.trackedHTTPClient.ClearRequestIDs()
-		setupResp, err := e.executePhase(ctx, baseURL, tmpl.TestPhases.Setup, tmpl.TestPhases.Setup.Auth, authInfos)
-		if err != nil {
-			return result, fmt.Errorf("setup phase failed: %w", err)
+	// Phase 1: Setup (create resource) - supports multiple setup phases
+	for i, setupPhase := range tmpl.TestPhases.Setup {
+		if setupPhase == nil {
+			continue
 		}
+
+		e.trackedHTTPClient.ClearRequestIDs()
+		setupResp, err := e.executePhase(ctx, baseURL, setupPhase, setupPhase.Auth, authInfos)
+		if err != nil {
+			return result, fmt.Errorf("setup phase %d failed: %w", i+1, err)
+		}
+
+		// For backwards compatibility, store last setup response
 		result.SetupResponse = setupResp
-		result.RequestIDs.Setup = e.trackedHTTPClient.GetRequestIDs()
+
+		// Append request IDs from this setup phase
+		result.RequestIDs.Setup = append(result.RequestIDs.Setup, e.trackedHTTPClient.GetRequestIDs()...)
 
 		// Store resource ID if needed - store by field name for later lookup
-		if tmpl.TestPhases.Setup.StoreResponseField != "" && setupResp != nil {
-			resourceID := extractField(setupResp.Body, tmpl.TestPhases.Setup.StoreResponseField)
+		// Support both single field (backwards compat) and multiple fields
+		if setupPhase.StoreResponseField != "" && setupResp != nil {
+			resourceID := extractField(setupResp.Body, setupPhase.StoreResponseField)
 			if resourceID != "" {
-				result.ResourceID = resourceID
-				e.tracker.StoreResource(tmpl.TestPhases.Setup.StoreResponseField, resourceID)
+				// Store in result if first setup phase with resource ID
+				if result.ResourceID == "" {
+					result.ResourceID = resourceID
+				}
+				e.tracker.StoreResource(setupPhase.StoreResponseField, resourceID)
+			}
+		}
+
+		// Store multiple fields if specified
+		if len(setupPhase.StoreResponseFields) > 0 && setupResp != nil {
+			for alias, jsonPath := range setupPhase.StoreResponseFields {
+				fieldValue := extractField(setupResp.Body, jsonPath)
+				if fieldValue != "" {
+					e.tracker.StoreResource(alias, fieldValue)
+					// If this is the first stored field and ResourceID is empty, use it
+					if result.ResourceID == "" {
+						result.ResourceID = fieldValue
+					}
+				}
 			}
 		}
 	}
@@ -159,11 +185,21 @@ func (e *MutationExecutor) executePhase(
 	}
 
 	// Substitute stored values into path
+	// Support backwards compatibility: if UseStoredField is set, use it
 	if phase.UseStoredField != "" {
 		storedValue := e.tracker.GetResource(phase.UseStoredField)
 		if storedValue != "" {
 			// Replace {fieldName} with stored value
 			path = strings.ReplaceAll(path, "{"+phase.UseStoredField+"}", storedValue)
+		}
+	}
+
+	// Also substitute ALL stored fields (supports multiple placeholders in path)
+	// This allows paths like "/api/{video_id}/comments/{comment_id}"
+	for _, alias := range e.tracker.GetAllKeys() {
+		storedValue := e.tracker.GetResource(alias)
+		if storedValue != "" {
+			path = strings.ReplaceAll(path, "{"+alias+"}", storedValue)
 		}
 	}
 

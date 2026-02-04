@@ -1,5 +1,9 @@
 package templates
 
+import (
+	"gopkg.in/yaml.v3"
+)
+
 // Template represents a parsed YAML test template
 type Template struct {
 	ID   string       `yaml:"id"`
@@ -45,22 +49,47 @@ type RoleSelector struct {
 	VictimPermissionLevel   string `yaml:"victim_permission_level"`
 }
 
+// SetupPhases supports both single phase and array of phases in YAML
+type SetupPhases []*Phase
+
+// UnmarshalYAML handles both single object and array syntax for backwards compatibility
+func (s *SetupPhases) UnmarshalYAML(value *yaml.Node) error {
+	// If it's a sequence (array), unmarshal as []*Phase
+	if value.Kind == yaml.SequenceNode {
+		var phases []*Phase
+		if err := value.Decode(&phases); err != nil {
+			return err
+		}
+		*s = phases
+		return nil
+	}
+
+	// If it's a mapping (single object), unmarshal as *Phase and wrap in slice
+	var phase Phase
+	if err := value.Decode(&phase); err != nil {
+		return err
+	}
+	*s = []*Phase{&phase}
+	return nil
+}
+
 type TestPhases struct {
-	Setup  *Phase `yaml:"setup"`
-	Attack *Phase `yaml:"attack"`
-	Verify *Phase `yaml:"verify"`
+	Setup  SetupPhases `yaml:"setup,omitempty"` // Now supports single or array
+	Attack *Phase      `yaml:"attack"`
+	Verify *Phase      `yaml:"verify"`
 }
 
 type Phase struct {
-	Path               string            `yaml:"path,omitempty"`                 // Endpoint path for this phase
-	Operation          string            `yaml:"operation"`                      // create, read, update, delete
-	Auth               string            `yaml:"auth"`                           // attacker, victim
-	Data               map[string]string `yaml:"data,omitempty"`                 // Request body data
-	StoreResponseField string            `yaml:"store_response_field,omitempty"` // Field to store
-	UseStoredField     string            `yaml:"use_stored_field,omitempty"`     // Use stored value
-	CheckField         string            `yaml:"check_field,omitempty"`          // Field to verify
-	ExpectedValue      string            `yaml:"expected_value,omitempty"`       // Expected value
-	ExpectedStatus     int               `yaml:"expected_status,omitempty"`
+	Path                string            `yaml:"path,omitempty"`                  // Endpoint path for this phase
+	Operation           string            `yaml:"operation"`                       // create, read, update, delete
+	Auth                string            `yaml:"auth"`                            // attacker, victim
+	Data                map[string]string `yaml:"data,omitempty"`                  // Request body data
+	StoreResponseField  string            `yaml:"store_response_field,omitempty"`  // Single field to store (backwards compat)
+	StoreResponseFields map[string]string `yaml:"store_response_fields,omitempty"` // Multiple fields: alias -> json_path
+	UseStoredField      string            `yaml:"use_stored_field,omitempty"`      // Use stored value
+	CheckField          string            `yaml:"check_field,omitempty"`           // Field to verify
+	ExpectedValue       string            `yaml:"expected_value,omitempty"`        // Expected value
+	ExpectedStatus      int               `yaml:"expected_status,omitempty"`
 }
 
 // RateLimit defines rate limiting detection criteria
@@ -97,7 +126,7 @@ type HTTPTest struct {
 }
 
 type Matcher struct {
-	Type      string   `yaml:"type"`  // word, regex, status, size, dsl
+	Type      string   `yaml:"type"` // word, regex, status, size, dsl
 	Words     []string `yaml:"words,omitempty"`
 	Regex     []string `yaml:"regex,omitempty"`
 	Status    []int    `yaml:"status,omitempty"`

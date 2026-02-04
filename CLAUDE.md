@@ -64,6 +64,40 @@ Templates in `templates/owasp/` define security tests with:
 
 Templates support both simple single-phase tests and multi-phase mutation tests (setup → attack → verify).
 
+#### Multi-Phase Mutation Tests
+
+For complex vulnerability patterns like BFLA and BOPLA, templates use `test_phases`:
+
+```yaml
+test_phases:
+  setup:
+    # Single phase (backwards compatible)
+    - path: "/api/user/dashboard"
+      auth: "victim"
+      store_response_fields:
+        victim_id: "id"
+        victim_video_id: "video_id"
+    # Multiple setup phases supported (array syntax)
+    - path: "/api/user/dashboard"
+      auth: "attacker"
+      store_response_fields:
+        attacker_video_id: "video_id"
+  attack:
+    path: "/api/resource/{victim_id}"
+    auth: "attacker"
+    use_stored_field: "victim_id"
+  verify:
+    path: "/api/resource/{victim_id}"
+    auth: "victim"
+    check_field: "status"
+    expected_value: "deleted"
+```
+
+Key features:
+- **`store_response_fields`**: Map of `alias: json_path` to extract and store multiple fields from setup responses
+- **`setup` as array**: Supports multiple sequential setup phases (e.g., get attacker's data, then victim's data)
+- **Placeholder substitution**: Use `{alias}` in paths and data fields to reference stored values
+
 ### Permission Format
 
 Permissions follow `<action>:<object>:<scope>`:

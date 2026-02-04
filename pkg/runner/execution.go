@@ -201,7 +201,8 @@ func executeMutationTemplate(
 				baseURL,
 			)
 			if err != nil {
-				log.Warn("Mutation test failed: %v", err)
+				log.Warn("Mutation test failed [template=%s, attacker=%s, victim=%s, endpoint=%s %s]: %v",
+					tmpl.ID, attackerRole.Name, victimRole.Name, op.Method, op.Path, err)
 				continue
 			}
 
