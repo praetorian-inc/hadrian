@@ -39,6 +39,7 @@ func TestSecurityScanner_CheckIntrospection(t *testing.T) {
 		assert.NotNil(t, finding)
 		assert.Equal(t, FindingTypeIntrospectionDisclosure, finding.Type)
 		assert.Equal(t, SeverityMedium, finding.Severity)
+		assert.Equal(t, "API3", finding.Category)
 	})
 
 	t.Run("returns nil when schema is nil", func(t *testing.T) {
@@ -106,6 +107,7 @@ func TestSecurityScanner_CheckDepthLimit(t *testing.T) {
 		assert.NotNil(t, finding)
 		assert.Equal(t, FindingTypeNoDepthLimit, finding.Type)
 		assert.Equal(t, SeverityHigh, finding.Severity)
+		assert.Equal(t, "API4", finding.Category)
 
 		// Verify generator is being used
 		assert.NotNil(t, gen)
@@ -203,6 +205,7 @@ func TestSecurityScanner_CheckBatchingLimit(t *testing.T) {
 		assert.NotNil(t, finding)
 		assert.Equal(t, FindingTypeNoBatchingLimit, finding.Type)
 		assert.Equal(t, SeverityMedium, finding.Severity)
+		assert.Equal(t, "API4", finding.Category)
 
 		// Verify generator is being used
 		assert.NotNil(t, gen)

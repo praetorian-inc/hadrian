@@ -51,6 +51,7 @@ func (s *SecurityScanner) CheckIntrospection(ctx context.Context) *Finding {
 		SeverityMedium,
 		"GraphQL introspection is enabled, allowing attackers to discover the full schema",
 	)
+	finding.Category = "API3"
 
 	finding.WithRemediation("Disable introspection in production environments")
 
@@ -99,6 +100,7 @@ func (s *SecurityScanner) CheckDepthLimit(ctx context.Context) *Finding {
 			SeverityHigh,
 			fmt.Sprintf("Server allows deeply nested queries (depth %d) without restriction", depth),
 		)
+		finding.Category = "API4"
 
 		finding.WithRemediation("Implement query depth limiting to prevent resource exhaustion attacks")
 		finding.WithDetails(map[string]interface{}{
@@ -156,6 +158,7 @@ func (s *SecurityScanner) CheckBatchingLimit(ctx context.Context) *Finding {
 			SeverityMedium,
 			fmt.Sprintf("Server allows batched queries with %d operations without restriction", batchSize),
 		)
+		finding.Category = "API4"
 
 		finding.WithRemediation("Implement batching limits to prevent resource exhaustion attacks")
 		finding.WithDetails(map[string]interface{}{
