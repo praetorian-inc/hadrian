@@ -281,7 +281,7 @@ func TestFetchSchema_Introspection(t *testing.T) {
 	assert.NotNil(t, schema)
 }
 
-// TestFetchSchema_SDLFile tests SDL file loading (currently unimplemented)
+// TestFetchSchema_SDLFile tests SDL file loading with nonexistent file
 func TestFetchSchema_SDLFile(t *testing.T) {
 	config := GraphQLConfig{
 		Target:   "https://api.example.com",
@@ -294,7 +294,7 @@ func TestFetchSchema_SDLFile(t *testing.T) {
 
 	schema, err := fetchSchema(ctx, config, httpClient)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "SDL file loading not yet implemented")
+	assert.Contains(t, err.Error(), "failed to load schema from file")
 	assert.Nil(t, schema)
 }
 

@@ -102,7 +102,7 @@ func TestFinding_Format(t *testing.T) {
 				SeverityMedium,
 				"Introspection query succeeded",
 			),
-			expected: "[MEDIUM] introspection-disclosure: Introspection query succeeded",
+			expected: "[MEDIUM] introspection-disclosure\n  Description: Introspection query succeeded",
 		},
 		{
 			name: "formats critical finding",
@@ -111,7 +111,7 @@ func TestFinding_Format(t *testing.T) {
 				SeverityCritical,
 				"Batch of 1000 queries accepted",
 			),
-			expected: "[CRITICAL] no-batching-limit: Batch of 1000 queries accepted",
+			expected: "[CRITICAL] no-batching-limit\n  Description: Batch of 1000 queries accepted",
 		},
 		{
 			name: "formats info level finding",
@@ -120,7 +120,7 @@ func TestFinding_Format(t *testing.T) {
 				SeverityInfo,
 				"Object access patterns observed",
 			),
-			expected: "[INFO] bola: Object access patterns observed",
+			expected: "[INFO] bola\n  Description: Object access patterns observed",
 		},
 	}
 
@@ -154,7 +154,8 @@ func TestFormatFindings(t *testing.T) {
 			},
 			expected: `=== Security Findings (1) ===
 
-[MEDIUM] introspection-disclosure: Introspection enabled
+[MEDIUM] introspection-disclosure
+  Description: Introspection enabled
 `,
 		},
 		{
@@ -173,8 +174,10 @@ func TestFormatFindings(t *testing.T) {
 			},
 			expected: `=== Security Findings (2) ===
 
-[CRITICAL] no-batching-limit: Batch of 1000 queries accepted
-[HIGH] no-depth-limit: Query depth 50 accepted
+[CRITICAL] no-batching-limit
+  Description: Batch of 1000 queries accepted
+[HIGH] no-depth-limit
+  Description: Query depth 50 accepted
 `,
 		},
 	}
