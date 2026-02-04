@@ -5,6 +5,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGRPCPlugin_Name(t *testing.T) {
@@ -125,4 +126,39 @@ func TestGRPCPlugin_Registration(t *testing.T) {
 	assert.NotNil(t, plugin)
 	assert.Equal(t, "gRPC Proto Parser", plugin.Name())
 	assert.Equal(t, plugins.ProtocolGRPC, plugin.Type())
+}
+
+func TestGRPCPlugin_Parse(t *testing.T) {
+	p := &GRPCPlugin{}
+
+	protoContent := `
+syntax = "proto3";
+package test;
+
+service TestService {
+    rpc GetItem (GetItemRequest) returns (Item);
+}
+
+message GetItemRequest {
+    string id = 1;
+}
+
+message Item {
+    string id = 1;
+    string name = 2;
+}
+`
+
+	spec, err := p.Parse([]byte(protoContent))
+	require.NoError(t, err)
+	require.NotNil(t, spec)
+
+	assert.Equal(t, "gRPC API", spec.Info.Title)
+	assert.Equal(t, "1.0.0", spec.Info.Version)
+	require.Len(t, spec.Operations, 1)
+
+	op := spec.Operations[0]
+	assert.Equal(t, "/test.TestService/GetItem", op.Path)
+	assert.Equal(t, "GRPC", op.Method)
+	assert.Equal(t, "grpc", op.Protocol)
 }

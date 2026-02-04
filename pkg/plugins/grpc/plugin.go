@@ -55,20 +55,28 @@ func (p *GRPCPlugin) CanParse(input []byte, filename string) bool {
 	return false
 }
 
-// Parse converts proto file to internal model (placeholder implementation for Batch 2)
+// Parse converts proto file to internal model
 func (p *GRPCPlugin) Parse(input []byte) (*model.APISpec, error) {
-	// Placeholder for Batch 2 implementation
-	return nil, ErrNotImplemented
-}
+	// Parse proto file to service descriptors
+	services, err := parseProtoFile(input)
+	if err != nil {
+		return nil, err
+	}
 
-// ErrNotImplemented indicates proto parsing is not yet implemented
-var ErrNotImplemented = &NotImplementedError{msg: "proto parsing not yet implemented"}
+	// Convert services to operations
+	operations, err := ConvertServicesToOperations(services)
+	if err != nil {
+		return nil, err
+	}
 
-// NotImplementedError represents a not-yet-implemented feature
-type NotImplementedError struct {
-	msg string
-}
+	// Create API spec
+	spec := &model.APISpec{
+		Info: model.APIInfo{
+			Title:   "gRPC API",
+			Version: "1.0.0",
+		},
+		Operations: operations,
+	}
 
-func (e *NotImplementedError) Error() string {
-	return e.msg
+	return spec, nil
 }
