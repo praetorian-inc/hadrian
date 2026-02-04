@@ -1,0 +1,28 @@
+id: grpc-deadline-manipulation
+info:
+  name: "gRPC Deadline/Timeout Manipulation"
+  category: "API4:2023 Unrestricted Resource Consumption"
+  severity: "LOW"
+  author: "hadrian"
+  tags: ["grpc", "dos", "timeout"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "any"
+
+grpc:
+  - method: "{{operation.method}}"
+    service: "{{operation.service}}"
+    message: '{}'
+    metadata:
+      grpc-timeout: "999999999n"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: [0, 4]
+  vulnerability_pattern: "grpc_deadline_manipulation"

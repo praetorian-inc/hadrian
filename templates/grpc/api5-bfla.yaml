@@ -1,0 +1,33 @@
+id: grpc-api5-bfla
+info:
+  name: "gRPC BFLA - Broken Function Level Authorization"
+  category: "API5:2023 Broken Function Level Authorization"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["grpc", "bfla", "api5", "authorization"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  methods: ["Admin*", "System*", "Config*", "Manage*"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "admin"
+
+grpc:
+  - method: "{{operation.method}}"
+    service: "{{operation.service}}"
+    message: '{}'
+    metadata:
+      authorization: "Bearer {{attacker_token}}"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+  failure_indicators:
+    - type: "grpc_status"
+      code: [7, 16]
+  vulnerability_pattern: "grpc_user_accessed_admin_function"

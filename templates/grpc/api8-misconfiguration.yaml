@@ -1,0 +1,33 @@
+id: grpc-api8-misconfiguration
+info:
+  name: "gRPC Security Misconfiguration - Reflection Enabled"
+  category: "API8:2023 Security Misconfiguration"
+  severity: "MEDIUM"
+  author: "hadrian"
+  tags: ["grpc", "misconfiguration", "api8", "reflection"]
+  requires_llm_triage: false
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "none"
+
+grpc:
+  - method: "ServerReflectionInfo"
+    service: "grpc.reflection.v1alpha.ServerReflection"
+    message: '{"list_services": ""}'
+    metadata: {}
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "body_field"
+      body_field: "list_services_response"
+      exists: true
+  failure_indicators:
+    - type: "grpc_status"
+      code: [12]
+  vulnerability_pattern: "grpc_reflection_enabled"

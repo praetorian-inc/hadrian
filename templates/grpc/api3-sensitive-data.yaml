@@ -1,0 +1,31 @@
+id: grpc-api3-sensitive-data
+info:
+  name: "gRPC Excessive Data Exposure"
+  category: "API3:2023 Excessive Data Exposure"
+  severity: "MEDIUM"
+  author: "hadrian"
+  tags: ["grpc", "data-exposure", "api3"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  methods: ["Get*", "List*", "Read*"]
+
+role_selector:
+  attacker_permission_level: "lower"
+
+grpc:
+  - method: "{{operation.method}}"
+    service: "{{operation.service}}"
+    message: '{}'
+    metadata:
+      authorization: "Bearer {{attacker_token}}"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "body_contains"
+      patterns: ["password", "secret", "ssn", "credit_card", "api_key"]
+  vulnerability_pattern: "grpc_sensitive_data_exposure"
