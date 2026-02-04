@@ -57,7 +57,6 @@ Hadrian is a security testing framework for REST and GraphQL APIs that tests for
 
 ```bash
 # Build from source
-cd modules/hadrian
 go build -o hadrian ./cmd/hadrian
 
 # Or install directly

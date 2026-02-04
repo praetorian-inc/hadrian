@@ -226,11 +226,11 @@ func TestTerminalReporter_ReportFinding_WithLLMAnalysis(t *testing.T) {
 
 	rep := NewTerminalReporter(tmpFile, 1)
 	finding := &model.Finding{
-		Severity:    model.SeverityHigh,
-		Category:    "API1",
-		Name:        "Broken Object Level Authorization",
-		Method:      "GET",
-		Endpoint:    "/api/users/{id}",
+		Severity: model.SeverityHigh,
+		Category: "API1",
+		Name:     "Broken Object Level Authorization",
+		Method:   "GET",
+		Endpoint: "/api/users/{id}",
 		LLMAnalysis: &model.LLMTriage{
 			Provider:        "ollama",
 			IsVulnerability: true,
@@ -325,11 +325,11 @@ func TestTerminalReporter_GenerateReport_WithLLMFindings(t *testing.T) {
 	// Findings with LLM analysis (would have been printed during triage)
 	findings := []*model.Finding{
 		{
-			Severity:    model.SeverityHigh,
-			Category:    "API1",
-			Name:        "Broken Object Level Authorization",
-			Method:      "GET",
-			Endpoint:    "/api/users/{id}",
+			Severity: model.SeverityHigh,
+			Category: "API1",
+			Name:     "Broken Object Level Authorization",
+			Method:   "GET",
+			Endpoint: "/api/users/{id}",
 			LLMAnalysis: &model.LLMTriage{
 				Provider:        "ollama",
 				IsVulnerability: true,

@@ -93,9 +93,9 @@ func Example_requestIDTracking() {
 	// Show the tracked request IDs
 	fmt.Printf("\nVulnerability detected: %v\n", result.Matched)
 	fmt.Printf("Total request IDs tracked: %d\n",
-		len(result.RequestIDs.Setup) +
-		len(result.RequestIDs.Attack) +
-		len(result.RequestIDs.Verify))
+		len(result.RequestIDs.Setup)+
+			len(result.RequestIDs.Attack)+
+			len(result.RequestIDs.Verify))
 
 	fmt.Printf("Setup phase IDs: %d\n", len(result.RequestIDs.Setup))
 	fmt.Printf("Attack phase IDs: %d\n", len(result.RequestIDs.Attack))
