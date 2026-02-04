@@ -238,29 +238,29 @@ func (f *Fingerprinter) buildVerificationChain(engine string) ([]PayloadWithExpe
 	case "jinja2":
 		return []PayloadWithExpected{
 			{Value: "{{7*191}}", Expected: "1337", Description: "Basic arithmetic"},
-			{Value: "{{13*37}}", Expected: "481", Description: "Alternative arithmetic"},
-			{Value: "{{17*89}}", Expected: "1513", Description: "Third arithmetic"},
+			{Value: "{{'test'|upper}}", Expected: "TEST", Description: "Jinja2-specific filter"},
+			{Value: "{{range(5)|list}}", Expected: "[0, 1, 2, 3, 4]", Description: "Jinja2-specific range function"},
 		}, nil
 
 	case "twig":
 		return []PayloadWithExpected{
 			{Value: "{{7*191}}", Expected: "1337", Description: "Basic arithmetic"},
-			{Value: "{{13*37}}", Expected: "481", Description: "Alternative arithmetic"},
-			{Value: "{{17*89}}", Expected: "1513", Description: "Third arithmetic"},
+			{Value: "{{'test'|upper}}", Expected: "TEST", Description: "Twig filter (same as Jinja2)"},
+			{Value: "{{random(1000)}}", Expected: "", Description: "Twig-specific random (check response contains number)"},
 		}, nil
 
 	case "pebble":
 		return []PayloadWithExpected{
 			{Value: "{{ 7 * 191 }}", Expected: "1337", Description: "Basic arithmetic with spaces"},
-			{Value: "{{ 13 * 37 }}", Expected: "481", Description: "Alternative arithmetic"},
-			{Value: "{{ 17 * 89 }}", Expected: "1513", Description: "Third arithmetic"},
+			{Value: "{{ 'test' | upper }}", Expected: "TEST", Description: "Pebble filter with spaces"},
+			{Value: "{{ beans }}", Expected: "", Description: "Pebble-specific beans variable (may error)"},
 		}, nil
 
 	case "handlebars":
 		return []PayloadWithExpected{
-			{Value: "{{7*191}}", Expected: "1337", Description: "Basic arithmetic"},
-			{Value: "{{13*37}}", Expected: "481", Description: "Alternative arithmetic"},
-			{Value: "{{17*89}}", Expected: "1513", Description: "Third arithmetic"},
+			{Value: "{{7*191}}", Expected: "7*191", Description: "Handlebars doesn't evaluate - returns literal"},
+			{Value: "{{#if true}}YES{{/if}}", Expected: "YES", Description: "Handlebars conditional helper"},
+			{Value: "{{#each items}}x{{/each}}", Expected: "", Description: "Handlebars each helper"},
 		}, nil
 
 	case "freemarker":

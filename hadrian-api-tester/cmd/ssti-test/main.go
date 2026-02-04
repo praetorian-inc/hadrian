@@ -68,10 +68,27 @@ func parseFlags(args []string) (config, error) {
 		return cfg, fmt.Errorf("-target is required")
 	}
 
+	// Validate URL format
+	parsedURL, err := url.Parse(cfg.target)
+	if err != nil {
+		return cfg, fmt.Errorf("invalid target URL: %w", err)
+	}
+	if parsedURL.Scheme == "" {
+		return cfg, fmt.Errorf("target URL must include protocol (e.g., http://localhost:5000/greet)")
+	}
+	if parsedURL.Scheme != "http" && parsedURL.Scheme != "https" {
+		return cfg, fmt.Errorf("target URL must use http or https protocol")
+	}
+
 	// Validate method
 	cfg.method = strings.ToUpper(cfg.method)
 	if cfg.method != "GET" && cfg.method != "POST" {
 		return cfg, fmt.Errorf("method must be GET or POST")
+	}
+
+	// Warn if parameter is empty
+	if cfg.param == "" {
+		fmt.Fprintln(os.Stderr, "Warning: -param is empty, this may cause unexpected behavior")
 	}
 
 	return cfg, nil
@@ -166,28 +183,29 @@ func loadVerificationChains(payloadDir string) (map[string][]ssti.PayloadWithExp
 		payloadDir = "payloads/ssti"
 	}
 
-	// Check if it's a directory or file(s)
-	info, err := os.Stat(payloadDir)
-	if err != nil {
-		return nil, err
-	}
-
 	var files []string
-	if info.IsDir() {
-		entries, err := os.ReadDir(payloadDir)
+
+	// Check for comma-separated paths FIRST (before os.Stat)
+	if strings.Contains(payloadDir, ",") {
+		files = strings.Split(payloadDir, ",")
+	} else {
+		// Check if it's a directory or single file
+		info, err := os.Stat(payloadDir)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("payload path not found: %s", payloadDir)
 		}
 
-		for _, entry := range entries {
-			if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
-				files = append(files, payloadDir+"/"+entry.Name())
+		if info.IsDir() {
+			entries, err := os.ReadDir(payloadDir)
+			if err != nil {
+				return nil, err
 			}
-		}
-	} else {
-		// Single file or comma-separated
-		if strings.Contains(payloadDir, ",") {
-			files = strings.Split(payloadDir, ",")
+
+			for _, entry := range entries {
+				if !entry.IsDir() && (strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml")) {
+					files = append(files, payloadDir+"/"+entry.Name())
+				}
+			}
 		} else {
 			files = []string{payloadDir}
 		}
