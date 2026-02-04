@@ -70,13 +70,21 @@ type Executor struct {
 // ExecutorOption configures Executor
 type ExecutorOption func(*Executor)
 
-// WithOOBClient enables OOB detection
+// WithOOBClient enables OOB detection with interactsh client
 func WithOOBClient(c *oob.Client) ExecutorOption {
 	return func(e *Executor) {
 		e.oobClient = c
 		if c != nil {
 			e.oobURL = c.GenerateURL()
 		}
+	}
+}
+
+// WithUserOOBURL sets a user-provided OOB callback URL (no interactsh client needed)
+func WithUserOOBURL(url string) ExecutorOption {
+	return func(e *Executor) {
+		e.oobURL = url
+		e.oobClient = nil // User handles callbacks themselves
 	}
 }
 

@@ -238,26 +238,37 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 
 	fmt.Printf("Loaded %d template(s) from: %s\n", len(tmplFiles), config.Templates)
 
-	// Initialize OOB client if enabled
-	var oobClient *oob.Client
+	// Initialize OOB detection based on user configuration
+	var tmplExecutor *templates.Executor
 	if config.EnableOOB {
-		oobCfg := oob.Config{
-			ServerURL:   config.OOBServerURL,
-			PollTimeout: time.Duration(config.OOBTimeout) * time.Second,
+		if config.OOBURL != "" {
+			// User provided their own OOB callback URL - no interactsh client needed
+			if config.Verbose {
+				fmt.Printf("OOB detection enabled with user-provided URL: %s\n", config.OOBURL)
+			}
+			tmplExecutor = templates.NewExecutor(httpClient, templates.WithUserOOBURL(config.OOBURL))
+		} else {
+			// Legacy mode: auto-generate interactsh URL
+			var oobClient *oob.Client
+			oobCfg := oob.Config{
+				ServerURL:   config.OOBServerURL,
+				PollTimeout: time.Duration(config.OOBTimeout) * time.Second,
+			}
+			oobClient, err = oob.NewClient(oobCfg)
+			if err != nil {
+				fmt.Printf("Failed to create OOB client: %v\n", err)
+				return nil
+			}
+			defer oobClient.Close()
+			if config.Verbose {
+				fmt.Printf("OOB detection enabled (interactsh): %s\n", oobClient.GenerateURL())
+			}
+			tmplExecutor = templates.NewExecutor(httpClient, templates.WithOOBClient(oobClient))
 		}
-		oobClient, err = oob.NewClient(oobCfg)
-		if err != nil {
-			fmt.Printf("Failed to create OOB client: %v\n", err)
-			return nil
-		}
-		defer oobClient.Close()
-		if config.Verbose {
-			fmt.Printf("OOB detection enabled: %s\n", oobClient.GenerateURL())
-		}
+	} else {
+		// OOB detection disabled
+		tmplExecutor = templates.NewExecutor(httpClient)
 	}
-
-	// Create template executor with OOB support
-	tmplExecutor := templates.NewExecutor(httpClient, templates.WithOOBClient(oobClient))
 
 	var findings []*graphql.Finding
 

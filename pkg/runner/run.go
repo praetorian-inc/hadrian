@@ -54,8 +54,9 @@ type Config struct {
 
 	// OOB detection (optional)
 	EnableOOB    bool   // Enable out-of-band detection
-	OOBServerURL string // interactsh server (default: oast.live)
-	OOBTimeout   int    // Poll timeout in seconds (default: 10)
+	OOBURL       string // User-provided OOB callback URL (optional, disables interactsh)
+	OOBServerURL string // interactsh server (default: oast.live) - used only if OOBURL is empty
+	OOBTimeout   int    // Poll timeout in seconds (default: 10) - used only if OOBURL is empty
 }
 
 // Run is the main entry point for the Hadrian CLI
@@ -140,8 +141,9 @@ func newTestRestCmd() *cobra.Command {
 
 	// OOB detection
 	cmd.Flags().BoolVar(&config.EnableOOB, "enable-oob", false, "Enable out-of-band detection for SSRF testing")
-	cmd.Flags().StringVar(&config.OOBServerURL, "oob-server", "oast.live", "Interactsh server URL")
-	cmd.Flags().IntVar(&config.OOBTimeout, "oob-timeout", 10, "OOB poll timeout in seconds")
+	cmd.Flags().StringVar(&config.OOBURL, "oob-url", "", "User-provided OOB callback URL (e.g., http://your-webhook.example.com)")
+	cmd.Flags().StringVar(&config.OOBServerURL, "oob-server", "oast.live", "Interactsh server URL (ignored if --oob-url is set)")
+	cmd.Flags().IntVar(&config.OOBTimeout, "oob-timeout", 10, "OOB poll timeout in seconds (ignored if --oob-url is set)")
 
 	return cmd
 }
@@ -277,8 +279,23 @@ func runTest(ctx context.Context, config Config) error {
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
 	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
 
-	// 9. Create template executor with rate-limiting client
-	executor := templates.NewExecutor(rateLimitingClient)
+	// 9. Create template executor with rate-limiting client and optional OOB support
+	var executor *templates.Executor
+	if config.EnableOOB {
+		if config.OOBURL != "" {
+			// User provided their own OOB callback URL
+			if config.Verbose {
+				fmt.Printf("[INFO] OOB detection enabled with user-provided URL: %s\n", config.OOBURL)
+			}
+			executor = templates.NewExecutor(rateLimitingClient, templates.WithUserOOBURL(config.OOBURL))
+		} else {
+			// Legacy mode: auto-generate interactsh URL (would need oob.Client import)
+			fmt.Printf("[WARN] OOB with auto-generated URLs not yet implemented for REST mode. Use --oob-url flag.\n")
+			executor = templates.NewExecutor(rateLimitingClient)
+		}
+	} else {
+		executor = templates.NewExecutor(rateLimitingClient)
+	}
 
 	// 10. Create mutation executor for mutation templates with rate-limiting client
 	mutationExecutor := owasp.NewMutationExecutor(rateLimitingClient)

@@ -59,8 +59,9 @@ type GraphQLConfig struct {
 
 	// OOB detection (optional)
 	EnableOOB    bool   // Enable OOB detection for SSRF testing
-	OOBServerURL string // interactsh server (default: oast.live)
-	OOBTimeout   int    // Poll timeout in seconds (default: 10)
+	OOBURL       string // User-provided OOB callback URL (optional, disables interactsh)
+	OOBServerURL string // interactsh server (default: oast.live) - used only if OOBURL is empty
+	OOBTimeout   int    // Poll timeout in seconds (default: 10) - used only if OOBURL is empty
 }
 
 // newTestGraphQLCmd creates the "test graphql" subcommand
@@ -106,8 +107,9 @@ func newTestGraphQLCmd() *cobra.Command {
 
 	// OOB detection
 	cmd.Flags().BoolVar(&config.EnableOOB, "enable-oob", false, "Enable out-of-band detection for SSRF testing")
-	cmd.Flags().StringVar(&config.OOBServerURL, "oob-server", "oast.live", "Interactsh server URL")
-	cmd.Flags().IntVar(&config.OOBTimeout, "oob-timeout", 10, "OOB poll timeout in seconds")
+	cmd.Flags().StringVar(&config.OOBURL, "oob-url", "", "User-provided OOB callback URL (e.g., http://your-webhook.example.com)")
+	cmd.Flags().StringVar(&config.OOBServerURL, "oob-server", "oast.live", "Interactsh server URL (ignored if --oob-url is set)")
+	cmd.Flags().IntVar(&config.OOBTimeout, "oob-timeout", 10, "OOB poll timeout in seconds (ignored if --oob-url is set)")
 
 	// Output options
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")

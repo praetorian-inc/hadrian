@@ -164,8 +164,11 @@ set -a && source testdata/dvga/.env && set +a && \
 
 ### OOB Detection for SSRF Testing
 
-For proper SSRF detection, enable Out-of-Band (OOB) detection which uses interactsh
-to verify the server actually makes outbound requests:
+For proper SSRF detection, enable Out-of-Band (OOB) detection to verify the server
+actually makes outbound requests. You can either use your own callback URL or let
+Hadrian auto-generate one via interactsh.
+
+**Option A: User-Provided Callback URL (Recommended)**
 
 ```bash
 ./hadrian test graphql \
@@ -174,21 +177,39 @@ to verify the server actually makes outbound requests:
   --templates testdata/dvga/templates/owasp \
   --template api7-ssrf-dvga \
   --enable-oob \
+  --oob-url http://your-webhook.example.com \
+  --allow-internal \
+  --verbose
+```
+
+**Option B: Auto-Generated Interactsh URL (Legacy)**
+
+```bash
+./hadrian test graphql \
+  --target http://localhost:5013 \
+  --endpoint /graphql \
+  --templates testdata/dvga/templates/owasp \
+  --template api7-ssrf-dvga \
+  --enable-oob \
+  --oob-server oast.live \
   --oob-timeout 15 \
   --allow-internal \
   --verbose
 ```
 
 **How OOB Detection Works:**
-1. Hadrian generates a unique callback URL via interactsh
-2. The `{{interactsh}}` variable in templates gets replaced with this URL
-3. If the target server is vulnerable, it will make a request to the callback URL
-4. Hadrian polls for these callbacks to confirm the vulnerability
+1. Hadrian substitutes the `{{interactsh}}` placeholder with your OOB callback URL
+2. Templates inject this URL into vulnerable parameters (e.g., `importPaste(host: "{{interactsh}}")`)
+3. If the target is vulnerable, it will make an outbound request to your callback URL
+4. You verify the vulnerability by checking your callback server logs
 
 **OOB Options:**
 - `--enable-oob` - Enable out-of-band detection
-- `--oob-server` - Interactsh server URL (default: oast.live)
-- `--oob-timeout` - Callback polling timeout in seconds (default: 10)
+- `--oob-url` - Your callback URL (e.g., http://webhook.site/unique-id)
+  - **Use this when:** You want to use your own webhook service (webhook.site, Burp Collaborator, etc.)
+  - **Benefits:** No polling needed, you control the callback server
+- `--oob-server` - Interactsh server URL (default: oast.live) - ignored if --oob-url is set
+- `--oob-timeout` - Callback polling timeout in seconds (default: 10) - ignored if --oob-url is set
 
 ## Expected Vulnerabilities
 
