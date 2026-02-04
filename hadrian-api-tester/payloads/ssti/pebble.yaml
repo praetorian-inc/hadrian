@@ -1,0 +1,16 @@
+# Pebble SSTI verification payloads (Java)
+# All payloads must match for CONFIRMED status
+# Syntax: {{ ... }} similar to Twig/Jinja2
+engine: pebble
+payloads:
+  - value: "{{ 7 * 191 }}"
+    expected: "1337"
+    description: "Pass 1: Uncommon multiplication"
+
+  - value: "{{ 13 * 37 }}"
+    expected: "481"
+    description: "Pass 2: Prime multiplication"
+
+  - value: "{{ 17 * 89 }}"
+    expected: "1513"
+    description: "Pass 3: Large prime multiplication"

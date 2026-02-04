@@ -1,0 +1,16 @@
+# Thymeleaf SSTI verification payloads (Spring Boot)
+# All payloads must match for CONFIRMED status
+# Syntax: [[${...}]], __${...}__, or ${...} in th:text
+engine: thymeleaf
+payloads:
+  - value: "${7*191}"
+    expected: "1337"
+    description: "Pass 1: Uncommon multiplication (expression syntax)"
+
+  - value: "${13*37}"
+    expected: "481"
+    description: "Pass 2: Prime multiplication"
+
+  - value: "${17*89}"
+    expected: "1513"
+    description: "Pass 3: Large prime multiplication"

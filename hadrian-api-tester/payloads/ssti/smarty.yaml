@@ -1,0 +1,16 @@
+# Smarty SSTI verification payloads (PHP)
+# All payloads must match for CONFIRMED status
+# Syntax: {math equation="..."} or {$smarty...}
+engine: smarty
+payloads:
+  - value: "{math equation=\"7*191\"}"
+    expected: "1337"
+    description: "Pass 1: Uncommon multiplication via {math}"
+
+  - value: "{math equation=\"13*37\"}"
+    expected: "481"
+    description: "Pass 2: Prime multiplication"
+
+  - value: "{math equation=\"17*89\"}"
+    expected: "1513"
+    description: "Pass 3: Large prime multiplication"

@@ -35,12 +35,12 @@ type PayloadWithExpected struct {
 
 // VerificationResult tracks the result of a multi-pass verification
 type VerificationResult struct {
-	Engine       string
-	PassCount    int
-	TotalPasses  int
-	Confirmed    bool
-	Uncertain    bool
-	PassResults  []PassResult
+	Engine      string
+	PassCount   int
+	TotalPasses int
+	Confirmed   bool
+	Uncertain   bool
+	PassResults []PassResult
 }
 
 // PassResult tracks individual verification pass results
@@ -414,13 +414,13 @@ func defaultPayloads() []injection.Payload {
 			Value:       "{{7*7}}",
 			Expected:    "49",
 			Engine:      "universal",
-			Description: "Universal arithmetic test (Jinja2, Twig)",
+			Description: "Universal arithmetic test (Jinja2, Twig, Pebble)",
 		},
 		{
 			Value:       "${7*7}",
 			Expected:    "49",
 			Engine:      "universal",
-			Description: "Universal arithmetic test (FreeMarker, Velocity)",
+			Description: "Universal arithmetic test (FreeMarker, Velocity, Mako, Thymeleaf)",
 		},
 		{
 			Value:       "<%= 7*7 %>",
@@ -449,6 +449,76 @@ func defaultPayloads() []injection.Payload {
 			Expected:    "49",
 			Engine:      "freemarker",
 			Description: "FreeMarker variable assignment",
+		},
+
+		// Velocity-specific (Java/Apache)
+		{
+			Value:       "#set($x=7*7)$x",
+			Expected:    "49",
+			Engine:      "velocity",
+			Description: "Velocity variable assignment and expansion",
+		},
+
+		// Pebble-specific (Java)
+		{
+			Value:       "{{ 7 * 7 }}",
+			Expected:    "49",
+			Engine:      "pebble",
+			Description: "Pebble arithmetic test (requires spaces)",
+		},
+
+		// Thymeleaf-specific (Spring Boot)
+		{
+			Value:       "${T(java.lang.Math).random()}",
+			Expected:    "0.",
+			Engine:      "thymeleaf",
+			Description: "Thymeleaf Java static method call (partial match on random decimal)",
+		},
+
+		// Smarty-specific (PHP)
+		{
+			Value:       "{math equation=\"7*7\"}",
+			Expected:    "49",
+			Engine:      "smarty",
+			Description: "Smarty math function",
+		},
+		{
+			Value:       "{$smarty.version}",
+			Expected:    "error",
+			Engine:      "smarty",
+			Description: "Smarty version variable (error-based)",
+		},
+
+		// Mako-specific (Python)
+		{
+			Value:       "${7*7}",
+			Expected:    "49",
+			Engine:      "mako",
+			Description: "Mako expression evaluation",
+		},
+
+		// Handlebars-specific (Node.js)
+		{
+			Value:       "{{constructor.constructor('return 7*7')()}}",
+			Expected:    "49",
+			Engine:      "handlebars",
+			Description: "Handlebars constructor exploitation",
+		},
+
+		// Pug-specific (Node.js)
+		{
+			Value:       "#{7*7}",
+			Expected:    "49",
+			Engine:      "pug",
+			Description: "Pug interpolation syntax",
+		},
+
+		// Razor-specific (ASP.NET)
+		{
+			Value:       "@(7*7)",
+			Expected:    "49",
+			Engine:      "razor",
+			Description: "Razor expression evaluation",
 		},
 	}
 }

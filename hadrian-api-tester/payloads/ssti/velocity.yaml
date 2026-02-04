@@ -1,0 +1,16 @@
+# Velocity SSTI verification payloads (Java/Apache)
+# All payloads must match for CONFIRMED status
+# Syntax: ${...} or #set($x=...) / $x
+engine: velocity
+payloads:
+  - value: "${7*191}"
+    expected: "1337"
+    description: "Pass 1: Uncommon multiplication (${} syntax)"
+
+  - value: "#set($x=13*37)$x"
+    expected: "481"
+    description: "Pass 2: Prime multiplication via #set directive"
+
+  - value: "$class.inspect('java.lang.Math').type.getMethod('multiplyExact',7,17*89)"
+    expected: "1513"
+    description: "Pass 3: Large prime multiplication - alternative: use ${17*89}"

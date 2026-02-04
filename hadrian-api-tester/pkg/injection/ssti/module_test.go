@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/praetorian-inc/hadrian/pkg/injection"
@@ -359,4 +360,270 @@ func TestLoadPayloads_Directory(t *testing.T) {
 	}
 
 	assert.GreaterOrEqual(t, len(engines), 3, "Should have at least 3 different engines")
+}
+
+// ============================================================================
+// NEW TEMPLATE ENGINE TESTS - TDD RED PHASE
+// These tests verify support for additional template engines beyond the original 4
+// ============================================================================
+
+func TestLoadPayloadsFromDir_AllEngines(t *testing.T) {
+	// This test verifies that ALL supported template engines have payload files
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadDir := filepath.Join(projectRoot, "payloads", "ssti")
+
+	payloads, err := LoadPayloadsFromDir(payloadDir)
+	require.NoError(t, err, "Should load payloads from directory without error")
+
+	// Collect all engines
+	engines := make(map[string]int)
+	for _, payload := range payloads {
+		engines[payload.Engine]++
+	}
+
+	// Original engines (4)
+	assert.True(t, engines["jinja2"] > 0, "Should have Jinja2 payloads")
+	assert.True(t, engines["freemarker"] > 0, "Should have FreeMarker payloads")
+	assert.True(t, engines["twig"] > 0, "Should have Twig payloads")
+	assert.True(t, engines["erb"] > 0, "Should have ERB payloads")
+
+	// New engines (8 additional)
+	assert.True(t, engines["velocity"] > 0, "Should have Velocity payloads (Java/Apache)")
+	assert.True(t, engines["pebble"] > 0, "Should have Pebble payloads (Java)")
+	assert.True(t, engines["thymeleaf"] > 0, "Should have Thymeleaf payloads (Spring Boot)")
+	assert.True(t, engines["smarty"] > 0, "Should have Smarty payloads (PHP)")
+	assert.True(t, engines["mako"] > 0, "Should have Mako payloads (Python)")
+	assert.True(t, engines["handlebars"] > 0, "Should have Handlebars payloads (Node.js)")
+	assert.True(t, engines["pug"] > 0, "Should have Pug/Jade payloads (Node.js)")
+	assert.True(t, engines["razor"] > 0, "Should have Razor payloads (ASP.NET)")
+
+	// Total: 12 engines
+	assert.GreaterOrEqual(t, len(engines), 12, "Should have at least 12 different template engines")
+}
+
+func TestVelocityPayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "velocity.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load velocity.yaml")
+	require.Equal(t, "velocity", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Velocity should have 3-pass verification chain")
+
+	// Verify arithmetic payloads use ${} syntax
+	assert.Contains(t, payloadFileData.Payloads[0].Value, "$", "Velocity uses $ syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestPebblePayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "pebble.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load pebble.yaml")
+	require.Equal(t, "pebble", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Pebble should have 3-pass verification chain")
+
+	// Verify arithmetic payloads use {{ }} syntax
+	assert.Contains(t, payloadFileData.Payloads[0].Value, "{{", "Pebble uses {{ }} syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestThymeleafPayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "thymeleaf.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load thymeleaf.yaml")
+	require.Equal(t, "thymeleaf", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Thymeleaf should have 3-pass verification chain")
+
+	// Verify payloads use Thymeleaf syntax [[${...}]] or __${...}__
+	firstPayload := payloadFileData.Payloads[0].Value
+	hasThymeleafSyntax := strings.Contains(firstPayload, "[[${") || strings.Contains(firstPayload, "__${") || strings.Contains(firstPayload, "${")
+	assert.True(t, hasThymeleafSyntax, "Thymeleaf uses [[${...}]], __${...}__, or ${...} syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestSmartyPayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "smarty.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load smarty.yaml")
+	require.Equal(t, "smarty", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Smarty should have 3-pass verification chain")
+
+	// Verify payloads use Smarty {math} or {$...} syntax
+	firstPayload := payloadFileData.Payloads[0].Value
+	hasSmartyMath := strings.Contains(firstPayload, "{math") || strings.Contains(firstPayload, "{$")
+	assert.True(t, hasSmartyMath, "Smarty uses {math} or {$...} syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestMakoPayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "mako.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load mako.yaml")
+	require.Equal(t, "mako", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Mako should have 3-pass verification chain")
+
+	// Verify payloads use Mako ${...} syntax
+	assert.Contains(t, payloadFileData.Payloads[0].Value, "${", "Mako uses ${...} syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestHandlebarsPayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "handlebars.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load handlebars.yaml")
+	require.Equal(t, "handlebars", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Handlebars should have 3-pass verification chain")
+
+	// Verify payloads use Handlebars {{...}} syntax
+	assert.Contains(t, payloadFileData.Payloads[0].Value, "{{", "Handlebars uses {{...}} syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestPugPayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "pug.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load pug.yaml")
+	require.Equal(t, "pug", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Pug should have 3-pass verification chain")
+
+	// Verify payloads use Pug #{...} or = syntax
+	firstPayload := payloadFileData.Payloads[0].Value
+	hasPugSyntax := strings.Contains(firstPayload, "#{") || strings.Contains(firstPayload, "=")
+	assert.True(t, hasPugSyntax, "Pug uses #{...} or = syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestRazorPayloads_VerificationChain(t *testing.T) {
+	testDir, err := os.Getwd()
+	require.NoError(t, err)
+
+	projectRoot := filepath.Join(testDir, "..", "..", "..")
+	payloadFile := filepath.Join(projectRoot, "payloads", "ssti", "razor.yaml")
+
+	payloadFileData, err := LoadPayloadFileWithPayloads(payloadFile)
+	require.NoError(t, err, "Should load razor.yaml")
+	require.Equal(t, "razor", payloadFileData.Engine)
+	require.Len(t, payloadFileData.Payloads, 3, "Razor should have 3-pass verification chain")
+
+	// Verify payloads use Razor @(...) syntax
+	assert.Contains(t, payloadFileData.Payloads[0].Value, "@", "Razor uses @(...) syntax")
+	assert.Equal(t, "1337", payloadFileData.Payloads[0].Expected)
+	assert.Equal(t, "481", payloadFileData.Payloads[1].Expected)
+	assert.Equal(t, "1513", payloadFileData.Payloads[2].Expected)
+}
+
+func TestNewEnginesDetection_Velocity(t *testing.T) {
+	module := NewSSTIModule()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+	}
+	body := "Result: 1337"
+
+	payload := injection.Payload{
+		Value:       "${7*191}",
+		Expected:    "1337",
+		Engine:      "velocity",
+		Description: "Velocity arithmetic test",
+	}
+
+	result := module.Detect(resp, body, payload)
+
+	assert.True(t, result.Detected, "Should detect Velocity SSTI when expected value is in response")
+	assert.Equal(t, "exact", result.MatchType)
+}
+
+func TestNewEnginesDetection_Thymeleaf(t *testing.T) {
+	module := NewSSTIModule()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+	}
+	body := "Result: 1337"
+
+	payload := injection.Payload{
+		Value:       "${7*191}",
+		Expected:    "1337",
+		Engine:      "thymeleaf",
+		Description: "Thymeleaf arithmetic test",
+	}
+
+	result := module.Detect(resp, body, payload)
+
+	assert.True(t, result.Detected, "Should detect Thymeleaf SSTI when expected value is in response")
+	assert.Equal(t, "exact", result.MatchType)
+}
+
+func TestNewEnginesDetection_Razor(t *testing.T) {
+	module := NewSSTIModule()
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+	}
+	body := "Result: 1337"
+
+	payload := injection.Payload{
+		Value:       "@(7*191)",
+		Expected:    "1337",
+		Engine:      "razor",
+		Description: "Razor arithmetic test",
+	}
+
+	result := module.Detect(resp, body, payload)
+
+	assert.True(t, result.Detected, "Should detect Razor SSTI when expected value is in response")
+	assert.Equal(t, "exact", result.MatchType)
 }
