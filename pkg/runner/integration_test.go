@@ -139,8 +139,8 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 		Concurrency:     1,
 		RateLimit:       10.0,
 		Timeout:         30,
-		AllowProduction: true,  // Allow testing against mock server
-		AllowInternal:   true,  // Allow localhost for testing
+		AllowProduction: true, // Allow testing against mock server
+		AllowInternal:   true, // Allow localhost for testing
 		Output:          "terminal",
 		Categories:      []string{"owasp"},
 	}

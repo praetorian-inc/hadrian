@@ -11,9 +11,9 @@ type Protocol string
 
 const (
 	ProtocolREST    Protocol = "rest"
-	ProtocolGraphQL Protocol = "graphql"  // v1.5
-	ProtocolGRPC    Protocol = "grpc"     // v2.0
-	ProtocolSOAP    Protocol = "soap"     // v2.0+
+	ProtocolGraphQL Protocol = "graphql" // v1.5
+	ProtocolGRPC    Protocol = "grpc"    // v2.0
+	ProtocolSOAP    Protocol = "soap"    // v2.0+
 )
 
 // Plugin parses protocol-specific API definitions to internal model

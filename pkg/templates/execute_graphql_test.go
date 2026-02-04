@@ -310,10 +310,10 @@ func TestExecutor_ExecuteGraphQL_ComplexVariables(t *testing.T) {
 				}`,
 				Variables: map[string]interface{}{
 					"input": map[string]interface{}{
-						"email":    "[email protected]",
-						"age":      30,
-						"active":   true,
-						"roles":    []string{"admin", "user"},
+						"email":  "[email protected]",
+						"age":    30,
+						"active": true,
+						"roles":  []string{"admin", "user"},
 						"metadata": map[string]interface{}{
 							"department": "engineering",
 							"level":      5,

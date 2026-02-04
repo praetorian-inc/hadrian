@@ -3,8 +3,8 @@ package runner
 import (
 	"bufio"
 
-	"github.com/praetorian-inc/hadrian/pkg/log"
 	"fmt"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"net"
 	"net/url"
 	"os"
@@ -25,7 +25,7 @@ func DetectProduction(baseURL string) (bool, error) {
 	nonProdPatterns := []string{
 		`localhost`,
 		`127\.0\.0\.1`,
-		`\.(dev|test|staging|qa|uat|local)\.`,  // *.dev.*, *.staging.*, etc.
+		`\.(dev|test|staging|qa|uat|local)\.`, // *.dev.*, *.staging.*, etc.
 	}
 
 	for _, pattern := range nonProdPatterns {
@@ -36,9 +36,9 @@ func DetectProduction(baseURL string) (bool, error) {
 
 	// Then check for production patterns
 	productionPatterns := []string{
-		`^(api|www)\..*\.(com|net|org)$`,  // api.example.com
-		`^.*\.prod\..*$`,                   // *.prod.*
-		`^.*\.production\..*$`,             // *.production.*
+		`^(api|www)\..*\.(com|net|org)$`, // api.example.com
+		`^.*\.prod\..*$`,                 // *.prod.*
+		`^.*\.production\..*$`,           // *.production.*
 	}
 
 	for _, pattern := range productionPatterns {
@@ -69,10 +69,10 @@ func BlockInternalIPs(targetURL string, allowInternal bool) error {
 		"10.0.0.0/8",
 		"172.16.0.0/12",
 		"192.168.0.0/16",
-		"127.0.0.0/8",       // localhost
-		"169.254.0.0/16",    // AWS metadata
-		"::1/128",           // IPv6 localhost
-		"fc00::/7",          // IPv6 private
+		"127.0.0.0/8",    // localhost
+		"169.254.0.0/16", // AWS metadata
+		"::1/128",        // IPv6 localhost
+		"fc00::/7",       // IPv6 private
 	}
 
 	for _, ip := range ips {
@@ -95,7 +95,7 @@ func ConfirmProductionTesting(baseURL string, allowProd bool) error {
 	isProduction, _ := DetectProduction(baseURL)
 
 	if !isProduction {
-		return nil  // Not production, proceed
+		return nil // Not production, proceed
 	}
 
 	// Production URL detected

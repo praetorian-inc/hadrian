@@ -173,8 +173,8 @@ type Indicator struct {
 	StatusCode interface{} `yaml:"status_code,omitempty"` // Can be int or "{{var}}"
 	BodyField  string      `yaml:"body_field,omitempty"`
 	Value      interface{} `yaml:"value,omitempty"`
-	Pattern    string      `yaml:"pattern,omitempty"`     // For regex_match type indicators
-	Fields     []string    `yaml:"fields,omitempty"`      // For sensitive_fields_exposed type indicators
+	Pattern    string      `yaml:"pattern,omitempty"` // For regex_match type indicators
+	Fields     []string    `yaml:"fields,omitempty"`  // For sensitive_fields_exposed type indicators
 	Exists     *bool       `yaml:"exists,omitempty"`
 }
 

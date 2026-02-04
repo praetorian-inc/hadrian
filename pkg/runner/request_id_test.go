@@ -15,14 +15,14 @@ import (
 func TestFinding_RequestIDsFlowToTerminalOutput(t *testing.T) {
 	// Create a finding with request IDs (simulating what runner creates)
 	finding := &model.Finding{
-		ID:          "test-finding",
-		Category:    "API1",
-		Name:        "Test Vulnerability",
-		Severity:    model.SeverityHigh,
-		Endpoint:    "/api/users/123",
-		Method:      "GET",
-		Confidence:  0.95,
-		RequestIDs:  []string{"req-abc123", "req-def456"},
+		ID:         "test-finding",
+		Category:   "API1",
+		Name:       "Test Vulnerability",
+		Severity:   model.SeverityHigh,
+		Endpoint:   "/api/users/123",
+		Method:     "GET",
+		Confidence: 0.95,
+		RequestIDs: []string{"req-abc123", "req-def456"},
 		Evidence: model.Evidence{
 			Response: model.HTTPResponse{
 				StatusCode: 200,

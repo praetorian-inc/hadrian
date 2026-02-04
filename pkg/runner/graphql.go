@@ -52,10 +52,10 @@ type GraphQLConfig struct {
 	DryRun          bool
 
 	// Rate limiting config (shared with REST)
-	RateLimitBackoff      string        // "exponential" or "fixed" (default: "exponential")
-	RateLimitMaxRetries   int           // Max retry attempts (default: 5)
-	RateLimitMaxWait      time.Duration // Max backoff wait time (default: 1m)
-	RateLimitStatusCodes  []int         // Status codes that trigger rate limiting (default: [429, 503])
+	RateLimitBackoff     string        // "exponential" or "fixed" (default: "exponential")
+	RateLimitMaxRetries  int           // Max retry attempts (default: 5)
+	RateLimitMaxWait     time.Duration // Max backoff wait time (default: 1m)
+	RateLimitStatusCodes []int         // Status codes that trigger rate limiting (default: [429, 503])
 
 	// GraphQL-specific
 	Schema            string   // SDL file path (optional, uses introspection if not provided)

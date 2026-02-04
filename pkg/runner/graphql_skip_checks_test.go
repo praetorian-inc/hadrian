@@ -109,4 +109,3 @@ func TestGraphQLConfig_SkipBuiltinChecksDocsExample(t *testing.T) {
 	// 3. CheckBatchingLimit
 	// This behavior is implemented in runSecurityChecks
 }
-

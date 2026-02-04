@@ -154,7 +154,7 @@ func createPasteSchema() *Schema {
 			"UserObject":  userType,
 			"Query":       queryType,
 		},
-		Queries: queryType.Fields,
+		Queries:   queryType.Fields,
 		QueryType: "Query",
 	}
 }

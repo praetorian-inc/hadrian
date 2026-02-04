@@ -100,9 +100,10 @@ func generateID() string {
 // Format returns a formatted string for terminal display
 // Output format matches REST runner:
 // [SEVERITY] Category - Name METHOD Endpoint
-//   Description: explanation text
-//   Roles: attacker=user, victim=admin (if applicable)
-//   Request IDs: req-abc123 (if available)
+//
+//	Description: explanation text
+//	Roles: attacker=user, victim=admin (if applicable)
+//	Request IDs: req-abc123 (if available)
 func (f *Finding) Format() string {
 	// Build category-name prefix
 	categoryName := string(f.Type)

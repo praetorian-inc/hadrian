@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	MaxYAMLDepth = 20              // Prevent YAML bombs
-	MaxYAMLSize  = 1024 * 1024     // 1MB limit
+	MaxYAMLDepth = 20          // Prevent YAML bombs
+	MaxYAMLSize  = 1024 * 1024 // 1MB limit
 )
 
 // Parse loads and parses a YAML template file (CR-2: YAML Security)

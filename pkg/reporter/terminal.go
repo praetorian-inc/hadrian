@@ -10,14 +10,14 @@ import (
 
 // ANSI color codes
 const (
-	colorReset    = "\033[0m"
-	colorRed      = "\033[31m"
-	colorRedBold  = "\033[1;31m"
-	colorYellow   = "\033[33m"
-	colorCyan     = "\033[36m"
-	colorGreen    = "\033[32m"
-	colorWhite    = "\033[37m"
-	colorGray     = "\033[90m"
+	colorReset   = "\033[0m"
+	colorRed     = "\033[31m"
+	colorRedBold = "\033[1;31m"
+	colorYellow  = "\033[33m"
+	colorCyan    = "\033[36m"
+	colorGreen   = "\033[32m"
+	colorWhite   = "\033[37m"
+	colorGray    = "\033[90m"
 )
 
 // TerminalReporter outputs findings to a terminal with optional color support
