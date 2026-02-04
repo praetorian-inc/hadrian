@@ -181,7 +181,7 @@ func convertGraphQLFinding(gqlFinding *graphql.Finding) *model.Finding {
 	// Create model.Finding with mapped fields
 	finding := &model.Finding{
 		ID:              gqlFinding.ID,
-		Category:        string(gqlFinding.Type), // Use finding type as category
+		Category:        gqlFinding.Category,     // Use OWASP category if set
 		Name:            string(gqlFinding.Type), // Use finding type as name
 		Description:     gqlFinding.Evidence,     // GraphQL evidence becomes description
 		Severity:        severity,
