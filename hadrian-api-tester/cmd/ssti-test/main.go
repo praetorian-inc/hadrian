@@ -21,6 +21,7 @@ type config struct {
 	verbose     bool
 	insecure    bool
 	payloadsDir string
+	fingerprint bool // enable fingerprinting mode (faster, detects engine family first)
 }
 
 // result holds detection results
@@ -57,6 +58,7 @@ func parseFlags(args []string) (config, error) {
 	fs.BoolVar(&cfg.verbose, "verbose", false, "Show all payloads tested")
 	fs.BoolVar(&cfg.insecure, "insecure", false, "Skip TLS verification")
 	fs.StringVar(&cfg.payloadsDir, "payloads", "", "YAML payload source: directory, single file, or comma-separated files (optional, uses embedded defaults if not specified)")
+	fs.BoolVar(&cfg.fingerprint, "fingerprint", false, "Use fingerprinting mode (faster, detects engine family first)")
 
 	if err := fs.Parse(args); err != nil {
 		return cfg, err
@@ -81,6 +83,11 @@ func run(cfg config) error {
 	client, err := createClient(cfg)
 	if err != nil {
 		return err
+	}
+
+	// Use fingerprinting mode if requested
+	if cfg.fingerprint {
+		return runWithFingerprinting(cfg, client)
 	}
 
 	// Create SSTI module for detection helpers
@@ -263,4 +270,76 @@ func buildRequest(cfg config, payload string) (*http.Request, error) {
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	return req, nil
+}
+
+// runWithFingerprinting executes SSTI testing with fingerprinting mode
+func runWithFingerprinting(cfg config, client *http.Client) error {
+	fmt.Println("[*] SSTI Scanner - Fingerprinting Mode")
+	fmt.Printf("[*] Target: %s\n", cfg.target)
+	fmt.Printf("[*] Parameter: %s\n\n", cfg.param)
+
+	// Create fingerprinter
+	fingerprinter := ssti.NewFingerprinter(client)
+
+	// Run fingerprint and confirm workflow
+	result, err := fingerprinter.FingerprintAndConfirm(cfg.target, cfg.param, cfg.method)
+	if err != nil {
+		return fmt.Errorf("fingerprinting failed: %w", err)
+	}
+
+	// Phase 1: Display probe results
+	fmt.Println("[PHASE 1: FINGERPRINTING]")
+	for _, probeResult := range result.ProbeResults {
+		status := "✗ NO RESPONSE"
+		if probeResult.Detected {
+			status = "✓ DETECTED"
+		}
+		fmt.Printf("  Probe: %s (%s) → %s\n", probeResult.Probe.Payload, probeResult.Probe.TargetFamily, status)
+	}
+
+	// Show detected families
+	fmt.Println()
+	if len(result.DetectedFamilies) == 0 {
+		fmt.Println("  No engine families detected")
+		fmt.Println()
+		fmt.Println("[SUMMARY]")
+		fmt.Println("  No vulnerabilities detected")
+		return nil
+	}
+
+	var detectedFamilyNames []string
+	for family, detected := range result.DetectedFamilies {
+		if detected {
+			detectedFamilyNames = append(detectedFamilyNames, string(family))
+		}
+	}
+	fmt.Printf("  Detected families: %s\n", strings.Join(detectedFamilyNames, ", "))
+	fmt.Printf("  Candidate engines: %s\n", strings.Join(result.CandidateEngines, ", "))
+
+	// Phase 2: Display confirmation results
+	fmt.Println()
+	fmt.Println("[PHASE 2: CONFIRMATION]")
+	if len(result.ConfirmedEngines) == 0 {
+		fmt.Println("  No engines confirmed (all verification chains failed)")
+	} else {
+		for _, engine := range result.ConfirmedEngines {
+			fmt.Printf("  Testing %s... ✓ CONFIRMED\n", engine)
+		}
+	}
+
+	// Calculate efficiency gain
+	fmt.Println()
+	fmt.Println("[SUMMARY]")
+	if len(result.ConfirmedEngines) > 0 {
+		fmt.Printf("  CONFIRMED: %s\n", strings.Join(result.ConfirmedEngines, ", "))
+	} else {
+		fmt.Println("  No vulnerabilities confirmed")
+	}
+
+	// Calculate saved requests (12 engines * 3 passes each = 36 full scan requests)
+	fullScanRequests := 12 * 3
+	savedRequests := fullScanRequests - result.RequestCount
+	fmt.Printf("  Total requests: %d (saved ~%d requests vs full scan)\n", result.RequestCount, savedRequests)
+
+	return nil
 }
