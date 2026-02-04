@@ -192,6 +192,10 @@ func convertGraphQLFinding(gqlFinding *graphql.Finding) *model.Finding {
 		Endpoint: "GraphQL Endpoint",
 		Method:   "POST",
 
+		// Role information for BOLA/BFLA findings
+		AttackerRole: gqlFinding.AttackerRole,
+		VictimRole:   gqlFinding.VictimRole,
+
 		// Evidence structure
 		Evidence: model.Evidence{
 			// Note: GraphQL findings don't have full HTTP request/response details yet
@@ -201,6 +205,9 @@ func convertGraphQLFinding(gqlFinding *graphql.Finding) *model.Finding {
 			},
 			Response: model.HTTPResponse{},
 		},
+
+		// Request correlation
+		RequestIDs: gqlFinding.RequestIDs,
 
 		Timestamp: time.Now(),
 	}
