@@ -1,0 +1,35 @@
+# gRPC Server Roles Configuration
+objects:
+  - users
+  - profiles
+  - orders
+  - config
+
+roles:
+  - name: admin
+    id: "1"
+    username: "admin"
+    level: 3
+    description: "Administrator with full privileges"
+    permissions:
+      - "read:*:all"
+      - "write:*:all"
+      - "delete:*:all"
+
+  - name: user1
+    id: "2"
+    username: "user1"
+    level: 1
+    description: "Regular user for testing BOLA attacks"
+    permissions:
+      - "read:users:own"
+      - "write:users:own"
+
+  - name: user2
+    id: "3"
+    username: "user2"
+    level: 1
+    description: "Victim user for testing BOLA vulnerabilities"
+    permissions:
+      - "read:users:own"
+      - "write:users:own"

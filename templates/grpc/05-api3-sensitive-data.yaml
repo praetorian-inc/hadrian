@@ -1,15 +1,16 @@
-id: grpc-metadata-injection
+id: 05-grpc-api3-sensitive-data
 info:
-  name: "gRPC Metadata Header Injection"
-  category: "API8:2023 Security Misconfiguration"
+  name: "gRPC Excessive Data Exposure"
+  category: "API3:2023 Excessive Data Exposure"
   severity: "MEDIUM"
   author: "hadrian"
-  tags: ["grpc", "injection", "metadata"]
+  tags: ["grpc", "data-exposure", "api3"]
   requires_llm_triage: true
   test_pattern: "simple"
 
 endpoint_selector:
   requires_auth: true
+  methods: ["Get*", "List*", "Read*"]
 
 role_selector:
   attacker_permission_level: "lower"
@@ -20,11 +21,11 @@ grpc:
     message: '{}'
     metadata:
       authorization: "Bearer {{attacker_token}}"
-      x-forwarded-for: "127.0.0.1"
-      x-real-ip: "127.0.0.1"
 
 detection:
   success_indicators:
     - type: "grpc_status"
       code: 0
-  vulnerability_pattern: "grpc_metadata_injection_allowed"
+    - type: "body_contains"
+      patterns: ["password", "secret", "ssn", "credit_card", "api_key"]
+  vulnerability_pattern: "grpc_sensitive_data_exposure"

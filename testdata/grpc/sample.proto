@@ -1,76 +1,30 @@
 syntax = "proto3";
 
-package test.v1;
+package example;
 
-option go_package = "testdata/grpc;grpc";
+// Example service for testing
+service GreeterService {
+  // Simple greeting RPC
+  rpc SayHello (HelloRequest) returns (HelloResponse);
 
-// UserService handles user operations
-service UserService {
-    // GetUser retrieves a user by ID
-    rpc GetUser (GetUserRequest) returns (User);
-
-    // CreateUser creates a new user
-    rpc CreateUser (CreateUserRequest) returns (User);
-
-    // UpdateUser modifies an existing user
-    rpc UpdateUser (UpdateUserRequest) returns (User);
-
-    // DeleteUser removes a user
-    rpc DeleteUser (DeleteUserRequest) returns (Empty);
-
-    // ListUsers returns all users
-    rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
+  // Authentication required RPC
+  rpc GetProfile (ProfileRequest) returns (ProfileResponse);
 }
 
-// AdminService handles admin operations
-service AdminService {
-    // GetSystemConfig retrieves system configuration
-    rpc GetSystemConfig (Empty) returns (SystemConfig);
-
-    // SetSystemConfig updates system configuration
-    rpc SetSystemConfig (SystemConfig) returns (Empty);
+message HelloRequest {
+  string name = 1;
 }
 
-message GetUserRequest {
-    string id = 1;
+message HelloResponse {
+  string message = 1;
 }
 
-message CreateUserRequest {
-    string name = 1;
-    string email = 2;
+message ProfileRequest {
+  string user_id = 1;
 }
 
-message UpdateUserRequest {
-    string id = 1;
-    string name = 2;
-    string email = 3;
+message ProfileResponse {
+  string user_id = 1;
+  string name = 2;
+  string email = 3;
 }
-
-message DeleteUserRequest {
-    string id = 1;
-}
-
-message ListUsersRequest {
-    int32 page_size = 1;
-    string page_token = 2;
-}
-
-message ListUsersResponse {
-    repeated User users = 1;
-    string next_page_token = 2;
-}
-
-message User {
-    string id = 1;
-    string name = 2;
-    string email = 3;
-    string created_at = 4;
-}
-
-message SystemConfig {
-    string setting_a = 1;
-    int32 setting_b = 2;
-    bool maintenance_mode = 3;
-}
-
-message Empty {}

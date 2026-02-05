@@ -155,3 +155,56 @@ service BadService {
 	assert.Error(t, err, "should return error for invalid proto syntax")
 	assert.Nil(t, services, "should return nil services on error")
 }
+
+// TestMethodDescriptor_RawDescriptorField tests that RawDescriptor field is populated
+func TestMethodDescriptor_RawDescriptorField(t *testing.T) {
+	services, err := parseProtoFile([]byte(testProto))
+	require.NoError(t, err)
+	require.Len(t, services, 1)
+
+	service := services[0]
+	require.NotEmpty(t, service.Methods, "should have at least one method")
+
+	// Verify RawDescriptor is populated for all methods
+	for _, method := range service.Methods {
+		assert.NotNil(t, method.RawDescriptor, "RawDescriptor should not be nil for method %s", method.Name)
+		assert.Equal(t, method.Name, method.RawDescriptor.GetName(), "RawDescriptor name should match method name")
+	}
+}
+
+// TestBuildMethodDescriptorMap tests the method descriptor lookup map creation
+func TestBuildMethodDescriptorMap(t *testing.T) {
+	services, err := parseProtoFile([]byte(testProto))
+	require.NoError(t, err)
+	require.Len(t, services, 1)
+
+	// Build the method descriptor map
+	descriptorMap := BuildMethodDescriptorMap(services)
+	require.NotNil(t, descriptorMap, "BuildMethodDescriptorMap should not return nil")
+
+	// Map should have 3 entries (3 unary methods)
+	assert.Len(t, descriptorMap, 3, "should have 3 method descriptors (streaming methods excluded)")
+
+	// Verify entries exist for each unary method with correct path format
+	getUserDesc, ok := descriptorMap["/user.v1.UserService/GetUser"]
+	assert.True(t, ok, "should find GetUser method descriptor")
+	assert.NotNil(t, getUserDesc, "GetUser descriptor should not be nil")
+	assert.Equal(t, "GetUser", getUserDesc.GetName())
+
+	createUserDesc, ok := descriptorMap["/user.v1.UserService/CreateUser"]
+	assert.True(t, ok, "should find CreateUser method descriptor")
+	assert.NotNil(t, createUserDesc, "CreateUser descriptor should not be nil")
+	assert.Equal(t, "CreateUser", createUserDesc.GetName())
+
+	deleteUserDesc, ok := descriptorMap["/user.v1.UserService/DeleteUser"]
+	assert.True(t, ok, "should find DeleteUser method descriptor")
+	assert.NotNil(t, deleteUserDesc, "DeleteUser descriptor should not be nil")
+	assert.Equal(t, "DeleteUser", deleteUserDesc.GetName())
+
+	// Verify streaming methods are NOT in the map
+	_, ok = descriptorMap["/user.v1.UserService/StreamUsers"]
+	assert.False(t, ok, "should not include server streaming method StreamUsers")
+
+	_, ok = descriptorMap["/user.v1.UserService/UploadUsers"]
+	assert.False(t, ok, "should not include client streaming method UploadUsers")
+}

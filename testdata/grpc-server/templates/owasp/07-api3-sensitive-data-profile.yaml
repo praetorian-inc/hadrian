@@ -1,0 +1,39 @@
+id: grpc-api3-sensitive-data-profile
+info:
+  name: "gRPC Excessive Data Exposure - Profile SSN and Credit Score"
+  category: "API3:2023 Broken Object Property Level Authorization"
+  severity: "HIGH"
+  author: "hadrian-test"
+  tags: ["grpc", "sensitive-data", "api3", "pii", "profile-service"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.ProfileService"
+  method: "GetProfile"
+
+role_selector:
+  attacker_permission_level: "lower"
+
+grpc:
+  - method: "GetProfile"
+    service: "vulnerable.v1.ProfileService"
+    message: '{"user_id": "3"}'
+    metadata:
+      authorization: "Bearer user2-token-abcde"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "body_field"
+      body_field: "ssn"
+      exists: true
+    - type: "body_field"
+      body_field: "credit_score"
+      exists: true
+  failure_indicators:
+    - type: "grpc_status"
+      code: [16]
+  vulnerability_pattern: "grpc_sensitive_data_exposure"

@@ -22,6 +22,8 @@ type MethodDescriptor struct {
 	OutputType     *MessageDescriptor
 	IsServerStream bool
 	IsClientStream bool
+	// RawDescriptor holds the original protoreflect descriptor for dynamic message building
+	RawDescriptor *desc.MethodDescriptor
 }
 
 // MessageDescriptor wraps protoreflect's message descriptor
@@ -82,6 +84,7 @@ func extractServices(fd *desc.FileDescriptor) []*ServiceDescriptor {
 				OutputType:     convertMessageDesc(method.GetOutputType()),
 				IsServerStream: method.IsServerStreaming(),
 				IsClientStream: method.IsClientStreaming(),
+				RawDescriptor:  method, // Store the original descriptor
 			}
 
 			methods = append(methods, methodDesc)
@@ -96,6 +99,21 @@ func extractServices(fd *desc.FileDescriptor) []*ServiceDescriptor {
 		result = append(result, serviceDesc)
 	}
 
+	return result
+}
+
+// BuildMethodDescriptorMap creates a map from operation path to method descriptor
+// Path format: /package.Service/Method
+func BuildMethodDescriptorMap(services []*ServiceDescriptor) map[string]*desc.MethodDescriptor {
+	result := make(map[string]*desc.MethodDescriptor)
+	for _, svc := range services {
+		for _, method := range svc.Methods {
+			if method.RawDescriptor != nil {
+				path := fmt.Sprintf("/%s/%s", svc.FullName, method.Name)
+				result[path] = method.RawDescriptor
+			}
+		}
+	}
 	return result
 }
 

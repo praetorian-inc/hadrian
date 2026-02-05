@@ -1,6 +1,6 @@
-id: grpc-api1-bola-write
+id: 01-grpc-api1-bola-read
 info:
-  name: "gRPC BOLA - Unauthorized Resource Modification"
+  name: "gRPC BOLA - Unauthorized Resource Read"
   category: "API1:2023 Broken Object Level Authorization"
   severity: "HIGH"
   author: "hadrian"
@@ -10,7 +10,7 @@ info:
 
 endpoint_selector:
   requires_auth: true
-  methods: ["Update*", "Set*", "Modify*", "Edit*"]
+  methods: ["Get*", "Read*", "Fetch*", "Find*"]
 
 role_selector:
   attacker_permission_level: "lower"
@@ -19,7 +19,7 @@ role_selector:
 grpc:
   - method: "{{operation.method}}"
     service: "{{operation.service}}"
-    message: '{"{{operation.owner_field}}": "{{victim_id}}", "data": "attacker_modified"}'
+    message: '{"{{operation.owner_field}}": "{{victim_id}}"}'
     metadata:
       authorization: "Bearer {{attacker_token}}"
 
@@ -27,7 +27,10 @@ detection:
   success_indicators:
     - type: "grpc_status"
       code: 0
+    - type: "body_field"
+      body_field: "data"
+      exists: true
   failure_indicators:
     - type: "grpc_status"
       code: [7, 16]
-  vulnerability_pattern: "grpc_attacker_modified_victim_resource"
+  vulnerability_pattern: "grpc_attacker_accessed_victim_data"

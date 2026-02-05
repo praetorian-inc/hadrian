@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jhump/protoreflect/desc"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
 )
@@ -79,4 +80,33 @@ func (p *GRPCPlugin) Parse(input []byte) (*model.APISpec, error) {
 	}
 
 	return spec, nil
+}
+
+// ParseWithDescriptors parses proto file and returns both the API spec and method descriptors
+func (p *GRPCPlugin) ParseWithDescriptors(input []byte) (*model.APISpec, map[string]*desc.MethodDescriptor, error) {
+	// Parse proto file to service descriptors
+	services, err := parseProtoFile(input)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Build method descriptor lookup map
+	methodDescriptors := BuildMethodDescriptorMap(services)
+
+	// Convert services to operations
+	operations, err := ConvertServicesToOperations(services)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// Create API spec
+	spec := &model.APISpec{
+		Info: model.APIInfo{
+			Title:   "gRPC API",
+			Version: "1.0.0",
+		},
+		Operations: operations,
+	}
+
+	return spec, methodDescriptors, nil
 }

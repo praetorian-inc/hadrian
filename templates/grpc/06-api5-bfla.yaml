@@ -1,4 +1,4 @@
-id: grpc-api5-bfla
+id: 06-grpc-api5-bfla
 info:
   name: "gRPC BFLA - Broken Function Level Authorization"
   category: "API5:2023 Broken Function Level Authorization"

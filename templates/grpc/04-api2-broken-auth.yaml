@@ -1,4 +1,4 @@
-id: grpc-api2-broken-auth
+id: 04-grpc-api2-broken-auth
 info:
   name: "gRPC Broken Authentication - No Token"
   category: "API2:2023 Broken Authentication"

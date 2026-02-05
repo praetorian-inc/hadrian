@@ -2,39 +2,40 @@
 
 **API Security Testing Framework**
 
-Hadrian is a security testing framework for REST and GraphQL APIs that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing.
+Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing.
 
 ## Features
 
 - **OWASP API Top 10 Coverage**: Test for BOLA, broken authentication, and more
 - **Role-Based Testing**: Define roles with permissions and test cross-role access
 - **Template-Driven**: YAML templates for customizable security tests
-- **REST & GraphQL Support**: Comprehensive testing for both API types
+- **Mutation Testing**: Setup/Attack/Verify three-phase testing pattern for proving write/delete vulnerabilities
 - **Multiple Output Formats**: Terminal, JSON, and Markdown reports
 - **Production Safety**: Built-in safeguards against testing production systems
 - **Adaptive Rate Limiting**: Proactive request throttling with reactive backoff on 429/503 responses
 - **Proxy Support**: Route traffic through Burp Suite or other proxies
-- **LLM Triage**: Optional AI-powered finding analysis (Anthropic, OpenAI, Ollama)
+- **LLM Triage**: Optional AI-powered finding analysis (Ollama)
 
 ## OWASP API Security Top 10 Coverage
 
-| Category | Name | REST | GraphQL |
-|----------|------|------|---------|
-| API1:2023 | Broken Object Level Authorization | ✅ | ✅ |
-| API2:2023 | Broken Authentication | ✅ | ✅ |
-| API3:2023 | Broken Object Property Level Authorization | ✅ | ✅ |
-| API4:2023 | Unrestricted Resource Consumption | ❌ | ✅ |
-| API5:2023 | Broken Function Level Authorization | ✅ | ✅ |
-| API6:2023 | Unrestricted Access to Sensitive Business Flows | ❌ | ❌ |
-| API7:2023 | Server Side Request Forgery | ❌ | ❌ |
-| API8:2023 | Security Misconfiguration | ✅ | ✅ |
-| API9:2023 | Improper Inventory Management | ✅ | ❌ |
-| API10:2023 | Unsafe Consumption of APIs | ❌ | ❌ |
+| Category | Name | REST | GraphQL | gRPC |
+|----------|------|------|---------|------|
+| API1:2023 | Broken Object Level Authorization | ✅ | ✅ | ✅ |
+| API2:2023 | Broken Authentication | ✅ | ✅ | ✅ |
+| API3:2023 | Broken Object Property Level Authorization | ✅ | ✅ | ✅ |
+| API4:2023 | Unrestricted Resource Consumption | ❌ | ✅ | ❌ |
+| API5:2023 | Broken Function Level Authorization | ✅ | ✅ | ✅ |
+| API6:2023 | Unrestricted Access to Sensitive Business Flows | ❌ | ❌ | ❌ |
+| API7:2023 | Server Side Request Forgery | ❌ | ❌ | ❌ |
+| API8:2023 | Security Misconfiguration | ✅ | ✅ | ✅ |
+| API9:2023 | Improper Inventory Management | ✅ | ❌ | ❌ |
+| API10:2023 | Unsafe Consumption of APIs | ❌ | ❌ | ❌ |
 
 **Legend:** ✅ = Supported, ❌ = Not Supported
 
 **REST templates:** 8 templates in `templates/rest/`
 **GraphQL templates:** 13 templates in `templates/graphql/`
+**gRPC templates:** 9 templates in `templates/grpc/`
 
 ## Table of Contents
 
@@ -44,7 +45,14 @@ Hadrian is a security testing framework for REST and GraphQL APIs that tests for
 - [Tutorials](#tutorials)
 - [Configuration Files](#configuration-files)
 - [CLI Reference](#cli-reference)
+  - [test rest](#test-rest)
+  - [test graphql](#test-graphql)
+  - [test grpc](#test-grpc)
+  - [parse](#parse-command)
+  - [version](#version-command)
+- [REST Testing](#rest-testing)
 - [GraphQL Testing](#graphql-testing)
+- [gRPC Testing](#grpc-testing)
 - [Writing Custom Templates](#writing-custom-templates)
 - [Output Examples](#output-examples)
 - [Testing](#testing)
@@ -69,22 +77,22 @@ go install github.com/praetorian-inc/hadrian/cmd/hadrian@latest
 
 ```bash
 # Basic security test
-hadrian test --api api.yaml --roles roles.yaml
+hadrian test rest --api api.yaml --roles roles.yaml
 
 # With authentication
-hadrian test --api api.yaml --roles roles.yaml --auth auth.yaml
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 
 # Test specific OWASP categories
-hadrian test --api api.yaml --roles roles.yaml --owasp API1,API2,API5
+hadrian test rest --api api.yaml --roles roles.yaml --owasp API1,API2,API5
 
 # Dry run (show what would be tested)
-hadrian test --api api.yaml --roles roles.yaml --dry-run
+hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
 # Verbose output
-hadrian test --api api.yaml --roles roles.yaml --verbose
+hadrian test rest --api api.yaml --roles roles.yaml --verbose
 
 # Output to JSON file
-hadrian test --api api.yaml --roles roles.yaml --output json --output-file report.json
+hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file report.json
 ```
 
 ### GraphQL API Testing
@@ -98,6 +106,19 @@ hadrian test graphql --target https://api.example.com --schema schema.graphql
 
 # With authentication for authorization testing
 hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml
+```
+
+### gRPC API Testing
+
+```bash
+# Basic gRPC security test
+hadrian test grpc --target localhost:50051 --proto service.proto --auth auth.yaml --roles roles.yaml
+
+# With reflection (no proto file needed)
+hadrian test grpc --target localhost:50051 --reflection --auth auth.yaml --roles roles.yaml
+
+# Test specific templates
+hadrian test grpc --target localhost:50051 --proto service.proto --templates 02-api1-bola-write
 ```
 
 ## Tutorials
@@ -259,6 +280,33 @@ hadrian test graphql --target https://api.example.com
 hadrian test graphql --target https://api.example.com --schema schema.graphql
 ```
 
+### gRPC Configuration
+
+For gRPC testing, Hadrian requires either a `.proto` file or server reflection support:
+
+**Proto File Requirements:**
+- Service definitions with RPC methods
+- Message definitions for requests/responses
+- Can include nested messages and enums
+
+**Server Reflection Option:**
+- Use `--reflection` flag when proto file not available
+- Requires gRPC server to have reflection enabled
+- Automatically discovers services and methods
+
+**Auth/Roles Configuration:**
+- Use the same `auth.yaml` and `roles.yaml` format as REST/GraphQL
+- Bearer tokens passed via metadata headers
+- Role-based testing applies to gRPC service methods
+
+```bash
+# With proto file
+hadrian test grpc --target localhost:50051 --proto service.proto --auth auth.yaml --roles roles.yaml
+
+# With reflection (no proto file)
+hadrian test grpc --target localhost:50051 --reflection --auth auth.yaml --roles roles.yaml
+```
+
 ### Authentication Configuration (auth.yaml)
 
 Configure how to authenticate as each role:
@@ -279,12 +327,12 @@ roles:
 
 ## CLI Reference
 
-### test command
+### test rest
 
 Run security tests against a REST API.
 
 ```bash
-hadrian test [flags]
+hadrian test rest [flags]
 ```
 
 **Required Flags:**
@@ -365,6 +413,51 @@ hadrian test graphql [flags]
 - `--llm-timeout <n>` - LLM request timeout in seconds (default: 30)
 - `--llm-context <text>` - Additional context for LLM triage
 
+### test grpc
+
+Run security tests against a gRPC API.
+
+```bash
+hadrian test grpc [flags]
+```
+
+**Required Flags:**
+- `--target <host:port>` - Target gRPC server (e.g., localhost:50051)
+
+**Schema Source (choose one):**
+- `--proto <file>` - Protocol Buffers `.proto` file with service definitions
+- `--reflection` - Use gRPC server reflection to discover services
+
+**Authentication:**
+- `--auth <file>` - Authentication configuration YAML file
+- `--roles <file>` - Roles and permissions YAML file
+
+**Template Options:**
+- `--template-dir <dir>` - gRPC templates directory (e.g., templates/grpc)
+- `--templates <id>` - Filter templates by ID or name (can specify multiple)
+- `--owasp <list>` - Filter by OWASP API Security category (e.g., API1,API2,API5)
+
+**Network Options:**
+- `--proxy <url>` - HTTP/HTTPS proxy URL
+- `--ca-cert <file>` - CA certificate for proxy
+- `--insecure` - Skip TLS verification
+- `--rate-limit <n>` - Rate limit in req/s (default: 5.0)
+- `--timeout <n>` - Request timeout in seconds (default: 30)
+- `--allow-internal` - Allow internal/private IP addresses
+- `--allow-production` - Allow testing production URLs
+
+**Output Options:**
+- `--output <format>` - Output format: terminal, json, markdown (default: terminal)
+- `--output-file <file>` - Write findings to file
+- `--verbose` - Enable verbose logging
+- `--dry-run` - Show what would be tested without making requests
+
+**LLM Triage (optional):**
+- `--llm-host <url>` - LLM service host for finding triage
+- `--llm-model <model>` - LLM model name for triage
+- `--llm-timeout <n>` - LLM request timeout in seconds (default: 30)
+- `--llm-context <text>` - Additional context for LLM triage
+
 ### parse command
 
 Parse and display API specification details for REST APIs.
@@ -388,6 +481,24 @@ Show Hadrian version.
 hadrian version
 ```
 
+## REST Testing
+
+Hadrian provides comprehensive REST API security testing with 8 built-in templates covering OWASP API Security Top 10 categories. REST testing uses OpenAPI/Swagger specifications to automatically discover endpoints and generate role-based authorization tests.
+
+**Key Features:**
+- OpenAPI 3.0/3.1 and Swagger 2.0 support
+- Automatic endpoint discovery from API specifications
+- Role-based authorization testing (BOLA/BFLA)
+- Path parameter substitution for resource-level testing
+- Authentication method support (Bearer, Basic, API Key)
+
+**Quick Start:**
+```bash
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
+```
+
+For a hands-on tutorial with an intentionally vulnerable API, see [crAPI Tutorial](testdata/crapi/README.md).
+
 ## GraphQL Testing
 
 Hadrian supports comprehensive GraphQL API security testing with 13 built-in templates covering OWASP API Security Top 10 categories. Features include:
@@ -400,6 +511,31 @@ Hadrian supports comprehensive GraphQL API security testing with 13 built-in tem
 For complete GraphQL documentation including example commands, security checks, and template development, see [docs/graphql.md](docs/graphql.md).
 
 For a hands-on tutorial, see [DVGA Tutorial](testdata/dvga/README.md).
+
+## gRPC Testing
+
+Hadrian provides security testing for gRPC APIs with support for both simple and mutation-based testing patterns:
+
+- **Simple Tests**: Single-request tests for read-only operations (BOLA read, BFLA, sensitive data exposure)
+- **Mutation Tests**: Three-phase tests (setup/attack/verify) for proving write/delete vulnerabilities
+- **Resource Tracking**: Track resource IDs across phases to test cross-user operations
+- **gRPC Status Codes**: Detection conditions using gRPC status codes (0=OK, 5=NOT_FOUND, 7=PERMISSION_DENIED, 16=UNAUTHENTICATED)
+
+### gRPC Test Patterns
+
+**Simple Pattern** (`test_pattern: "simple"`):
+- Single gRPC call per test
+- Used for read operations, BFLA checks, sensitive data exposure
+- Detection based on immediate response
+
+**Mutation Pattern** (`test_pattern: "mutation"`):
+- Three phases: setup (create resource), attack (unauthorized action), verify (confirm change)
+- Used for write/update/delete operations
+- Proves vulnerability by confirming unauthorized modifications succeeded
+
+For complete gRPC documentation including template structure, examples, and vulnerable test server, see [docs/grpc.md](docs/grpc.md).
+
+For a hands-on tutorial with a vulnerable gRPC server, see [gRPC Server Tutorial](testdata/grpc-server/README.md).
 
 ## Writing Custom Templates
 
@@ -551,7 +687,7 @@ Limits outgoing requests to a configured rate (default 5 requests/second):
 
 ```bash
 # Set custom rate limit
-hadrian test --api api.yaml --roles roles.yaml --rate-limit 10.0
+hadrian test rest --api api.yaml --roles roles.yaml --rate-limit 10.0
 ```
 
 **Reactive Backoff**
@@ -560,15 +696,15 @@ Automatically detects rate limit responses and implements retry with backoff:
 
 ```bash
 # Use fixed backoff (constant 5s wait)
-hadrian test --api api.yaml --roles roles.yaml --rate-limit-backoff fixed
+hadrian test rest --api api.yaml --roles roles.yaml --rate-limit-backoff fixed
 
 # Configure max retries and wait time
-hadrian test --api api.yaml --roles roles.yaml \
+hadrian test rest --api api.yaml --roles roles.yaml \
   --rate-limit-max-retries 10 \
   --rate-limit-max-wait 120s
 
 # Custom status codes for rate limit detection
-hadrian test --api api.yaml --roles roles.yaml \
+hadrian test rest --api api.yaml --roles roles.yaml \
   --rate-limit-status-codes 429,503,529
 ```
 
@@ -584,9 +720,7 @@ The backoff respects the server's `Retry-After` header when present, capping at 
 ## Environment Variables
 
 - `HADRIAN_TEMPLATES` - Custom templates directory path
-- `ANTHROPIC_API_KEY` - Anthropic API key for LLM triage
-- `OPENAI_API_KEY` - OpenAI API key for LLM triage
-- `OLLAMA_HOST` - Ollama host for local LLM triage
+- `OLLAMA_HOST` - Ollama host for local LLM triage (default: http://localhost:11434)
 
 ## License
 

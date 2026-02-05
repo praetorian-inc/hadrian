@@ -4,7 +4,6 @@ package runner
 import (
 	"fmt"
 
-	"github.com/praetorian-inc/hadrian/pkg/log"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -75,13 +74,13 @@ func grpcStatusToString(code int) string {
 // grpcVerboseLog prints message if verbose mode is enabled (gRPC-specific version)
 func grpcVerboseLog(verbose bool, format string, args ...interface{}) {
 	if verbose {
-		log.Debug(format, args...)
+		fmt.Printf(format+"\n", args...)
 	}
 }
 
 // grpcDryRunLog prints message if dry run mode is enabled (gRPC-specific version)
 func grpcDryRunLog(dryRun bool, format string, args ...interface{}) {
 	if dryRun {
-		log.Debug("[DRY RUN] "+format, args...)
+		fmt.Printf("[DRY RUN] "+format+"\n", args...)
 	}
 }

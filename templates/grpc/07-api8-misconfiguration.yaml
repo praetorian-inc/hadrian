@@ -1,4 +1,4 @@
-id: grpc-api8-misconfiguration
+id: 07-grpc-api8-misconfiguration
 info:
   name: "gRPC Security Misconfiguration - Reflection Enabled"
   category: "API8:2023 Security Misconfiguration"
@@ -17,7 +17,7 @@ role_selector:
 grpc:
   - method: "ServerReflectionInfo"
     service: "grpc.reflection.v1alpha.ServerReflection"
-    message: '{"list_services": ""}'
+    message: '{}'
     metadata: {}
 
 detection:
