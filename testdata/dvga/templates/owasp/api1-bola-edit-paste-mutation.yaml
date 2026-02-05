@@ -32,10 +32,9 @@ role_selector:
   attacker_permission_level: "lower"
   victim_permission_level: "higher"
 
-test_phases:
-  # Phase 1: Read original state as victim
-  setup:
-    query: |
+graphql:
+  # Phase 1: Setup - victim reads their paste
+  - query: |
       query GetPaste {
         paste(id: 1) {
           id
@@ -47,11 +46,12 @@ test_phases:
     auth: "victim"
     store_response_fields:
       original_title: "data.paste.title"
-    expected_status: 200
+    matchers:
+      - type: status
+        status: [200]
 
-  # Phase 2: Attacker performs unauthorized mutation
-  attack:
-    query: |
+  # Phase 2: Attack - attacker modifies victim's paste
+  - query: |
       mutation EditPaste {
         editPaste(id: 1, title: "ATTACKER_MODIFIED", content: "Unauthorized modification by attacker") {
           paste {
@@ -63,11 +63,15 @@ test_phases:
         }
       }
     auth: "attacker"
-    expected_status: 200
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["ATTACKER_MODIFIED"]
+        part: body
 
-  # Phase 3: Verify mutation persisted
-  verify:
-    query: |
+  # Phase 3: Verify - victim re-reads to confirm change persisted
+  - query: |
       query VerifyPaste {
         paste(id: 1) {
           id
@@ -77,9 +81,12 @@ test_phases:
         }
       }
     auth: "victim"
-    check_field: "data.paste.title"
-    expected_value: "ATTACKER_MODIFIED"
-    expected_status: 200
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["ATTACKER_MODIFIED"]
+        part: body
 
 detection:
   success_indicators:

@@ -32,10 +32,9 @@ role_selector:
   attacker_permission_level: "lower"
   victim_permission_level: "higher"
 
-test_phases:
-  # Phase 1: Verify resource exists as victim
-  setup:
-    query: |
+graphql:
+  # Phase 1: Setup - verify resource exists as victim
+  - query: |
       query GetPaste {
         paste(id: 2) {
           id
@@ -47,22 +46,27 @@ test_phases:
     auth: "victim"
     store_response_fields:
       original_id: "data.paste.id"
-    expected_status: 200
+    matchers:
+      - type: status
+        status: [200]
 
-  # Phase 2: Attacker performs unauthorized deletion
-  attack:
-    query: |
+  # Phase 2: Attack - attacker performs unauthorized deletion
+  - query: |
       mutation DeletePaste {
         deletePaste(id: 2) {
           result
         }
       }
     auth: "attacker"
-    expected_status: 200
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["result"]
+        part: body
 
-  # Phase 3: Verify resource was deleted (returns null)
-  verify:
-    query: |
+  # Phase 3: Verify - resource was deleted (returns null)
+  - query: |
       query VerifyPasteDeleted {
         paste(id: 2) {
           id
@@ -72,9 +76,9 @@ test_phases:
         }
       }
     auth: "victim"
-    check_field: "data.paste"
-    expected_value: null
-    expected_status: 200
+    matchers:
+      - type: status
+        status: [200]
 
 detection:
   success_indicators:
@@ -84,8 +88,7 @@ detection:
       body_field: "data.paste"
       value: null
   vulnerability_pattern: "dvga_bola_paste_deletion_verified"
+  resource_deleted: true
   conditions:
     - attack_phase_status: [200]
       verify_phase_status: [200]
-      verify_field_is_null: true
-      resource_deleted: true
