@@ -137,14 +137,18 @@ func (g *AttackGenerator) ComplexityAttackQuery(fields []string, depth int) stri
 
 // BOLAProbeQuery generates a query to test for Broken Object Level Authorization
 func (g *AttackGenerator) BOLAProbeQuery(fieldName, idField, victimID string) string {
-	return fmt.Sprintf(`query BOLAProbe { %s(%s: "%s") { id } }`, fieldName, idField, victimID)
+	// Escape double quotes to prevent GraphQL injection
+	escapedID := strings.ReplaceAll(victimID, `"`, `\"`)
+	return fmt.Sprintf(`query BOLAProbe { %s(%s: "%s") { id } }`, fieldName, idField, escapedID)
 }
 
 // BFLAProbeQuery generates a mutation to test for Broken Function Level Authorization
 func (g *AttackGenerator) BFLAProbeQuery(mutationName string, args map[string]string) string {
 	var argParts []string
 	for key, value := range args {
-		argParts = append(argParts, fmt.Sprintf(`%s: "%s"`, key, value))
+		// Escape double quotes to prevent GraphQL injection
+		escapedValue := strings.ReplaceAll(value, `"`, `\"`)
+		argParts = append(argParts, fmt.Sprintf(`%s: "%s"`, key, escapedValue))
 	}
 
 	argStr := ""

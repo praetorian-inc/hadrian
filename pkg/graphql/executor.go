@@ -156,6 +156,8 @@ func (r *ExecuteResult) IsSuccess() bool {
 
 func generateRequestID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("failed to generate request ID: %v", err))
+	}
 	return hex.EncodeToString(b)
 }

@@ -21,10 +21,8 @@ import (
 // generateRequestID creates a random UUID-style request ID
 func generateRequestID() string {
 	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		// Fallback to a simple hex string if crypto/rand fails
-		return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("failed to generate request ID: %v", err))
 	}
 
 	// Format as UUID (8-4-4-4-12)
@@ -445,17 +443,22 @@ func (e *Executor) ExecuteGraphQL(
 			}
 		}
 
-		// Execute HTTP request
-		resp, err := e.httpClient.Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("GraphQL request failed: %w", err)
-		}
+		// Execute HTTP request and read response body
+		resp, bodyBytes, err := func() (*http.Response, []byte, error) {
+			resp, err := e.httpClient.Do(req)
+			if err != nil {
+				return nil, nil, fmt.Errorf("GraphQL request failed: %w", err)
+			}
+			defer resp.Body.Close()
 
-		// Read response body
-		bodyBytes, err = io.ReadAll(resp.Body)
-		resp.Body.Close()
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to read GraphQL response body: %w", err)
+			}
+			return resp, body, nil
+		}()
 		if err != nil {
-			return nil, fmt.Errorf("failed to read GraphQL response body: %w", err)
+			return nil, err
 		}
 		bodyStr := string(bodyBytes)
 
@@ -463,6 +466,14 @@ func (e *Executor) ExecuteGraphQL(
 		if len(test.StoreResponseFields) > 0 {
 			var responseData map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &responseData); err == nil {
+				// Check for GraphQL errors in response
+				if errors, ok := responseData["errors"]; ok && errors != nil {
+					if errArr, ok := errors.([]interface{}); ok && len(errArr) > 0 {
+						if responseData["data"] == nil {
+							log.Debug("GraphQL response contained errors for template phase, stored fields may be empty")
+						}
+					}
+				}
 				for alias, jsonPath := range test.StoreResponseFields {
 					value := extractJSONPath(responseData, jsonPath)
 					if value != "" {
@@ -707,8 +718,15 @@ type RateLimitInfo struct {
 	Threshold      int
 }
 
-// extractJSONPath extracts a value from a JSON object using a dot-separated path
+// extractJSONPath extracts a value from a JSON object using a dot-separated path.
 // Example: "data.user.id" extracts value from {"data":{"user":{"id":"123"}}}
+//
+// Limitations:
+//   - Only supports dot-separated object key traversal (e.g., "data.user.id")
+//   - Does NOT support array indexing (e.g., "data.users[0].id")
+//   - Does NOT support keys containing dots
+//   - Does NOT support nested arrays
+//   - Returns "" for any unsupported path pattern
 func extractJSONPath(data map[string]interface{}, path string) string {
 	parts := strings.Split(path, ".")
 	current := interface{}(data)

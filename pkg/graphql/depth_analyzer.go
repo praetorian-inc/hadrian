@@ -105,10 +105,3 @@ func (a *DepthAnalyzer) IsDoSCandidate(query string) bool {
 	result := a.AnalyzeQuery(query)
 	return result.TooDeep || result.TooComplex
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
