@@ -690,6 +690,58 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			assert.Equal(t, FindingTypeBFLA.String(), finding.Name)
 		}
 	})
+
+	t.Run("uses GraphQL variables for arguments like BOLA check", func(t *testing.T) {
+		// Track what queries were executed
+		var receivedQuery string
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Capture the query body
+			body := make([]byte, 2048)
+			n, _ := r.Body.Read(body)
+			receivedQuery = string(body[:n])
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"data":{"deleteUser":{"success":true}}}`))
+		}))
+		defer server.Close()
+
+		schema := &Schema{
+			MutationType: "Mutation",
+			Mutations: []*FieldDef{
+				{
+					Name: "deleteUser",
+					Type: &TypeRef{Name: "DeleteResult", Kind: TypeKindObject},
+					Args: []*ArgumentDef{
+						{Name: "id", Type: &TypeRef{Name: "ID", Kind: TypeKindScalar}},
+					},
+				},
+			},
+		}
+
+		authConfigs := map[string]*AuthInfo{
+			"admin": {Method: "bearer", Value: "admin-token"},
+			"user":  {Method: "bearer", Value: "user-token"},
+		}
+
+		executor := NewExecutor(http.DefaultClient, server.URL)
+		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
+
+		ctx := context.Background()
+		scanner.CheckBFLA(ctx, authConfigs)
+
+		// Verify the query uses GraphQL variables instead of string interpolation
+		// This follows the same pattern as CheckBOLA (line 300-301 in security_scanner.go)
+		assert.NotEmpty(t, receivedQuery)
+
+		// Should use variables syntax: mutation($id: ID!)
+		assert.Contains(t, receivedQuery, "$id")
+		// Should pass variables separately
+		assert.Contains(t, receivedQuery, "variables")
+		// Should NOT use inline string interpolation
+		assert.NotContains(t, receivedQuery, `id: "test-123"`)
+	})
 }
 
 func TestSecurityScanner_RunAllChecks(t *testing.T) {

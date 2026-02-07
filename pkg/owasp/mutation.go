@@ -14,6 +14,9 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/util"
 )
 
+// maxResponseBodySize is the maximum size of HTTP response bodies (10MB)
+const maxResponseBodySize = 10 * 1024 * 1024
+
 // HTTPClient interface for making HTTP requests
 type HTTPClient interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -241,7 +244,7 @@ func (e *MutationExecutor) executePhase(
 	defer resp.Body.Close()
 
 	// Read response body
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
 	if err != nil {
 		return nil, err
 	}

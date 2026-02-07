@@ -106,3 +106,38 @@ func TestExecuteResult_IsSuccess(t *testing.T) {
 	result.Errors = []GraphQLError{{Message: "error"}}
 	assert.False(t, result.IsSuccess())
 }
+
+func TestExecutor_ResponseSizeLimit(t *testing.T) {
+	// Test that responses larger than 10MB are rejected
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Write exactly 10MB + 1 byte to exceed limit
+		// First write the JSON structure opening
+		w.Write([]byte(`{"data":"`))
+
+		// Write large data
+		largeData := make([]byte, 11*1024*1024) // 11MB
+		for i := range largeData {
+			largeData[i] = 'x'
+		}
+		w.Write(largeData)
+
+		// Close JSON structure
+		w.Write([]byte(`"}`))
+	}))
+	defer server.Close()
+
+	executor := NewExecutor(http.DefaultClient, server.URL)
+	_, err := executor.Execute(
+		context.Background(),
+		"{ test }",
+		nil,
+		"",
+		nil,
+	)
+
+	// Should fail due to size limit
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds maximum size")
+}

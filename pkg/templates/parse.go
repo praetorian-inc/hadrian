@@ -67,14 +67,11 @@ func validateTemplate(tmpl *Template) error {
 		return fmt.Errorf("template missing required field: info.category")
 	}
 
-	// Validate DSL matchers for dangerous functions (CR-2)
+	// Reject DSL matchers - feature is incomplete and poses injection risk (CR-2)
 	for i, test := range tmpl.HTTP {
 		for j, matcher := range test.Matchers {
 			if matcher.Type == "dsl" {
-				// Note: We don't have DSL field in Matcher struct,
-				// but plan shows this check. Skip for now.
-				_ = i
-				_ = j
+				return fmt.Errorf("DSL matchers are not supported (template %s, test %d, matcher %d)", tmpl.ID, i+1, j+1)
 			}
 		}
 	}

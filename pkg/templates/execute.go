@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -17,6 +18,14 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/util"
 )
+
+// MaxResponseBodySize is the maximum size of HTTP response bodies (10MB)
+// This prevents memory exhaustion from malicious servers sending unbounded responses
+const MaxResponseBodySize = 10 * 1024 * 1024
+
+// MaxLLMResponseBodySize is the maximum size for LLM API responses (1MB)
+// LLM responses should be smaller than general HTTP responses
+const MaxLLMResponseBodySize = 1 * 1024 * 1024
 
 // generateRequestID creates a random UUID-style request ID
 func generateRequestID() string {
@@ -162,8 +171,17 @@ func (e *Executor) Execute(
 					return nil, fmt.Errorf("HTTP request failed: %w", err)
 				}
 
-				// Read response body
-				bodyBytes, err = io.ReadAll(resp.Body)
+				// Read response body with size limit to prevent memory exhaustion
+				limitedReader := io.LimitReader(resp.Body, MaxResponseBodySize)
+				bodyBytes, err = io.ReadAll(limitedReader)
+
+				// Check if response was truncated (more data available after limit)
+				var buf [1]byte
+				if n, _ := resp.Body.Read(buf[:]); n > 0 {
+					resp.Body.Close()
+					return nil, fmt.Errorf("failed to read response body: response exceeds maximum size of %d bytes", MaxResponseBodySize)
+				}
+
 				resp.Body.Close()
 				if err != nil {
 					return nil, fmt.Errorf("failed to read response body: %w", err)
@@ -360,9 +378,14 @@ func (e *Executor) ExecuteGraphQL(
 			}
 		}
 
-		// Substitute stored fields from previous phases
+		// Substitute stored fields from previous phases (with escaping to prevent injection)
 		for key, value := range storedFields {
-			query = strings.ReplaceAll(query, "{{"+key+"}}", value)
+			escaped := strings.ReplaceAll(value, `\`, `\\`)
+			escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+			escaped = strings.ReplaceAll(escaped, "\n", `\n`)
+			escaped = strings.ReplaceAll(escaped, "\r", `\r`)
+			escaped = strings.ReplaceAll(escaped, "\t", `\t`)
+			query = strings.ReplaceAll(query, "{{"+key+"}}", escaped)
 		}
 
 		// Build GraphQL request body
@@ -451,10 +474,19 @@ func (e *Executor) ExecuteGraphQL(
 			}
 			defer resp.Body.Close()
 
-			body, err := io.ReadAll(resp.Body)
+			// Read with size limit to prevent memory exhaustion
+			limitedReader := io.LimitReader(resp.Body, MaxResponseBodySize)
+			body, err := io.ReadAll(limitedReader)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to read GraphQL response body: %w", err)
 			}
+
+			// Check if response was truncated (more data available after limit)
+			var buf [1]byte
+			if n, _ := resp.Body.Read(buf[:]); n > 0 {
+				return nil, nil, fmt.Errorf("failed to read GraphQL response body: response exceeds maximum size of %d bytes", MaxResponseBodySize)
+			}
+
 			return resp, body, nil
 		}()
 		if err != nil {
@@ -524,8 +556,9 @@ func buildRequest(
 	// Replace both {{key}} (template variables) and {key} (OpenAPI path params)
 	if variables != nil {
 		for key, value := range variables {
-			path = strings.ReplaceAll(path, "{{"+key+"}}", value)
-			path = strings.ReplaceAll(path, "{"+key+"}", value)
+			encoded := url.PathEscape(value)
+			path = strings.ReplaceAll(path, "{{"+key+"}}", encoded)
+			path = strings.ReplaceAll(path, "{"+key+"}", encoded)
 		}
 	}
 

@@ -76,3 +76,69 @@ func countChar(s string, c rune) int {
 	}
 	return count
 }
+
+func TestFormatValue_EscapesSpecialCharacters(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    interface{}
+		expected string
+	}{
+		{
+			name:     "escapes double quotes in string",
+			input:    `test"value`,
+			expected: `"test\"value"`,
+		},
+		{
+			name:     "escapes backslashes in string",
+			input:    `test\value`,
+			expected: `"test\\value"`,
+		},
+		{
+			name:     "escapes newlines in string",
+			input:    "test\nvalue",
+			expected: `"test\nvalue"`,
+		},
+		{
+			name:     "escapes carriage returns in string",
+			input:    "test\rvalue",
+			expected: `"test\rvalue"`,
+		},
+		{
+			name:     "escapes tabs in string",
+			input:    "test\tvalue",
+			expected: `"test\tvalue"`,
+		},
+		{
+			name:     "escapes GraphQL injection payload",
+			input:    `victim"}{evil:__schema{types{name}}}`,
+			expected: `"victim\"}{evil:__schema{types{name}}}"`,
+		},
+		{
+			name:     "handles normal string",
+			input:    "normalValue",
+			expected: `"normalValue"`,
+		},
+		{
+			name:     "handles integer",
+			input:    123,
+			expected: "123",
+		},
+		{
+			name:     "handles boolean",
+			input:    true,
+			expected: "true",
+		},
+		{
+			name:     "escapes special characters in default case",
+			input:    struct{ Value string }{Value: `test"value`},
+			expected: `"{test\"value}"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatValue(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

@@ -1,6 +1,10 @@
 package log
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+	"sync/atomic"
+)
 
 // Terminal color codes (exported for reuse across packages)
 const (
@@ -14,31 +18,29 @@ const (
 	ColorBold    = "\033[1m"
 )
 
-// verbose controls whether operational messages (Warn, Debug) are displayed.
+// verboseFlag controls whether operational messages (Debug) are displayed.
 // Security findings are always displayed via the reporter system regardless of this setting.
-var verbose bool
+// Warnings are always displayed regardless of verbose mode.
+var verboseFlag atomic.Bool
 
 // SetVerbose enables or disables verbose output for operational messages.
 func SetVerbose(v bool) {
-	verbose = v
+	verboseFlag.Store(v)
 }
 
 // IsVerbose returns the current verbose setting.
 func IsVerbose() bool {
-	return verbose
+	return verboseFlag.Load()
 }
 
-// Warn prints a warning message with magenta [WARN] prefix (only if verbose mode is enabled)
+// Warn prints a warning message with magenta [WARN] prefix to stderr (always displayed)
 func Warn(format string, args ...interface{}) {
-	if !verbose {
-		return
-	}
-	fmt.Printf("%s[WARN]%s %s\n", ColorMagenta, ColorReset, fmt.Sprintf(format, args...))
+	fmt.Fprintf(os.Stderr, "%s[WARN]%s %s\n", ColorMagenta, ColorReset, fmt.Sprintf(format, args...))
 }
 
 // Debug prints a debug message with cyan [DEBUG] prefix (only if verbose mode is enabled)
 func Debug(format string, args ...interface{}) {
-	if !verbose {
+	if !verboseFlag.Load() {
 		return
 	}
 	fmt.Printf("%s[DEBUG]%s %s\n", ColorCyan, ColorReset, fmt.Sprintf(format, args...))

@@ -71,19 +71,12 @@ func (s *SecurityScanner) CheckIntrospection(ctx context.Context) *model.Finding
 
 	// If introspection succeeds, it's a finding
 	if result.IsSuccess() {
-		finding := &model.Finding{
-			ID:              generateID(),
-			Category:        CategoryAPI8,
-			Name:            FindingTypeIntrospectionDisclosure.String(),
-			Description:     "GraphQL introspection is enabled, allowing attackers to discover the full schema\nRemediation: Disable introspection in production environments",
-			Severity:        model.SeverityMedium,
-			Confidence:      1.0,
-			IsVulnerability: true,
-			Endpoint:        s.config.Endpoint,
-			Method:          "POST",
-			RequestIDs:      s.executor.GetRequestIDs(),
-			Timestamp:       time.Now(),
-		}
+		finding := s.newFinding(
+			CategoryAPI8,
+			FindingTypeIntrospectionDisclosure.String(),
+			"GraphQL introspection is enabled, allowing attackers to discover the full schema\nRemediation: Disable introspection in production environments",
+			model.SeverityMedium,
+		)
 		return finding
 	}
 
@@ -100,6 +93,23 @@ func generateID() string {
 		panic(fmt.Sprintf("failed to generate random ID: %v", err))
 	}
 	return hex.EncodeToString(b)
+}
+
+// newFinding creates a new security finding with common fields pre-populated.
+func (s *SecurityScanner) newFinding(category, name, description string, severity model.Severity) *model.Finding {
+	return &model.Finding{
+		ID:              generateID(),
+		Category:        category,
+		Name:            name,
+		Description:     description,
+		Severity:        severity,
+		Confidence:      1.0,
+		IsVulnerability: true,
+		Endpoint:        s.config.Endpoint,
+		Method:          "POST",
+		RequestIDs:      s.executor.GetRequestIDs(),
+		Timestamp:       time.Now(),
+	}
 }
 
 // CheckDepthLimit checks if the server has query depth limiting
@@ -142,19 +152,12 @@ func (s *SecurityScanner) CheckDepthLimit(ctx context.Context) *model.Finding {
 
 	// If query succeeded (200 and no GraphQL errors), no depth limit exists
 	if result.IsSuccess() {
-		finding := &model.Finding{
-			ID:              generateID(),
-			Category:        CategoryAPI4,
-			Name:            FindingTypeNoDepthLimit.String(),
-			Description:     fmt.Sprintf("Server allows deeply nested queries (depth %d) without restriction\nRemediation: Implement query depth limiting to prevent resource exhaustion attacks", depth),
-			Severity:        model.SeverityHigh,
-			Confidence:      1.0,
-			IsVulnerability: true,
-			Endpoint:        s.config.Endpoint,
-			Method:          "POST",
-			RequestIDs:      s.executor.GetRequestIDs(),
-			Timestamp:       time.Now(),
-		}
+		finding := s.newFinding(
+			CategoryAPI4,
+			FindingTypeNoDepthLimit.String(),
+			fmt.Sprintf("Server allows deeply nested queries (depth %d) without restriction\nRemediation: Implement query depth limiting to prevent resource exhaustion attacks", depth),
+			model.SeverityHigh,
+		)
 
 		return finding
 	}
@@ -204,19 +207,12 @@ func (s *SecurityScanner) CheckBatchingLimit(ctx context.Context) *model.Finding
 
 	// If query succeeded (200 and no GraphQL errors), no batching limit exists
 	if result.IsSuccess() {
-		finding := &model.Finding{
-			ID:              generateID(),
-			Category:        CategoryAPI4,
-			Name:            FindingTypeNoBatchingLimit.String(),
-			Description:     fmt.Sprintf("Server allows batched queries with %d operations without restriction\nRemediation: Implement batching limits to prevent resource exhaustion attacks", batchSize),
-			Severity:        model.SeverityMedium,
-			Confidence:      1.0,
-			IsVulnerability: true,
-			Endpoint:        s.config.Endpoint,
-			Method:          "POST",
-			RequestIDs:      s.executor.GetRequestIDs(),
-			Timestamp:       time.Now(),
-		}
+		finding := s.newFinding(
+			CategoryAPI4,
+			FindingTypeNoBatchingLimit.String(),
+			fmt.Sprintf("Server allows batched queries with %d operations without restriction\nRemediation: Implement batching limits to prevent resource exhaustion attacks", batchSize),
+			model.SeverityMedium,
+		)
 
 		return finding
 	}
@@ -312,21 +308,14 @@ func (s *SecurityScanner) CheckBOLA(ctx context.Context, authConfigs map[string]
 
 	// If successful (200 + data returned), BOLA vulnerability exists
 	if result.IsSuccess() {
-		finding := &model.Finding{
-			ID:              generateID(),
-			Category:        CategoryAPI1,
-			Name:            FindingTypeBOLA.String(),
-			Description:     fmt.Sprintf("BOLA detected: attacker can access victim data via %s query using ID %s - unauthorized access to user-specific resources\nRemediation: Implement proper object-level authorization checks to verify the authenticated user has permission to access the requested resource", targetQuery.Name, victimID),
-			Severity:        model.SeverityCritical,
-			Confidence:      1.0,
-			IsVulnerability: true,
-			Endpoint:        s.config.Endpoint,
-			Method:          "POST",
-			AttackerRole:    attackerRole,
-			VictimRole:      victimRole,
-			RequestIDs:      s.executor.GetRequestIDs(),
-			Timestamp:       time.Now(),
-		}
+		finding := s.newFinding(
+			CategoryAPI1,
+			FindingTypeBOLA.String(),
+			fmt.Sprintf("BOLA detected: attacker can access victim data via %s query using ID %s - unauthorized access to user-specific resources\nRemediation: Implement proper object-level authorization checks to verify the authenticated user has permission to access the requested resource", targetQuery.Name, victimID),
+			model.SeverityCritical,
+		)
+		finding.AttackerRole = attackerRole
+		finding.VictimRole = victimRole
 
 		return finding
 	}
@@ -391,46 +380,52 @@ func (s *SecurityScanner) CheckBFLA(ctx context.Context, authConfigs map[string]
 	// Clear request IDs before starting test
 	s.executor.ClearRequestIDs()
 
-	// Generate mutation query
-	var queryArgs string
+	// Generate mutation query using GraphQL variables (defense-in-depth against injection)
+	// This follows the same pattern as CheckBOLA
+	var query string
+	var variables map[string]interface{}
+
 	if len(targetMutation.Args) > 0 {
-		// Build arguments based on schema
-		args := []string{}
+		// Build variable definitions and arguments
+		varDefs := []string{}
+		argsList := []string{}
+		variables = make(map[string]interface{})
+
 		for _, arg := range targetMutation.Args {
 			if arg.Name == "id" {
-				args = append(args, `id: "test-123"`)
+				varDefs = append(varDefs, "$id: ID!")
+				argsList = append(argsList, "id: $id")
+				variables["id"] = "test-123"
 			}
 		}
-		if len(args) > 0 {
-			queryArgs = "(" + strings.Join(args, ", ") + ")"
+
+		if len(varDefs) > 0 {
+			varDefsStr := strings.Join(varDefs, ", ")
+			argsStr := strings.Join(argsList, ", ")
+			query = fmt.Sprintf(`mutation(%s) { %s(%s) { __typename } }`, varDefsStr, targetMutation.Name, argsStr)
+		} else {
+			query = fmt.Sprintf(`mutation { %s { __typename } }`, targetMutation.Name)
 		}
+	} else {
+		query = fmt.Sprintf(`mutation { %s { __typename } }`, targetMutation.Name)
 	}
 
-	query := fmt.Sprintf(`mutation { %s%s { __typename } }`, targetMutation.Name, queryArgs)
-
 	// Execute as lower-privileged user
-	result, err := s.executor.Execute(ctx, query, nil, "", userAuth)
+	result, err := s.executor.Execute(ctx, query, variables, "", userAuth)
 	if err != nil {
 		return nil
 	}
 
 	// If successful (200 + mutation succeeded), BFLA vulnerability exists
 	if result.IsSuccess() {
-		finding := &model.Finding{
-			ID:              generateID(),
-			Category:        CategoryAPI5,
-			Name:            FindingTypeBFLA.String(),
-			Description:     fmt.Sprintf("BFLA detected: low-privileged user can execute %s mutation - privilege escalation vulnerability\nRemediation: Implement proper function-level authorization checks to restrict sensitive mutations to authorized users only", targetMutation.Name),
-			Severity:        model.SeverityCritical,
-			Confidence:      1.0,
-			IsVulnerability: true,
-			Endpoint:        s.config.Endpoint,
-			Method:          "POST",
-			AttackerRole:    userRole,
-			VictimRole:      adminRole,
-			RequestIDs:      s.executor.GetRequestIDs(),
-			Timestamp:       time.Now(),
-		}
+		finding := s.newFinding(
+			CategoryAPI5,
+			FindingTypeBFLA.String(),
+			fmt.Sprintf("BFLA detected: low-privileged user can execute %s mutation - privilege escalation vulnerability\nRemediation: Implement proper function-level authorization checks to restrict sensitive mutations to authorized users only", targetMutation.Name),
+			model.SeverityCritical,
+		)
+		finding.AttackerRole = userRole
+		finding.VictimRole = adminRole
 
 		return finding
 	}

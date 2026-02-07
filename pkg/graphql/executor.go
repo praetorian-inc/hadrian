@@ -9,12 +9,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 )
+
+// MaxResponseBodySize is the maximum size of HTTP response bodies (10MB)
+// This prevents memory exhaustion from malicious servers sending unbounded responses
+const MaxResponseBodySize = 10 * 1024 * 1024
 
 // Executor executes GraphQL queries
 type Executor struct {
 	httpClient HTTPClient
 	endpoint   string
+	mu         sync.Mutex
 	requestIDs []string // Track all request IDs for this executor session
 }
 
@@ -29,6 +35,8 @@ func NewExecutor(client HTTPClient, endpoint string) *Executor {
 
 // GetRequestIDs returns all tracked request IDs
 func (e *Executor) GetRequestIDs() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	ids := make([]string, len(e.requestIDs))
 	copy(ids, e.requestIDs)
 	return ids
@@ -36,6 +44,8 @@ func (e *Executor) GetRequestIDs() []string {
 
 // ClearRequestIDs clears the tracked request IDs
 func (e *Executor) ClearRequestIDs() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.requestIDs = make([]string, 0)
 }
 
@@ -113,7 +123,9 @@ func (e *Executor) Execute(
 	req.Header.Set("X-Hadrian-Request-Id", requestID)
 
 	// Track request ID
+	e.mu.Lock()
 	e.requestIDs = append(e.requestIDs, requestID)
+	e.mu.Unlock()
 
 	// Execute
 	resp, err := e.httpClient.Do(req)
@@ -122,10 +134,17 @@ func (e *Executor) Execute(
 	}
 	defer resp.Body.Close()
 
-	// Read body
-	respBody, err := io.ReadAll(resp.Body)
+	// Read body with size limit to prevent memory exhaustion
+	limitedReader := io.LimitReader(resp.Body, MaxResponseBodySize)
+	respBody, err := io.ReadAll(limitedReader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	// Check if response was truncated (more data available after limit)
+	var buf [1]byte
+	if n, _ := resp.Body.Read(buf[:]); n > 0 {
+		return nil, fmt.Errorf("failed to read response: response body exceeds maximum size of %d bytes", MaxResponseBodySize)
 	}
 
 	result := &ExecuteResult{

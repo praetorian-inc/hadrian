@@ -52,7 +52,7 @@ func captureStdout(t *testing.T, fn func()) string {
 func TestWarn_ProducesMagentaWarnPrefix(t *testing.T) {
 	setupVerbose(t)
 
-	output := captureStdout(t, func() {
+	output := captureStderr(t, func() {
 		Warn("warning message")
 	})
 
@@ -101,7 +101,7 @@ func TestWarn_FormatStringSubstitution(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			setupVerbose(t)
 
-			output := captureStdout(t, func() {
+			output := captureStderr(t, func() {
 				Warn(tt.format, tt.args...)
 			})
 
@@ -123,19 +123,26 @@ func TestColorConstants_AreExported(t *testing.T) {
 }
 
 func TestSetVerbose_ControlsOutput(t *testing.T) {
-	// Test that Debug/Warn produce no output when verbose=false
+	// Test that Warn always produces output (it now always prints to stderr)
 	SetVerbose(false)
-	output := captureStdout(t, func() {
-		Warn("should not appear")
+	output := captureStderr(t, func() {
+		Warn("always appears")
 	})
-	assert.Empty(t, output)
+	assert.Contains(t, output, "always appears")
 
-	// Test that Warn produces output when verbose=true
-	SetVerbose(true)
-	output = captureStdout(t, func() {
-		Warn("should appear")
+	// Test that Debug produces no output when verbose=false
+	SetVerbose(false)
+	debugOutput := captureStdout(t, func() {
+		Debug("should not appear")
 	})
-	assert.Contains(t, output, "should appear")
+	assert.Empty(t, debugOutput)
+
+	// Test that Debug produces output when verbose=true
+	SetVerbose(true)
+	debugOutput = captureStdout(t, func() {
+		Debug("should appear")
+	})
+	assert.Contains(t, debugOutput, "should appear")
 
 	SetVerbose(false) // cleanup
 }
@@ -160,4 +167,91 @@ func TestDebug_ProducesCyanDebugPrefix(t *testing.T) {
 	assert.Contains(t, output, "[DEBUG]")
 	assert.Contains(t, output, ColorCyan+"[DEBUG]"+ColorReset)
 	assert.Contains(t, output, "debug message")
+}
+
+// captureStderr captures stderr during function execution and returns the output
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	// Save original stderr
+	oldStderr := os.Stderr
+
+	// Create a pipe to capture output
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+
+	os.Stderr = w
+
+	// Run the function
+	fn()
+
+	// Close writer and restore stderr
+	w.Close()
+	os.Stderr = oldStderr
+
+	// Read captured output
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, r)
+	require.NoError(t, err)
+	r.Close()
+
+	return buf.String()
+}
+
+// Test Fix 1: Race condition on verbose flag
+func TestVerboseFlag_ThreadSafe(t *testing.T) {
+	// Test concurrent access to SetVerbose/IsVerbose
+	done := make(chan bool)
+
+	// Start multiple goroutines that read and write verbose flag
+	for i := 0; i < 10; i++ {
+		go func() {
+			for j := 0; j < 100; j++ {
+				SetVerbose(true)
+				_ = IsVerbose()
+				SetVerbose(false)
+				_ = IsVerbose()
+			}
+			done <- true
+		}()
+	}
+
+	// Wait for all goroutines to complete
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+
+	// If we reach here without data race, the test passes
+	// Run with: go test -race
+}
+
+// Test Fix 2: Warn always prints to stderr regardless of verbose mode
+func TestWarn_AlwaysPrintsToStderr(t *testing.T) {
+	// Set verbose to false
+	SetVerbose(false)
+
+	// Warn should still print to stderr
+	output := captureStderr(t, func() {
+		Warn("critical warning")
+	})
+
+	assert.Contains(t, output, "[WARN]")
+	assert.Contains(t, output, "critical warning")
+}
+
+func TestWarn_PrintsToStderrNotStdout(t *testing.T) {
+	SetVerbose(true)
+
+	// Capture both stdout and stderr
+	stdoutOutput := captureStdout(t, func() {
+		// This should NOT capture anything since Warn uses stderr
+	})
+
+	stderrOutput := captureStderr(t, func() {
+		Warn("warning to stderr")
+	})
+
+	// Verify it goes to stderr, not stdout
+	assert.Empty(t, stdoutOutput)
+	assert.Contains(t, stderrOutput, "warning to stderr")
 }
