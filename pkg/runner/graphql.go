@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -168,7 +169,7 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 		}
 
 		// Parse template file
-		filePath := dir + "/" + name
+		filePath := filepath.Join(dir, name)
 		tmpl, err := templates.Parse(filePath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse template %s: %w", name, err)

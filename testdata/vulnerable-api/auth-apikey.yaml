@@ -14,4 +14,5 @@ roles:
     api_key: "user1-api-key-67890"
   user2:
     api_key: "user2-api-key-abcde"
-  # anonymous role has no credentials - tests unauthenticated access
+  anonymous:
+    api_key: ""  # No authentication for anonymous role

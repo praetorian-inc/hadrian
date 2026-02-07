@@ -13,6 +13,13 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/model"
 )
 
+const (
+	// DefaultDepthLimit is the default maximum query depth for DoS testing
+	DefaultDepthLimit = 10
+	// DefaultBatchSize is the default number of queries in batch attack tests
+	DefaultBatchSize = 10
+)
+
 // SecurityScanner performs security checks on GraphQL endpoints
 type SecurityScanner struct {
 	schema   *Schema
@@ -104,7 +111,7 @@ func (s *SecurityScanner) CheckDepthLimit(ctx context.Context) *model.Finding {
 
 	depth := s.config.DepthLimit
 	if depth == 0 {
-		depth = 10 // Default depth
+		depth = DefaultDepthLimit
 	}
 
 	// Get the first available query field from schema
@@ -164,7 +171,7 @@ func (s *SecurityScanner) CheckBatchingLimit(ctx context.Context) *model.Finding
 
 	batchSize := s.config.BatchSize
 	if batchSize == 0 {
-		batchSize = 10 // Default batch size
+		batchSize = DefaultBatchSize
 	}
 
 	// Get the first available query field from schema
@@ -259,6 +266,7 @@ func (s *SecurityScanner) CheckBOLA(ctx context.Context, authConfigs map[string]
 	}
 
 	if victimAuth == nil || attackerAuth == nil {
+		log.Debug("CheckBOLA skipped: auth config requires 'victim' and 'attacker' roles")
 		return nil
 	}
 
@@ -292,10 +300,12 @@ func (s *SecurityScanner) CheckBOLA(ctx context.Context, authConfigs map[string]
 	}
 
 	// Step 2: Try to access victim's ID as attacker
-	query := fmt.Sprintf(`query { %s(id: "%s") { id } }`, targetQuery.Name, victimID)
+	// Use GraphQL variables to prevent injection
+	query := fmt.Sprintf(`query($id: ID!) { %s(id: $id) { id } }`, targetQuery.Name)
+	variables := map[string]interface{}{"id": victimID}
 
 	// Execute as attacker
-	result, err := s.executor.Execute(ctx, query, nil, "", attackerAuth)
+	result, err := s.executor.Execute(ctx, query, variables, "", attackerAuth)
 	if err != nil {
 		return nil
 	}
@@ -374,6 +384,7 @@ func (s *SecurityScanner) CheckBFLA(ctx context.Context, authConfigs map[string]
 	}
 
 	if adminAuth == nil || userAuth == nil {
+		log.Debug("CheckBFLA skipped: auth config requires 'admin' and 'user' roles")
 		return nil
 	}
 

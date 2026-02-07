@@ -219,6 +219,10 @@ detection:
   vulnerability_pattern: "graphql_custom_vuln"
 ```
 
+### Template Variable Limitations
+
+The `store_response_fields` directive uses JSON path expressions to extract values from GraphQL responses for use in subsequent phases. These paths only support **dot-separated object key traversal** (e.g., `data.user.id`). Array indexing (e.g., `data.users[0].id`), keys containing dots, and nested arrays are not supported — unsupported paths silently return empty strings.
+
 ```bash
 hadrian test graphql --target https://api.example.com --templates ./my-templates
 ```
