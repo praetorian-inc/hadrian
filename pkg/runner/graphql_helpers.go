@@ -146,7 +146,7 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 			if roleAuth.Token == "" {
 				return nil, fmt.Errorf("role %s: bearer auth requires 'token' field", role)
 			}
-			authValue = roleAuth.Token
+			authValue = "Bearer " + roleAuth.Token
 
 		case "api_key":
 			if roleAuth.APIKey == "" {

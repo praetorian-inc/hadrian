@@ -220,7 +220,8 @@ func (c *IntrospectionClient) FetchSchema(ctx context.Context) (*Schema, error) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, readErr := io.ReadAll(resp.Body)
+		// Read error body with size limit
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBodySize))
 		if readErr != nil {
 			return nil, fmt.Errorf("introspection failed with status %d (body unreadable: %v)", resp.StatusCode, readErr)
 		}

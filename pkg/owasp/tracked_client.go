@@ -4,11 +4,13 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"sync"
 )
 
 // TrackedHTTPClient wraps an HTTPClient to add request ID tracking
 type TrackedHTTPClient struct {
 	client     HTTPClient
+	mu         sync.Mutex
 	requestIDs []string
 }
 
@@ -24,17 +26,25 @@ func NewTrackedHTTPClient(client HTTPClient) *TrackedHTTPClient {
 func (t *TrackedHTTPClient) Do(req *http.Request) (*http.Response, error) {
 	requestID := generateRequestID()
 	req.Header.Set("X-Hadrian-Request-Id", requestID)
+	t.mu.Lock()
 	t.requestIDs = append(t.requestIDs, requestID)
+	t.mu.Unlock()
 	return t.client.Do(req)
 }
 
 // GetRequestIDs returns all tracked request IDs
 func (t *TrackedHTTPClient) GetRequestIDs() []string {
-	return t.requestIDs
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	ids := make([]string, len(t.requestIDs))
+	copy(ids, t.requestIDs)
+	return ids
 }
 
 // ClearRequestIDs clears the tracked request IDs
 func (t *TrackedHTTPClient) ClearRequestIDs() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.requestIDs = make([]string, 0)
 }
 

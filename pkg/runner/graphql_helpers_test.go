@@ -128,14 +128,14 @@ func TestBuildAuthConfigs_BearerAuth(t *testing.T) {
 	// Check admin role
 	assert.NotNil(t, authConfigs["admin"])
 	assert.Equal(t, "bearer", authConfigs["admin"].Method)
-	assert.Equal(t, "admin-token-123", authConfigs["admin"].Value)
+	assert.Equal(t, "Bearer admin-token-123", authConfigs["admin"].Value)
 	assert.Equal(t, "header", authConfigs["admin"].Location)
 	assert.Equal(t, "Authorization", authConfigs["admin"].KeyName)
 
 	// Check user role
 	assert.NotNil(t, authConfigs["user"])
 	assert.Equal(t, "bearer", authConfigs["user"].Method)
-	assert.Equal(t, "user-token-456", authConfigs["user"].Value)
+	assert.Equal(t, "Bearer user-token-456", authConfigs["user"].Value)
 }
 
 // TestBuildAuthConfigs_APIKeyAuth tests API key conversion

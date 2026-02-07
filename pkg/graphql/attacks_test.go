@@ -291,3 +291,17 @@ func TestBatchingAttackQuery_ErrorCases(t *testing.T) {
 		assert.Contains(t, err.Error(), "not found in schema")
 	})
 }
+
+func TestFieldSuggestionQuery_EscapesDoubleQuotes(t *testing.T) {
+	gen := NewAttackGenerator(nil)
+
+	// Test case with double quote injection attempt
+	maliciousTypeName := `User") { fields { name } } } query Inject { __type(name: "Admin`
+	query := gen.FieldSuggestionQuery(maliciousTypeName)
+
+	// The query should escape the double quotes in the typeName
+	// Expected: { __type(name: "User\") { fields { name } } } } query Inject { __type(name: \"Admin") { fields { name } } }
+	assert.Contains(t, query, `\"`)
+	// Should not contain unescaped double quotes that would break out of the string
+	assert.NotContains(t, query, `name: "User") { fields`)
+}

@@ -78,7 +78,9 @@ func (g *AttackGenerator) AliasBombQuery(fieldName string, count int) string {
 
 // FieldSuggestionQuery generates an invalid field query to elicit suggestions
 func (g *AttackGenerator) FieldSuggestionQuery(typeName string) string {
-	return fmt.Sprintf(`{ __type(name: "%s") { fields { name } } }`, typeName)
+	// Escape double quotes to prevent GraphQL injection
+	escapedTypeName := strings.ReplaceAll(typeName, `"`, `\"`)
+	return fmt.Sprintf(`{ __type(name: "%s") { fields { name } } }`, escapedTypeName)
 }
 
 // DirectiveOverloadQuery generates a query with many directives

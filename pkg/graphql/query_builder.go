@@ -125,12 +125,24 @@ func (b *QueryBuilder) buildSelectionSet(typeName string, depth int) string {
 func formatValue(v interface{}) string {
 	switch val := v.(type) {
 	case string:
-		return fmt.Sprintf(`"%s"`, val)
+		escaped := strings.ReplaceAll(val, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+		escaped = strings.ReplaceAll(escaped, "\n", `\n`)
+		escaped = strings.ReplaceAll(escaped, "\r", `\r`)
+		escaped = strings.ReplaceAll(escaped, "\t", `\t`)
+		return fmt.Sprintf(`"%s"`, escaped)
 	case int, int64, float64:
 		return fmt.Sprintf("%v", val)
 	case bool:
 		return fmt.Sprintf("%t", val)
 	default:
-		return fmt.Sprintf(`"%v"`, val)
+		// Convert to string first, then apply the same escaping
+		str := fmt.Sprintf("%v", val)
+		escaped := strings.ReplaceAll(str, `\`, `\\`)
+		escaped = strings.ReplaceAll(escaped, `"`, `\"`)
+		escaped = strings.ReplaceAll(escaped, "\n", `\n`)
+		escaped = strings.ReplaceAll(escaped, "\r", `\r`)
+		escaped = strings.ReplaceAll(escaped, "\t", `\t`)
+		return fmt.Sprintf(`"%s"`, escaped)
 	}
 }
