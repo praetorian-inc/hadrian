@@ -1,8 +1,14 @@
-# Hadrian-API-Testing
+# Hadrian
 
-**API Security Testing Framework**
+[![CI](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml/badge.svg)](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/praetorian-inc/hadrian)](https://goreportcard.com/report/github.com/praetorian-inc/hadrian)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Hadrian is a security testing framework for REST APIs that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing.
+> API security testing framework for REST APIs that tests for OWASP API vulnerabilities using role-based authorization testing.
+
+## Overview
+
+Hadrian is a security testing framework that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing and YAML-driven templates.
 
 ## Features
 
@@ -17,13 +23,15 @@ Hadrian is a security testing framework for REST APIs that tests for OWASP API v
 
 ## Installation
 
-```bash
-# Build from source
-go build -o hadrian ./cmd/hadrian
+### From source
 
-# Or install directly
+```bash
 go install github.com/praetorian-inc/hadrian/cmd/hadrian@latest
 ```
+
+### From releases
+
+Download the latest binary from the [Releases](https://github.com/praetorian-inc/hadrian/releases) page.
 
 ## Quick Start
 
@@ -349,7 +357,32 @@ Summary: 2 findings (1 CRITICAL, 1 HIGH)
 }
 ```
 
-## Testing
+## Development
+
+### Prerequisites
+
+- [Go 1.24+](https://go.dev/dl/)
+- [golangci-lint](https://golangci-lint.run/welcome/install/)
+
+### Getting started
+
+```bash
+git clone https://github.com/praetorian-inc/hadrian.git
+cd hadrian
+make build
+```
+
+### Common commands
+
+```bash
+make build       # Build the binary
+make test        # Run tests
+make lint        # Run linters
+make fmt         # Format code
+make check       # Run all checks (fmt, vet, lint, test)
+```
+
+### Testing
 
 ```bash
 # Run unit tests
@@ -431,15 +464,20 @@ The backoff respects the server's `Retry-After` header when present, capping at 
 | API9:2023 | Improper Inventory Management | ⏳ |
 | API10:2023 | Unsafe Consumption of APIs | ⏳ |
 
-## License
-
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
-
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes (`git commit -am 'Add my feature'`)
+4. Push to the branch (`git push origin feature/my-feature`)
+5. Open a Pull Request
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+Please ensure all CI checks pass before requesting review.
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## About Praetorian
+
+[Praetorian](https://www.praetorian.com/) is a leading cybersecurity company that helps organizations secure their most critical assets.
