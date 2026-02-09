@@ -49,15 +49,18 @@ YAML Templates ────
 1. **Parse** the API specification into a list of operations (REST endpoints, GraphQL queries/mutations, or gRPC methods)
 2. **Load** the roles configuration with permissions in `<action>:<object>:<scope>` format
 3. **Match** each YAML template's `endpoint_selector` and `role_selector` against operations and roles
-4. **Execute** HTTP requests with attacker/victim role credentials substituted into the template
+4. **Execute** tests — either single-phase HTTP requests or three-phase mutation tests (setup/attack/verify) with attacker/victim role credentials
 5. **Detect** vulnerabilities by evaluating response status codes and body patterns against success/failure indicators
 6. **Report** findings with severity, evidence, and attacker/victim role context
+
+Templates come in two forms: **single-phase** templates that send one request and check the response, and **mutation tests** that use a three-phase `test_phases` pipeline. The mutation testing engine (`MutationExecutor`) runs setup phases to establish state (e.g., create a resource as the victim), an attack phase to attempt unauthorized access (e.g., modify the resource as the attacker), and an optional verify phase to confirm the mutation succeeded (e.g., check if the resource was actually modified). This enables testing for BFLA, BOPLA, and other stateful authorization flaws that single-request tests cannot detect.
 
 ## Features
 
 - **Multi-Protocol**: Supports REST, GraphQL, and gRPC APIs
 - **OWASP API Top 10 Coverage**: Test for BOLA and broken authentication
 - **Role-Based Testing**: Define roles with permissions and test cross-role access
+- **Mutation Testing Engine**: Three-phase setup/attack/verify tests for BFLA and BOPLA
 - **Template-Driven**: YAML templates for customizable security tests
 - **Multiple Output Formats**: Terminal, JSON, and Markdown reports
 - **Production Safety**: Built-in safeguards against testing production systems
@@ -322,6 +325,54 @@ detection:
     - type: status_code
       status_code: 401
 ```
+
+### Mutation Tests (Three-Phase)
+
+For complex vulnerability patterns like BFLA and BOPLA, templates use `test_phases` with a setup/attack/verify pipeline:
+
+```yaml
+id: api5-bfla-delete
+info:
+  name: "BFLA - Unauthorized Resource Deletion"
+  category: "API5:2023"
+  severity: "HIGH"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["DELETE"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+test_phases:
+  setup:
+    # Multiple setup phases supported (array syntax)
+    - path: "/api/user/dashboard"
+      auth: "victim"
+      store_response_fields:
+        victim_id: "id"
+        victim_video_id: "video_id"
+    - path: "/api/user/dashboard"
+      auth: "attacker"
+      store_response_fields:
+        attacker_video_id: "video_id"
+  attack:
+    path: "/api/resource/{victim_video_id}"
+    auth: "attacker"
+    operation: "delete"
+    expected_status: 200
+  verify:
+    path: "/api/resource/{victim_video_id}"
+    auth: "victim"
+    check_field: "status"
+    expected_value: "deleted"
+```
+
+- **`setup`**: One or more phases that establish state and store response fields (e.g., resource IDs) for later substitution
+- **`attack`**: Attempts the unauthorized action using the attacker's credentials with `{placeholder}` substitution from stored fields
+- **`verify`**: Confirms whether the attack succeeded by checking the resource state as the victim
 
 ### Template Fields
 
