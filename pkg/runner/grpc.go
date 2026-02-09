@@ -322,6 +322,17 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 					if mutationResult.Matched {
 						finding := buildGRPCFinding(tmpl, op, attackerRoleName, victimRoleName)
 
+						// Attach evidence from mutation phases
+						finding.Evidence = model.Evidence{
+							SetupResponse:  mutationResult.SetupResponse,
+							AttackResponse: mutationResult.AttackResponse,
+							VerifyResponse: mutationResult.VerifyResponse,
+							ResourceID:     mutationResult.ResourceID,
+						}
+						if mutationResult.AttackResponse != nil {
+							finding.Evidence.Response = *mutationResult.AttackResponse
+						}
+
 						// Collect request IDs from all phases
 						if mutationResult.RequestIDs != nil {
 							finding.RequestIDs = append(finding.RequestIDs, mutationResult.RequestIDs.Setup...)
@@ -353,6 +364,9 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 				if result.Matched {
 					finding := buildGRPCFinding(tmpl, op, attackerRoleName, victimRoleName)
+					finding.Evidence = model.Evidence{
+						Response: result.Response,
+					}
 					finding.RequestIDs = result.RequestIDs
 
 					allFindings = append(allFindings, finding)
