@@ -46,6 +46,8 @@ type EndpointSelector struct {
 	HasPathParameter bool     `yaml:"has_path_parameter"`
 	RequiresAuth     bool     `yaml:"requires_auth"`
 	Methods          []string `yaml:"methods"`
+	Service          string   `yaml:"service,omitempty"`  // gRPC: exact service name filter
+	Method           string   `yaml:"method,omitempty"`   // gRPC: exact method name filter
 	ReturnsObject    bool     `yaml:"returns_object"`
 	PathPattern      string   `yaml:"path_pattern,omitempty"`
 	Tags             []string `yaml:"tags,omitempty"`
@@ -160,6 +162,7 @@ type GRPCTest struct {
 	Service             string            `yaml:"service"`
 	Message             string            `yaml:"message"`
 	Metadata            map[string]string `yaml:"metadata,omitempty"`
+	DeadlineMs          int               `yaml:"deadline_ms,omitempty"`
 	Repeat              int               `yaml:"repeat,omitempty"`
 	RateLimit           *RateLimit        `yaml:"rate_limit,omitempty"`
 	Backoff             *Backoff          `yaml:"backoff,omitempty"`
@@ -197,6 +200,7 @@ type Indicator struct {
 	Patterns   []string    `yaml:"patterns,omitempty"` // For body_contains checks
 	Fields     []string    `yaml:"fields,omitempty"`   // For sensitive_fields_exposed type indicators
 	Exists     *bool       `yaml:"exists,omitempty"`
+	MinMs      int         `yaml:"min_ms,omitempty"`
 }
 
 type Condition struct {

@@ -535,20 +535,38 @@ func buildTemplateVariablesWithRoles(op *model.Operation, methodDesc *desc.Metho
 func matchesEndpointSelector(op *model.Operation, tmpl *templates.CompiledTemplate) bool {
 	selector := tmpl.EndpointSelector
 
-	// If no methods specified, match all operations
+	// Check service filter (exact match against service portion of path)
+	if selector.Service != "" {
+		// Extract service from path: "/package.Service/Method" -> "package.Service"
+		parts := strings.Split(strings.TrimPrefix(op.Path, "/"), "/")
+		if len(parts) >= 2 {
+			serviceName := parts[0]
+			if serviceName != selector.Service {
+				return false
+			}
+		}
+	}
+
+	// Check method filter (exact match against method name)
+	if selector.Method != "" {
+		parts := strings.Split(op.Path, "/")
+		methodName := parts[len(parts)-1]
+		if methodName != selector.Method {
+			return false
+		}
+	}
+
+	// If no methods glob specified, match (already passed service/method filters above)
 	if len(selector.Methods) == 0 {
 		return true
 	}
 
-	// For gRPC, extract method name from path (e.g., "/package.Service/MethodName" -> "MethodName")
-	// op.Method contains "GRPC" protocol type, not the actual method name
+	// For gRPC, extract method name from path
 	var methodName string
 	parts := strings.Split(op.Path, "/")
 	if len(parts) > 0 {
 		methodName = parts[len(parts)-1]
 	}
-
-	// Fallback if path extraction failed
 	if methodName == "" {
 		methodName = op.Method
 	}

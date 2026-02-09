@@ -250,3 +250,145 @@ func createMockMethodDescriptor(t *testing.T, inputFieldNames []string) *desc.Me
 
 	return methods[0]
 }
+
+// TestMatchesEndpointSelector_GRPCServiceAndMethod tests the Service and Method exact match filters
+func TestMatchesEndpointSelector_GRPCServiceAndMethod(t *testing.T) {
+	t.Run("matches when service filter matches", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Service: "vulnerable.v1.UserService",
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.True(t, result, "should match when service name matches exactly")
+	})
+
+	t.Run("does not match when service filter does not match", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Service: "vulnerable.v1.OrderService",
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.False(t, result, "should not match when service name differs")
+	})
+
+	t.Run("matches when method filter matches", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Method: "GetUser",
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.True(t, result, "should match when method name matches exactly")
+	})
+
+	t.Run("does not match when method filter does not match", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Method: "DeleteUser",
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.False(t, result, "should not match when method name differs")
+	})
+
+	t.Run("matches when both service and method filters match", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Service: "vulnerable.v1.UserService",
+					Method:  "GetUser",
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.True(t, result, "should match when both service and method match")
+	})
+
+	t.Run("does not match when service matches but method does not", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Service: "vulnerable.v1.UserService",
+					Method:  "DeleteUser",
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.False(t, result, "should not match when service matches but method does not")
+	})
+
+	t.Run("matches when service and method filters empty and methods glob matches", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Methods: []string{"Get*"},
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.True(t, result, "should use methods glob when service/method filters empty")
+	})
+
+	t.Run("matches with service filter and methods glob both matching", func(t *testing.T) {
+		op := &model.Operation{
+			Path:   "/vulnerable.v1.UserService/GetUser",
+			Method: "GRPC",
+		}
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				EndpointSelector: templates.EndpointSelector{
+					Service: "vulnerable.v1.UserService",
+					Methods: []string{"Get*"},
+				},
+			},
+		}
+
+		result := matchesEndpointSelector(op, tmpl)
+		assert.True(t, result, "should match when service filter and methods glob both match")
+	})
+}
