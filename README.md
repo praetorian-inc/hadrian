@@ -1,14 +1,56 @@
-# Hadrian
+# Hadrian: API Security Testing Framework
 
 [![CI](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml/badge.svg)](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/praetorian-inc/hadrian)](https://goreportcard.com/report/github.com/praetorian-inc/hadrian)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-> API security testing framework for REST APIs that tests for OWASP API vulnerabilities using role-based authorization testing.
+Hadrian tests REST APIs for OWASP API Security Top 10 vulnerabilities using role-based authorization testing and YAML-driven templates. It takes an OpenAPI specification and a roles configuration, then systematically tests every endpoint against every role combination to find broken object-level authorization (BOLA), broken authentication, broken function-level authorization (BFLA), and other access control flaws.
 
-## Overview
+Built for penetration testers and security engineers who need to validate API authorization logic during authorized security assessments.
 
-Hadrian is a security testing framework that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing and YAML-driven templates.
+## Table of Contents
+
+- [Why Hadrian](#why-hadrian)
+- [How It Works](#how-it-works)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Configuration Files](#configuration-files)
+- [CLI Reference](#cli-reference)
+- [Writing Custom Templates](#writing-custom-templates)
+- [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Why Hadrian
+
+API authorization testing is tedious and error-prone when done manually. For an API with 20 endpoints, 4 roles, and 3 HTTP methods, a tester faces hundreds of request-role combinations to verify. Missing even one combination can leave a critical BOLA or privilege escalation vulnerability unreported.
+
+Existing approaches have limitations:
+
+- **Manual testing** with Burp Suite or Postman requires crafting individual requests for each endpoint-role pair, which doesn't scale and is prone to incomplete coverage
+- **Generic DAST scanners** send malformed input to find injection flaws but don't understand role-based authorization or ownership semantics
+- **Custom scripts** are written per engagement, aren't reusable across clients, and lack structured reporting
+
+Hadrian takes a different approach: you define your roles and their permissions declaratively, point it at an OpenAPI spec, and it systematically tests every endpoint against every role combination using YAML templates that encode OWASP vulnerability patterns. The templates are reusable across engagements, and the role-permission model means Hadrian understands which access patterns should be allowed and which indicate a vulnerability.
+
+## How It Works
+
+Hadrian uses a template-driven pipeline that matches security test patterns against API endpoints and role combinations:
+
+```
+OpenAPI Spec ──┐
+               ├──▶ Template Matching ──▶ HTTP Execution ──▶ Detection ──▶ Report
+Roles Config ──┘    (endpoint_selector     (role-based        (success/     (terminal,
+YAML Templates ─────  + role_selector)       requests)         failure       JSON, MD)
+                                                               indicators)
+```
+
+1. **Parse** the OpenAPI specification into a list of operations (method + path + parameters)
+2. **Load** the roles configuration with permissions in `<action>:<object>:<scope>` format
+3. **Match** each YAML template's `endpoint_selector` and `role_selector` against operations and roles
+4. **Execute** HTTP requests with attacker/victim role credentials substituted into the template
+5. **Detect** vulnerabilities by evaluating response status codes and body patterns against success/failure indicators
+6. **Report** findings with severity, evidence, and attacker/victim role context
 
 ## Features
 
@@ -480,4 +522,4 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ## About Praetorian
 
-[Praetorian](https://www.praetorian.com/) is a leading cybersecurity company that helps organizations secure their most critical assets.
+[Praetorian](https://www.praetorian.com/) is a cybersecurity company that helps organizations secure their most critical assets through offensive security services and the [Praetorian Guard](https://www.praetorian.com/guard) attack surface management platform.
