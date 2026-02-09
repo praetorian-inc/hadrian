@@ -4,7 +4,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/praetorian-inc/hadrian)](https://goreportcard.com/report/github.com/praetorian-inc/hadrian)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-Hadrian tests REST APIs for OWASP API Security Top 10 vulnerabilities using role-based authorization testing and YAML-driven templates. It takes an OpenAPI specification and a roles configuration, then systematically tests every endpoint against every role combination to find broken object-level authorization (BOLA), broken authentication, broken function-level authorization (BFLA), and other access control flaws.
+Hadrian tests REST, GraphQL, and gRPC APIs for OWASP API Security Top 10 vulnerabilities using role-based authorization testing and YAML-driven templates. It takes an API specification and a roles configuration, then systematically tests every endpoint against every role combination to find broken object-level authorization (BOLA), broken authentication, broken function-level authorization (BFLA), and other access control flaws.
 
 Built for penetration testers and security engineers who need to validate API authorization logic during authorized security assessments.
 
@@ -31,21 +31,22 @@ Existing approaches have limitations:
 - **Generic DAST scanners** send malformed input to find injection flaws but don't understand role-based authorization or ownership semantics
 - **Custom scripts** are written per engagement, aren't reusable across clients, and lack structured reporting
 
-Hadrian takes a different approach: you define your roles and their permissions declaratively, point it at an OpenAPI spec, and it systematically tests every endpoint against every role combination using YAML templates that encode OWASP vulnerability patterns. The templates are reusable across engagements, and the role-permission model means Hadrian understands which access patterns should be allowed and which indicate a vulnerability.
+Hadrian takes a different approach: you define your roles and their permissions declaratively, point it at an API specification (OpenAPI for REST, schema introspection for GraphQL, proto definitions for gRPC), and it systematically tests every endpoint against every role combination using YAML templates that encode OWASP vulnerability patterns. The templates are reusable across engagements, and the role-permission model means Hadrian understands which access patterns should be allowed and which indicate a vulnerability.
 
 ## How It Works
 
 Hadrian uses a template-driven pipeline that matches security test patterns against API endpoints and role combinations:
 
 ```
-OpenAPI Spec ──┐
-               ├──▶ Template Matching ──▶ HTTP Execution ──▶ Detection ──▶ Report
-Roles Config ──┘    (endpoint_selector     (role-based        (success/     (terminal,
-YAML Templates ─────  + role_selector)       requests)         failure       JSON, MD)
-                                                               indicators)
+API Spec ──────┐
+(OpenAPI,       ├──▶ Template Matching ──▶ Execution ──▶ Detection ──▶ Report
+ GraphQL,      │    (endpoint_selector    (role-based    (success/     (terminal,
+ gRPC proto) ──┘      + role_selector)     requests)     failure       JSON, MD)
+Roles Config ──────                                       indicators)
+YAML Templates ────
 ```
 
-1. **Parse** the OpenAPI specification into a list of operations (method + path + parameters)
+1. **Parse** the API specification into a list of operations (REST endpoints, GraphQL queries/mutations, or gRPC methods)
 2. **Load** the roles configuration with permissions in `<action>:<object>:<scope>` format
 3. **Match** each YAML template's `endpoint_selector` and `role_selector` against operations and roles
 4. **Execute** HTTP requests with attacker/victim role credentials substituted into the template
@@ -54,6 +55,7 @@ YAML Templates ─────  + role_selector)       requests)         failure
 
 ## Features
 
+- **Multi-Protocol**: Supports REST, GraphQL, and gRPC APIs
 - **OWASP API Top 10 Coverage**: Test for BOLA and broken authentication
 - **Role-Based Testing**: Define roles with permissions and test cross-role access
 - **Template-Driven**: YAML templates for customizable security tests
