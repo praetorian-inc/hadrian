@@ -6,7 +6,9 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	pb "github.com/praetorian-inc/hadrian/testdata/grpc-server/pb"
@@ -464,12 +466,16 @@ func (s *orderServiceServer) StreamOrders(req *pb.StreamOrdersRequest, stream pb
 }
 
 func main() {
+	host := os.Getenv("GRPC_HOST")
+	if host == "" {
+		host = "localhost"
+	}
 	port := os.Getenv("GRPC_PORT")
 	if port == "" {
 		port = "50051"
 	}
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
 	if err != nil {
 		log.Fatalf("Failed to listen: %v", err)
 	}
@@ -485,7 +491,7 @@ func main() {
 	// Enable reflection for service discovery
 	reflection.Register(grpcServer)
 
-	log.Printf("⚠️  Vulnerable gRPC server starting on port %s", port)
+	log.Printf("⚠️  Vulnerable gRPC server starting on %s:%s", host, port)
 	log.Printf("⚠️  THIS IS AN INTENTIONALLY VULNERABLE APPLICATION FOR TESTING ONLY")
 	log.Printf("⚠️  DO NOT USE IN PRODUCTION")
 	log.Println()
@@ -494,6 +500,15 @@ func main() {
 	log.Println("  user1-token-67890 (user_id: 2, role: user)")
 	log.Println("  user2-token-abcde (user_id: 3, role: user)")
 	log.Println()
+
+	// Graceful shutdown on interrupt
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigCh
+		log.Printf("Received %v, shutting down gracefully...", sig)
+		grpcServer.GracefulStop()
+	}()
 
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("Failed to serve: %v", err)

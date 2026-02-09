@@ -37,19 +37,14 @@ func (p *GRPCPlugin) CanParse(input []byte, filename string) bool {
 	// Check content for proto markers
 	content := string(input)
 
-	// Proto syntax markers
+	// Proto syntax declaration is a strong indicator
 	if strings.Contains(content, `syntax = "proto3"`) ||
 		strings.Contains(content, `syntax = "proto2"`) {
 		return true
 	}
 
-	// Service definition marker
-	if strings.Contains(content, "service ") {
-		return true
-	}
-
-	// RPC method marker
-	if strings.Contains(content, "rpc ") {
+	// Require both service and rpc markers together to reduce false positives
+	if strings.Contains(content, "service ") && strings.Contains(content, "rpc ") {
 		return true
 	}
 

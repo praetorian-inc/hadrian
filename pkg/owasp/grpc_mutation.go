@@ -178,11 +178,16 @@ func (e *GRPCMutationExecutor) executePhase(
 		variables[key] = e.tracker.GetResource(key)
 	}
 
+	msg, err := buildGRPCMessage(phase, variables)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create a minimal compiled template for execution
 	grpcTest := templates.GRPCTest{
 		Method:   path,
 		Service:  "", // Will be extracted from methodDesc
-		Message:  buildGRPCMessage(phase, variables),
+		Message:  msg,
 		Metadata: make(map[string]string),
 	}
 
@@ -212,9 +217,9 @@ func (e *GRPCMutationExecutor) executePhase(
 }
 
 // buildGRPCMessage constructs a gRPC message JSON from phase data and variables
-func buildGRPCMessage(phase *templates.Phase, variables map[string]string) string {
+func buildGRPCMessage(phase *templates.Phase, variables map[string]string) (string, error) {
 	if len(phase.Data) == 0 && len(variables) == 0 {
-		return "{}"
+		return "{}", nil
 	}
 
 	// Merge phase data and variables
@@ -233,10 +238,10 @@ func buildGRPCMessage(phase *templates.Phase, variables map[string]string) strin
 	// Convert to JSON
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
-		return "{}"
+		return "", fmt.Errorf("failed to marshal gRPC message: %w", err)
 	}
 
-	return string(jsonBytes)
+	return string(jsonBytes), nil
 }
 
 // ClearTracker clears all tracked resources

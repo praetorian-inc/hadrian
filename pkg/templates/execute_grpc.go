@@ -2,7 +2,12 @@ package templates
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"fmt"
+	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -11,12 +16,17 @@ import (
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
+	grpcinsecure "google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 )
+
+// MaxGRPCResponseBodySize limits gRPC response body size to prevent memory exhaustion (10MB)
+const MaxGRPCResponseBodySize = 10 * 1024 * 1024
 
 // GRPCExecutor handles gRPC test execution
 type GRPCExecutor struct {
@@ -42,16 +52,24 @@ func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 	var opts []grpc.DialOption
 
 	if config.Plaintext {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		opts = append(opts, grpc.WithTransportCredentials(grpcinsecure.NewCredentials()))
 	} else if config.Insecure {
-		// TLS but skip verification
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})))
+	} else if config.TLSCACert != "" {
+		caCert, err := os.ReadFile(config.TLSCACert)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+		}
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caCert) {
+			return nil, fmt.Errorf("failed to parse CA certificate")
+		}
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{RootCAs: certPool})))
 	} else {
-		// TODO: Add proper TLS with CA cert support
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 
-	conn, err := grpc.Dial(config.Target, opts...)
+	conn, err := grpc.NewClient(config.Target, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to gRPC server: %w", err)
 	}
@@ -201,12 +219,20 @@ func (e *GRPCExecutor) executeGRPCTest(
 	var responseBody string
 	if respMsg != nil {
 		if dynMsg, ok := respMsg.(*dynamic.Message); ok {
-			bodyBytes, _ := dynMsg.MarshalJSON()
-			responseBody = string(bodyBytes)
+			bodyBytes, err := dynMsg.MarshalJSON()
+			if err != nil {
+				log.Debug("failed to marshal gRPC response: %v", err)
+			} else {
+				responseBody = string(bodyBytes)
+			}
 		}
 	}
+	if len(responseBody) > MaxGRPCResponseBodySize {
+		return nil, fmt.Errorf("gRPC response exceeds maximum size of %d bytes", MaxGRPCResponseBodySize)
+	}
 	if statusMessage != "" && responseBody == "" {
-		responseBody = fmt.Sprintf(`{"error": "%s"}`, statusMessage)
+		errJSON, _ := json.Marshal(map[string]string{"error": statusMessage})
+		responseBody = string(errJSON)
 	}
 
 	// Convert metadata to headers map
@@ -294,10 +320,14 @@ func substituteVariables(s string, variables map[string]string) string {
 	return result
 }
 
-// matchRegex checks if a pattern matches the input
+// matchRegex checks if a regex pattern matches the input
 func matchRegex(pattern, input string) bool {
-	// Simple implementation - in production use pre-compiled regex
-	return strings.Contains(input, pattern)
+	matched, err := regexp.MatchString(pattern, input)
+	if err != nil {
+		log.Debug("invalid regex pattern %q: %v", pattern, err)
+		return false
+	}
+	return matched
 }
 
 // evaluateDetection evaluates the Detection section to determine if a vulnerability was found
