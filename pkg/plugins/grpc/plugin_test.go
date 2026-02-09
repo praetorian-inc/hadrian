@@ -77,16 +77,24 @@ func TestGRPCPlugin_CanParse_ProtoContent(t *testing.T) {
 			want:     true,
 		},
 		{
-			name:     "service definition",
+			name:     "service definition only (no rpc)",
 			filename: "unknown.txt",
 			input:    []byte(`service UserService {`),
-			want:     true,
+			want:     false, // requires both "service " and "rpc " to reduce false positives
 		},
 		{
-			name:     "rpc method",
+			name:     "rpc method only (no service)",
 			filename: "unknown.txt",
 			input:    []byte(`rpc GetUser(UserRequest) returns (UserResponse);`),
-			want:     true,
+			want:     false, // requires both "service " and "rpc " to reduce false positives
+		},
+		{
+			name:     "service and rpc together",
+			filename: "unknown.txt",
+			input: []byte(`service UserService {
+  rpc GetUser(UserRequest) returns (UserResponse);
+}`),
+			want: true,
 		},
 		{
 			name:     "complete proto file",

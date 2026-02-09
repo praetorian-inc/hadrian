@@ -173,12 +173,12 @@ detection:
 
 // TestParseGRPCTemplate_FromActualFile tests parsing an actual gRPC template file
 func TestParseGRPCTemplate_FromActualFile(t *testing.T) {
-	tmpl, err := Parse("../../templates/grpc/api1-bola-read.yaml")
+	tmpl, err := Parse("../../templates/grpc/01-api1-bola-read.yaml")
 	require.NoError(t, err)
 	require.NotNil(t, tmpl)
 
 	// Verify basic structure
-	assert.Equal(t, "grpc-api1-bola-read", tmpl.ID)
+	assert.Equal(t, "01-grpc-api1-bola-read", tmpl.ID)
 	assert.Equal(t, "gRPC BOLA - Unauthorized Resource Read", tmpl.Info.Name)
 
 	// Verify gRPC test is present and parseable
