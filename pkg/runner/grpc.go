@@ -96,37 +96,6 @@ func newTestGRPCCmd() *cobra.Command {
 	return cmd
 }
 
-
-// findingSummary tracks findings by severity level
-type findingSummary struct {
-	Critical int
-	High     int
-	Medium   int
-	Low      int
-	Info     int
-}
-
-// addFinding increments the count for the given severity
-func (s *findingSummary) addFinding(severity string) {
-	switch strings.ToUpper(severity) {
-	case "CRITICAL":
-		s.Critical++
-	case "HIGH":
-		s.High++
-	case "MEDIUM":
-		s.Medium++
-	case "LOW":
-		s.Low++
-	case "INFO":
-		s.Info++
-	}
-}
-
-// total returns the total number of findings
-func (s *findingSummary) total() int {
-	return s.Critical + s.High + s.Medium + s.Low + s.Info
-}
-
 // countServices counts unique services from operations
 func countServices(operations []*model.Operation) int {
 	services := make(map[string]bool)
@@ -273,6 +242,13 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 		mutationExecutor = owasp.NewGRPCMutationExecutor(adapter)
 	}
 
+	// Create reporter based on output format
+	rep, err := createReporter(config.Output, config.OutputFile, 0)
+	if err != nil {
+		return fmt.Errorf("failed to create reporter: %w", err)
+	}
+	defer rep.Close()
+
 	// 5. Section header for template execution
 	if len(templateFiles) > 0 {
 		fmt.Println("")
@@ -290,7 +266,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	}
 
 	testCount := 0
-	summary := findingSummary{}
+	var allFindings []*model.Finding
 
 	for _, op := range operations {
 		if len(templateFiles) == 0 {
@@ -344,48 +320,18 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 					}
 
 					if mutationResult.Matched {
-						// Get severity and OWASP category from template
-						severity := "MEDIUM"
-						if tmpl.Info.Severity != "" {
-							severity = tmpl.Info.Severity
-						}
+						finding := buildGRPCFinding(tmpl, op, attackerRoleName, victimRoleName)
 
-						owaspCategory := tmpl.ID
-						if tmpl.Info.Category != "" {
-							owaspCategory = tmpl.Info.Category
-						}
-
-						// Track finding by severity
-						summary.addFinding(severity)
-
-						// Get severity color
-						color := getSeverityColor(model.Severity(severity))
-
-						// Output finding with colored severity
-						fmt.Printf("%s[%s]%s %s - %s %s %s\n",
-							color,
-							strings.ToUpper(severity),
-							colorReset,
-							owaspCategory,
-							tmpl.ID,
-							op.Method,
-							op.Path)
-
-						// Output roles line
-						fmt.Printf("  Roles: attacker=%s, victim=%s\n", attackerRoleName, victimRoleName)
-
-						// Output request IDs if available (collect from all phases)
+						// Collect request IDs from all phases
 						if mutationResult.RequestIDs != nil {
-							var allRequestIDs []string
-							allRequestIDs = append(allRequestIDs, mutationResult.RequestIDs.Setup...)
-							allRequestIDs = append(allRequestIDs, mutationResult.RequestIDs.Attack...)
-							allRequestIDs = append(allRequestIDs, mutationResult.RequestIDs.Verify...)
-							if len(allRequestIDs) > 0 {
-								fmt.Printf("  Request IDs: %s\n", strings.Join(allRequestIDs, ", "))
-							}
+							finding.RequestIDs = append(finding.RequestIDs, mutationResult.RequestIDs.Setup...)
+							finding.RequestIDs = append(finding.RequestIDs, mutationResult.RequestIDs.Attack...)
+							finding.RequestIDs = append(finding.RequestIDs, mutationResult.RequestIDs.Verify...)
 						}
+
+						allFindings = append(allFindings, finding)
+						rep.ReportFinding(finding)
 					} else {
-						// Verbose: plain output for pass results
 						if config.Verbose {
 							fmt.Printf("  [PASS] %s (mutation test)\n", tmpl.ID)
 						}
@@ -406,42 +352,12 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 				}
 
 				if result.Matched {
-					// Get severity and OWASP category from template
-					severity := "MEDIUM" // Default if not specified
-					if tmpl.Info.Severity != "" {
-						severity = tmpl.Info.Severity
-					}
+					finding := buildGRPCFinding(tmpl, op, attackerRoleName, victimRoleName)
+					finding.RequestIDs = result.RequestIDs
 
-					owaspCategory := tmpl.ID // Fallback to ID if no category
-					if tmpl.Info.Category != "" {
-						owaspCategory = tmpl.Info.Category
-					}
-
-					// Track finding by severity
-					summary.addFinding(severity)
-
-					// Get severity color
-					color := getSeverityColor(model.Severity(severity))
-
-					// Output finding with colored severity (matches GraphQL format exactly)
-					fmt.Printf("%s[%s]%s %s - %s %s %s\n",
-						color,
-						strings.ToUpper(severity),
-						colorReset,
-						owaspCategory,
-						tmpl.ID,
-						op.Method,
-						op.Path)
-
-					// Output roles line (matches GraphQL format exactly)
-					fmt.Printf("  Roles: attacker=%s, victim=%s\n", attackerRoleName, victimRoleName)
-
-					// Output request IDs if available
-					if len(result.RequestIDs) > 0 {
-						fmt.Printf("  Request IDs: %s\n", strings.Join(result.RequestIDs, ", "))
-					}
+					allFindings = append(allFindings, finding)
+					rep.ReportFinding(finding)
 				} else {
-					// Verbose: plain output for pass results (no nested log levels)
 					if config.Verbose {
 						fmt.Printf("  [PASS] %s (status: %d)\n", tmpl.ID, result.Response.StatusCode)
 					}
@@ -450,48 +366,23 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 		}
 	}
 
-	// 6. Final summary (GraphQL style)
+	// 7. Calculate stats and generate report
 	elapsed := time.Since(startTime)
 	grpcVerboseLog(config.Verbose, "Test completed in %v", elapsed)
 
-	// Count roles tested
 	rolesCount := 0
 	if rolesCfg != nil {
 		rolesCount = len(rolesCfg.Roles)
 	}
 
-	fmt.Println("")
-	fmt.Println("=== Hadrian Security Test Results ===")
-	fmt.Println("")
-	fmt.Printf("Duration: %v\n", elapsed.Round(time.Second))
-	fmt.Printf("Operations tested: %d\n", len(operations))
-	fmt.Printf("Templates loaded: %d\n", len(templateFiles))
-	if rolesCount > 0 {
-		fmt.Printf("Roles tested: %d\n", rolesCount)
-	}
-	fmt.Println("")
+	stats := calculateStats(allFindings, startTime)
+	stats.TotalTests = testCount
+	stats.OperationCount = len(operations)
+	stats.RoleCount = rolesCount
+	stats.TemplatesLoaded = len(templateFiles)
 
-	if summary.total() > 0 {
-		fmt.Println("Findings Summary:")
-		if summary.Critical > 0 {
-			fmt.Printf("  %sCRITICAL%s: %d\n", colorRed, colorReset, summary.Critical)
-		}
-		if summary.High > 0 {
-			fmt.Printf("  %sHIGH%s: %d\n", colorOrange, colorReset, summary.High)
-		}
-		if summary.Medium > 0 {
-			fmt.Printf("  %sMEDIUM%s: %d\n", colorYellow, colorReset, summary.Medium)
-		}
-		if summary.Low > 0 {
-			fmt.Printf("  %sLOW%s: %d\n", colorBlue, colorReset, summary.Low)
-		}
-		if summary.Info > 0 {
-			fmt.Printf("  %sINFO%s: %d\n", colorGreen, colorReset, summary.Info)
-		}
-		fmt.Println("")
-		fmt.Printf("Total findings: %d\n", summary.total())
-	} else {
-		fmt.Println("Total findings: 0")
+	if err := rep.GenerateReport(allFindings, stats); err != nil {
+		return fmt.Errorf("failed to generate report: %w", err)
 	}
 
 	if config.DryRun {
@@ -503,6 +394,32 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	}
 
 	return nil
+}
+
+// buildGRPCFinding constructs a model.Finding from a matched template and operation
+func buildGRPCFinding(tmpl *templates.CompiledTemplate, op *model.Operation, attackerRole, victimRole string) *model.Finding {
+	severity := model.Severity("MEDIUM")
+	if tmpl.Info.Severity != "" {
+		severity = model.Severity(tmpl.Info.Severity)
+	}
+
+	category := tmpl.ID
+	if tmpl.Info.Category != "" {
+		category = tmpl.Info.Category
+	}
+
+	return &model.Finding{
+		ID:              tmpl.ID,
+		Category:        category,
+		Name:            tmpl.ID,
+		Severity:        severity,
+		IsVulnerability: true,
+		Endpoint:        op.Path,
+		Method:          op.Method,
+		AttackerRole:    attackerRole,
+		VictimRole:      victimRole,
+		Timestamp:       time.Now(),
+	}
 }
 
 // buildTemplateVariablesWithRoles constructs the variable map for template substitution
