@@ -15,6 +15,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
 	_ "github.com/praetorian-inc/hadrian/pkg/plugins/graphql" // Register GraphQL plugin
+	_ "github.com/praetorian-inc/hadrian/pkg/plugins/grpc"    // Register gRPC plugin
 	_ "github.com/praetorian-inc/hadrian/pkg/plugins/rest"    // Register REST plugin
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
 	"github.com/praetorian-inc/hadrian/pkg/roles"

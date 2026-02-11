@@ -38,10 +38,10 @@ type GRPCConfig struct {
 	DryRun          bool
 
 	// gRPC-specific flags
-	Proto       string // Proto file path
-	Reflection  bool   // Use server reflection
-	Plaintext   bool   // Use plaintext (no TLS)
-	TLSCACert   string // Custom CA certificate
+	Proto       string   // Proto file path
+	Reflection  bool     // Use server reflection
+	Plaintext   bool     // Use plaintext (no TLS)
+	TLSCACert   string   // Custom CA certificate
 	TemplateDir string   // gRPC templates directory
 	Templates   []string // Filter templates by ID or name
 }
@@ -307,6 +307,8 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 				// Check if this is a mutation template requiring three-phase testing
 				if tmpl.Template != nil && tmpl.Template.Info.TestPattern == "mutation" {
+					// Clear tracker to prevent cross-test pollution of stored resource IDs
+					mutationExecutor.ClearTracker()
 					// Execute three-phase mutation test
 					authInfoMap := buildAuthInfoMap(authCfg, rolesCfg)
 					mutationResult, err := mutationExecutor.ExecuteGRPCMutation(ctx, tmpl.Template, methodDesc, authInfoMap)
