@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -50,8 +51,10 @@ func Load(filePath string) (*AuthConfig, error) {
 	}
 
 	var config AuthConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse auth YAML: %w", err)
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&config); err != nil {
+		return nil, fmt.Errorf("failed to parse auth config: %w", err)
 	}
 
 	// Expand environment variables (CR-3)

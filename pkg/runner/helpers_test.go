@@ -495,7 +495,7 @@ func TestGetTemplateDir_Default(t *testing.T) {
 	os.Unsetenv("HADRIAN_TEMPLATES")
 
 	dir := getTemplateDir()
-	assert.Equal(t, "./templates/owasp", dir)
+	assert.Equal(t, "./templates/rest", dir)
 }
 
 func TestGetTemplateDir_EnvOverride(t *testing.T) {
@@ -780,7 +780,8 @@ func TestVerboseLog_Disabled(t *testing.T) {
 }
 
 func TestNewTestCmd_VerboseFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Find the verbose flag
 	flag := cmd.Flags().Lookup("verbose")
@@ -794,7 +795,8 @@ func TestNewTestCmd_VerboseFlag(t *testing.T) {
 // =============================================================================
 
 func TestNewTestCmd_DryRunFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Find the dry-run flag
 	flag := cmd.Flags().Lookup("dry-run")
@@ -807,7 +809,8 @@ func TestNewTestCmd_DryRunFlag(t *testing.T) {
 // =============================================================================
 
 func TestNewTestCmd_TemplateDirFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Find the template-dir flag
 	flag := cmd.Flags().Lookup("template-dir")
@@ -845,8 +848,8 @@ func TestFilterByTemplates_MatchByID(t *testing.T) {
 
 func TestFilterByTemplates_MatchByFilename(t *testing.T) {
 	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/templates/owasp/bola-idor-basic.yaml"},
-		{Template: &templates.Template{ID: "rate-limiting"}, FilePath: "/templates/owasp/rate-limiting.yaml"},
+		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/templates/rest/bola-idor-basic.yaml"},
+		{Template: &templates.Template{ID: "rate-limiting"}, FilePath: "/templates/rest/rate-limiting.yaml"},
 	}
 
 	// Match with extension
@@ -862,17 +865,17 @@ func TestFilterByTemplates_MatchByFilename(t *testing.T) {
 
 func TestFilterByTemplates_MatchByPathSuffix(t *testing.T) {
 	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/path/to/templates/owasp/bola-idor-basic.yaml"},
+		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/path/to/templates/rest/bola-idor-basic.yaml"},
 		{Template: &templates.Template{ID: "other-template"}, FilePath: "/path/to/templates/custom/other.yaml"},
 	}
 
 	// Match by partial path
-	result := filterByTemplates(tmpls, []string{"templates/owasp/bola-idor-basic.yaml"})
+	result := filterByTemplates(tmpls, []string{"templates/rest/bola-idor-basic.yaml"})
 	require.Len(t, result, 1)
 	assert.Equal(t, "bola-idor-basic", result[0].ID)
 
 	// Match by shorter path suffix
-	result = filterByTemplates(tmpls, []string{"owasp/bola-idor-basic.yaml"})
+	result = filterByTemplates(tmpls, []string{"rest/bola-idor-basic.yaml"})
 	require.Len(t, result, 1)
 	assert.Equal(t, "bola-idor-basic", result[0].ID)
 }
@@ -932,8 +935,8 @@ func TestFilterByTemplates_EmptyTemplateList(t *testing.T) {
 
 func TestFilterByTemplates_MixedMatchTypes(t *testing.T) {
 	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/templates/owasp/bola-idor-basic.yaml"},
-		{Template: &templates.Template{ID: "rate-limiting"}, FilePath: "/templates/owasp/rate-limiting.yaml"},
+		{Template: &templates.Template{ID: "bola-idor-basic"}, FilePath: "/templates/rest/bola-idor-basic.yaml"},
+		{Template: &templates.Template{ID: "rate-limiting"}, FilePath: "/templates/rest/rate-limiting.yaml"},
 		{Template: &templates.Template{ID: "custom-test"}, FilePath: "/templates/custom/custom-test.yaml"},
 	}
 
@@ -988,10 +991,10 @@ func TestTemplateMatchesFilter_ByFilename(t *testing.T) {
 func TestTemplateMatchesFilter_ByPathSuffix(t *testing.T) {
 	tmpl := &templates.CompiledTemplate{
 		Template: &templates.Template{ID: "other-id"},
-		FilePath: "/templates/owasp/api1/bola.yaml",
+		FilePath: "/templates/rest/api1/bola.yaml",
 	}
 
-	assert.True(t, templateMatchesFilter(tmpl, "owasp/api1/bola.yaml"))
+	assert.True(t, templateMatchesFilter(tmpl, "rest/api1/bola.yaml"))
 	assert.True(t, templateMatchesFilter(tmpl, "api1/bola.yaml"))
 	assert.False(t, templateMatchesFilter(tmpl, "api2/bola.yaml"))
 }

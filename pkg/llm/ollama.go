@@ -15,6 +15,10 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
 )
 
+// MaxLLMResponseBodySize is the maximum size for LLM API responses (1MB)
+// LLM responses should be smaller than general HTTP responses
+const MaxLLMResponseBodySize = 1 * 1024 * 1024
+
 type OllamaClient struct {
 	baseURL       string
 	model         string
@@ -99,7 +103,8 @@ func (o *OllamaClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		// Read error body with size limit (1MB for LLM responses)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, MaxLLMResponseBodySize))
 		return nil, fmt.Errorf("Ollama API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 

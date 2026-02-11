@@ -1,0 +1,183 @@
+# DVGA (Damn Vulnerable GraphQL Application) Schema
+# Generated from introspection on http://172.17.0.1:5013/graphql
+# This schema contains intentional security vulnerabilities for testing
+
+# Custom scalars
+scalar DateTime
+
+# ============================================================================
+# ROOT TYPES
+# ============================================================================
+
+type Query {
+  """List pastes with optional filtering"""
+  pastes(public: Boolean, limit: Int, filter: String): [PasteObject]
+
+  """Get a specific paste by ID or title"""
+  paste(id: Int, title: String): PasteObject
+
+  """System update information - may expose sensitive data"""
+  systemUpdate: String
+
+  """System diagnostics - VULNERABLE: Command injection via cmd parameter"""
+  systemDiagnostics(username: String, password: String, cmd: String): String
+
+  """System debug endpoint - VULNERABLE: Information disclosure"""
+  systemDebug(arg: String): String
+
+  """System health check"""
+  systemHealth: String
+
+  """List users - VULNERABLE: May expose user data"""
+  users(id: Int): [UserObject]
+
+  """Read and burn paste - self-deletes after reading"""
+  readAndBurn(id: Int): PasteObject
+
+  """Search across content - returns union type"""
+  search(keyword: String): [SearchResult]
+
+  """Audit log entries"""
+  audits: [AuditObject]
+
+  """Delete all pastes - DANGEROUS: No authorization check"""
+  deleteAllPastes: Boolean
+
+  """Get current user info from token"""
+  me(token: String): UserObject
+}
+
+type Mutations {
+  """Create a new paste"""
+  createPaste(burn: Boolean, content: String, public: Boolean, title: String): CreatePaste
+
+  """Edit an existing paste - VULNERABLE: BOLA (no owner check)"""
+  editPaste(content: String, id: Int, title: String): EditPaste
+
+  """Delete a paste - VULNERABLE: BOLA (no owner check)"""
+  deletePaste(id: Int): DeletePaste
+
+  """Upload a paste from content - VULNERABLE: Path traversal"""
+  uploadPaste(content: String!, filename: String!): UploadPaste
+
+  """Import paste from URL - VULNERABLE: SSRF"""
+  importPaste(host: String!, path: String!, port: Int, scheme: String!): ImportPaste
+
+  """Create a new user"""
+  createUser(userData: UserInput!): CreateUser
+
+  """User login - returns JWT tokens"""
+  login(password: String, username: String): Login
+}
+
+type Subscription {
+  """Subscribe to paste updates"""
+  paste(id: Int, title: String): PasteObject
+}
+
+# ============================================================================
+# OBJECT TYPES
+# ============================================================================
+
+"""Paste object containing user-submitted content"""
+type PasteObject {
+  id: ID!
+  title: String
+  content: String
+  public: Boolean
+  userAgent: String
+  ipAddr: String
+  ownerId: Int
+  burn: Boolean
+  owner: OwnerObject
+}
+
+"""Owner of a paste"""
+type OwnerObject {
+  id: ID!
+  name: String
+  paste: [PasteObject]
+  pastes: [PasteObject]
+}
+
+"""User account"""
+type UserObject {
+  id: ID!
+  username(capitalize: Boolean): String
+  """Password field exposed - VULNERABLE: Sensitive data exposure"""
+  password: String!
+}
+
+"""Audit log entry for GraphQL operations"""
+type AuditObject {
+  id: ID!
+  gqloperation: String
+  gqlquery: String
+  timestamp: DateTime
+}
+
+"""Result of creating a paste"""
+type CreatePaste {
+  paste: PasteObject
+}
+
+"""Result of editing a paste"""
+type EditPaste {
+  paste: PasteObject
+}
+
+"""Result of deleting a paste"""
+type DeletePaste {
+  result: Boolean
+}
+
+"""Result of uploading a paste"""
+type UploadPaste {
+  content: String
+  filename: String
+  result: String
+}
+
+"""Result of importing a paste from URL"""
+type ImportPaste {
+  result: String
+}
+
+"""Result of creating a user"""
+type CreateUser {
+  user: UserObject
+}
+
+"""Login response with JWT tokens"""
+type Login {
+  accessToken: String
+  refreshToken: String
+}
+
+# ============================================================================
+# INPUT TYPES
+# ============================================================================
+
+"""Input for creating a new user"""
+input UserInput {
+  username: String!
+  email: String!
+  password: String!
+}
+
+# ============================================================================
+# UNION TYPES
+# ============================================================================
+
+"""Search results can be either PasteObject or UserObject"""
+union SearchResult = PasteObject | UserObject
+
+# ============================================================================
+# SCHEMA DEFINITION
+# ============================================================================
+
+schema {
+  query: Query
+  mutation: Mutations
+  subscription: Subscription
+}

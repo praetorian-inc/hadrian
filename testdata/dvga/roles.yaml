@@ -1,0 +1,53 @@
+# DVGA Roles Configuration
+# Role definitions for Damn Vulnerable GraphQL Application
+
+objects:
+  - users
+  - pastes
+  - system
+
+roles:
+  - name: admin
+    level: 100
+    permissions:
+      - "read:users:all"
+      - "write:users:all"
+      - "delete:users:all"
+      - "read:pastes:all"
+      - "write:pastes:all"
+      - "delete:pastes:all"
+      - "execute:system:all"
+
+  - name: user
+    level: 50
+    permissions:
+      - "read:users:own"
+      - "read:pastes:all"
+      - "write:pastes:own"
+      - "delete:pastes:own"
+
+  - name: guest
+    level: 0
+    permissions:
+      - "read:pastes:public"
+
+# DVGA endpoint to object mappings (discovered via introspection)
+endpoints:
+  - path: "/graphql"
+    object: pastes
+    queries:
+      - pastes
+      - paste
+    mutations:
+      - createPaste
+      - editPaste
+      - deletePaste
+
+  - path: "/graphql"
+    object: users
+    queries:
+      - users
+      - user
+    mutations:
+      - createUser
+      - deleteUser

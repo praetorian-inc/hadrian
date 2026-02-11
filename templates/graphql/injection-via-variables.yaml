@@ -1,0 +1,68 @@
+id: graphql-injection-via-variables
+info:
+  name: "GraphQL Injection via Variables"
+  category: "API3:2023 Broken Object Property Level Authorization"
+  severity: "HIGH"
+  author: "hadrian"
+  description: "Tests for SQL/NoSQL injection vulnerabilities through GraphQL variables. When user input from variables is not properly sanitized before being used in database queries, attackers can inject malicious payloads to access or manipulate data."
+  tags: ["graphql", "injection", "sql-injection", "nosql-injection", "variables"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query InjectionTest($userId: String!) {
+        user(id: $userId) {
+          id
+          name
+          email
+        }
+      }
+    variables: |
+      {
+        "userId": "1' OR '1'='1"
+      }
+    matchers:
+      - type: status
+        status: [200, 400, 500]
+      - type: word
+        words: ["data", "errors"]
+        part: body
+        condition: or
+
+  - query: |
+      query NoSQLInjection($filter: UserFilter!) {
+        users(filter: $filter) {
+          id
+          name
+          email
+        }
+      }
+    variables: |
+      {
+        "filter": {
+          "$ne": null
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.users"
+      exists: true
+  vulnerability_pattern: "graphql_injection_via_variables"

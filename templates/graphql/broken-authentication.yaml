@@ -1,0 +1,83 @@
+id: graphql-broken-authentication
+info:
+  name: "GraphQL Broken Authentication"
+  category: "API2:2023 Broken Authentication"
+  severity: "HIGH"
+  author: "hadrian"
+  description: "Tests for broken authentication in GraphQL APIs including missing authentication checks, weak token validation, and session management issues."
+  tags: ["graphql", "authentication", "session", "api2"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  # Test 1: Access protected query without authentication
+  - query: |
+      query UnauthorizedAccess {
+        users {
+          id
+          username
+          email
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data", "users"]
+        part: body
+        condition: and
+
+  # Test 2: Access with malformed/invalid token
+  - query: |
+      query MalformedTokenAccess {
+        users {
+          id
+          username
+          email
+        }
+      }
+    auth: "invalid"
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data", "users"]
+        part: body
+        condition: and
+
+  # Test 3: Access user profile without authentication
+  - query: |
+      query AnonymousProfileAccess {
+        me {
+          id
+          username
+          email
+          role
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data", "me"]
+        part: body
+        condition: and
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data"
+      exists: true
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "graphql_broken_authentication"

@@ -38,12 +38,12 @@ type JSONMetadata struct {
 
 // JSONSummary contains aggregated statistics
 type JSONSummary struct {
-	TotalOperations int                      `json:"total_operations"`
-	TotalTemplates  int                      `json:"total_templates"`
-	TotalFindings   int                      `json:"total_findings"`
-	Duration        string                   `json:"duration"`
-	BySeverity      map[model.Severity]int   `json:"by_severity"`
-	ByCategory      map[string]int           `json:"by_category"`
+	TotalOperations int                    `json:"total_operations"`
+	TotalTemplates  int                    `json:"total_templates"`
+	TotalFindings   int                    `json:"total_findings"`
+	Duration        string                 `json:"duration"`
+	BySeverity      map[model.Severity]int `json:"by_severity"`
+	ByCategory      map[string]int         `json:"by_category"`
 }
 
 // ReportFinding is a no-op for JSON reporter (batch output only)
@@ -83,7 +83,7 @@ func (r *JSONReporter) GenerateReport(findings []*model.Finding, stats *Stats) e
 		return err
 	}
 
-	return os.WriteFile(r.outputPath, data, 0644)
+	return os.WriteFile(r.outputPath, data, 0600)
 }
 
 // redactFinding creates a copy of the finding with sensitive data redacted

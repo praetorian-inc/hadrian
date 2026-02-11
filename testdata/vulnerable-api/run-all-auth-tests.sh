@@ -155,7 +155,8 @@ start_api() {
     fi
 
     # Kill any leftover vulnerable-api processes from previous runs
-    pkill -f "vulnerable-api" 2>/dev/null || true
+    # Use -x for exact match to avoid killing this script (whose path contains "vulnerable-api")
+    pkill -x "vulnerable-api" 2>/dev/null || true
     sleep 0.5
 
     log_info "Starting API with AUTH_METHOD=${auth_method}..."
@@ -238,7 +239,7 @@ run_hadrian() {
     # delete resources before BOLA read tests can detect vulnerabilities.
     if [[ "$CLI_ONLY" == "true" ]]; then
         # CLI-only mode: print directly to terminal, no JSON files
-        HADRIAN_TEMPLATES="${TEMPLATES_DIR}" "${HADRIAN_BIN}" test \
+        HADRIAN_TEMPLATES="${TEMPLATES_DIR}" "${HADRIAN_BIN}" test rest \
             --api "${SCRIPT_DIR}/openapi.yaml" \
             --roles "${SCRIPT_DIR}/roles.yaml" \
             --auth "${SCRIPT_DIR}/${auth_config}" \
@@ -247,7 +248,7 @@ run_hadrian() {
             ${VERBOSE}
     else
         # Default mode: output to JSON files with log
-        HADRIAN_TEMPLATES="${TEMPLATES_DIR}" "${HADRIAN_BIN}" test \
+        HADRIAN_TEMPLATES="${TEMPLATES_DIR}" "${HADRIAN_BIN}" test rest \
             --api "${SCRIPT_DIR}/openapi.yaml" \
             --roles "${SCRIPT_DIR}/roles.yaml" \
             --auth "${SCRIPT_DIR}/${auth_config}" \

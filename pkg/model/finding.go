@@ -4,25 +4,25 @@ import "time"
 
 // Finding represents a security issue discovered during testing
 type Finding struct {
-	ID              string    `json:"id"`
-	Category        string    `json:"category"`     // API1, API2, etc.
-	Name            string    `json:"name"`
-	Description     string    `json:"description"`
-	Severity        Severity  `json:"severity"`
-	Confidence      float64   `json:"confidence"`   // 0.0-1.0
-	IsVulnerability bool      `json:"is_vulnerability"`
+	ID              string   `json:"id"`
+	Category        string   `json:"category"` // API1, API2, etc.
+	Name            string   `json:"name"`
+	Description     string   `json:"description"`
+	Severity        Severity `json:"severity"`
+	Confidence      float64  `json:"confidence"` // 0.0-1.0
+	IsVulnerability bool     `json:"is_vulnerability"`
 
 	// Evidence
-	Endpoint     string    `json:"endpoint"`      // GET /api/users/{id}
-	Method       string    `json:"method"`
-	AttackerRole string    `json:"attacker_role"`
-	VictimRole   string    `json:"victim_role,omitempty"`
+	Endpoint     string `json:"endpoint"` // GET /api/users/{id}
+	Method       string `json:"method"`
+	AttackerRole string `json:"attacker_role"`
+	VictimRole   string `json:"victim_role,omitempty"`
 
 	Evidence    Evidence   `json:"evidence"`
 	LLMAnalysis *LLMTriage `json:"llm_analysis,omitempty"`
 	RequestIDs  []string   `json:"request_ids,omitempty"` // All request IDs from all phases
 
-	Timestamp   time.Time `json:"timestamp"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 type Severity string
@@ -57,13 +57,13 @@ type HTTPResponse struct {
 	StatusCode int               `json:"status_code"`
 	Headers    map[string]string `json:"headers"`
 	Body       string            `json:"body"`
-	BodyHash   string            `json:"body_hash"`   // SHA-256 for comparison
+	BodyHash   string            `json:"body_hash"` // SHA-256 for comparison
 	Size       int               `json:"size"`
 	Truncated  bool              `json:"truncated"`
 }
 
 type LLMTriage struct {
-	Provider        string  `json:"provider"`  // claude, openai, ollama
+	Provider        string  `json:"provider"` // claude, openai, ollama
 	IsVulnerability bool    `json:"is_vulnerability"`
 	Confidence      float64 `json:"confidence"`
 	Reasoning       string  `json:"reasoning"`

@@ -1,0 +1,51 @@
+id: graphql-directive-overloading
+info:
+  name: "GraphQL Directive Overloading Attack"
+  category: "API4:2023 Unrestricted Resource Consumption"
+  severity: "MEDIUM"
+  author: "hadrian"
+  description: "Tests for GraphQL directive abuse by overloading queries with excessive @skip, @include, or custom directives. Processing many directives can cause performance degradation and resource exhaustion."
+  tags: ["graphql", "dos", "directives", "skip", "include"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query DirectiveOverload($skip: Boolean = false, $include: Boolean = true) {
+        user(id: "1") {
+          id @skip(if: $skip) @include(if: $include) @skip(if: $skip) @include(if: $include)
+          name @skip(if: $skip) @include(if: $include) @skip(if: $skip) @include(if: $include)
+          email @skip(if: $skip) @include(if: $include) @skip(if: $skip) @include(if: $include)
+          posts @skip(if: $skip) @include(if: $include) {
+            id @skip(if: $skip) @include(if: $include)
+            title @skip(if: $skip) @include(if: $include)
+            content @skip(if: $skip) @include(if: $include)
+            author @skip(if: $skip) @include(if: $include) {
+              id @skip(if: $skip) @include(if: $include)
+              name @skip(if: $skip) @include(if: $include)
+            }
+          }
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "graphql_directive_abuse"

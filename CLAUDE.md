@@ -56,7 +56,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 
 ### Template System
 
-Templates in `templates/owasp/` define security tests with:
+Templates in `templates/rest/` define security tests with:
 - `endpoint_selector`: Filters which operations to test (methods, path params, auth requirements)
 - `role_selector`: Defines attacker/victim role combinations by permission level (lower/higher/all)
 - `http`: HTTP request definition with template variables (`{{operation.method}}`, `{{attacker_token}}`)
@@ -123,7 +123,7 @@ Quick start:
 git clone https://github.com/OWASP/crAPI.git && cd crAPI/deploy/docker && docker-compose up -d
 
 # Run Hadrian (after setting up test users and tokens per the README)
-HADRIAN_TEMPLATES=testdata/crapi/templates/owasp ./hadrian test \
+HADRIAN_TEMPLATES=testdata/crapi/templates/rest ./hadrian test \
   --api testdata/crapi/crapi-openapi-spec.json \
   --roles testdata/crapi/roles.yaml \
   --auth testdata/crapi/auth.yaml \

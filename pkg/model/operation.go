@@ -1,25 +1,28 @@
 package model
 
-// Protocol-agnostic API operation (extracted from OpenAPI/Swagger)
+// Protocol-agnostic API operation (extracted from OpenAPI/Swagger or GraphQL)
 type Operation struct {
-	Method             string            // GET, POST, PUT, DELETE
-	Path               string            // /api/users/{id}
-	PathParams         []Parameter       // {id}, {userId}, etc.
+	Method             string      // GET, POST, PUT, DELETE (REST) or POST (GraphQL)
+	Path               string      // /api/users/{id} (REST) or "query user" (GraphQL)
+	Protocol           string      // "rest" or "graphql"
+	GraphQLOperation   string      // "query" or "mutation" (GraphQL only)
+	GraphQLField       string      // Field name like "user", "deleteUser" (GraphQL only)
+	PathParams         []Parameter // {id}, {userId}, etc.
 	QueryParams        []Parameter
 	HeaderParams       []Parameter
 	BodySchema         *Schema
-	ResponseSchemas    map[int]*Schema   // 200 → success, 403 → forbidden
+	ResponseSchemas    map[int]*Schema // 200 → success, 403 → forbidden
 	RequiresAuth       bool
-	ResourceType       string            // "users" (extracted from path)
-	OwnerField         string            // "id", "user_id" (for ownership checks)
-	SuccessStatus      int               // 200, 201, 204
-	UnauthorizedStatus int               // 403, 401
+	ResourceType       string // "users" (extracted from path)
+	OwnerField         string // "id", "user_id" (for ownership checks)
+	SuccessStatus      int    // 200, 201, 204
+	UnauthorizedStatus int    // 403, 401
 	Tags               []string
 }
 
 type Parameter struct {
 	Name     string
-	In       string  // path, query, header
+	In       string // path, query, header
 	Required bool
 	Type     string
 	Example  interface{}
