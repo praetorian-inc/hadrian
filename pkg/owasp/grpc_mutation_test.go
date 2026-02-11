@@ -236,17 +236,17 @@ func TestExecuteGRPCMutation_DetectionConditions(t *testing.T) {
 			name:          "attack_denied_correctly",
 			attackStatus:  codes.PermissionDenied,
 			attackBody:    `{"error": "permission denied"}`,
-			checkField:    "error",                              // Check error field exists
-			expectedValue: "permission denied",                  // Expect permission denied message
-			expectedMatch: true,                                 // Correctly denied (message matches expected)
+			checkField:    "error",             // Check error field exists
+			expectedValue: "permission denied", // Expect permission denied message
+			expectedMatch: true,                // Correctly denied (message matches expected)
 		},
 		{
 			name:          "attack_succeeded_vulnerability",
 			attackStatus:  codes.OK,
 			attackBody:    `{"deleted": true}`,
-			checkField:    "deleted",                            // Check 'deleted' field
-			expectedValue: "true",                               // Expect true = vulnerability
-			expectedMatch: true,                                 // Succeeded = vulnerability found
+			checkField:    "deleted", // Check 'deleted' field
+			expectedValue: "true",    // Expect true = vulnerability
+			expectedMatch: true,      // Succeeded = vulnerability found
 		},
 	}
 

@@ -30,12 +30,12 @@ const MaxGRPCResponseBodySize = 10 * 1024 * 1024
 
 // GRPCExecutor handles gRPC test execution
 type GRPCExecutor struct {
-	conn       *grpc.ClientConn
-	stub       grpcdynamic.Stub
-	target     string
-	plaintext  bool
-	insecure   bool
-	timeout    time.Duration
+	conn      *grpc.ClientConn
+	stub      grpcdynamic.Stub
+	target    string
+	plaintext bool
+	insecure  bool
+	timeout   time.Duration
 }
 
 // GRPCExecutorConfig holds configuration for the gRPC executor

@@ -109,20 +109,20 @@ func TestGRPCMutationIntegration(t *testing.T) {
 			TestPhases: &templates.TestPhases{
 				Setup: []*templates.Phase{
 					{
-						Path: "/vulnerable.v1.UserService/CreateUser",
-						Auth: "victim",
-						Data: map[string]string{"name": "test"},
+						Path:               "/vulnerable.v1.UserService/CreateUser",
+						Auth:               "victim",
+						Data:               map[string]string{"name": "test"},
 						StoreResponseField: "id",
 					},
 				},
 				Attack: &templates.Phase{
-					Path: "/vulnerable.v1.UserService/DeleteUser",
-					Auth: "attacker",
+					Path:           "/vulnerable.v1.UserService/DeleteUser",
+					Auth:           "attacker",
 					UseStoredField: "id",
 				},
 				Verify: &templates.Phase{
-					Path: "/vulnerable.v1.UserService/GetUser",
-					Auth: "victim",
+					Path:           "/vulnerable.v1.UserService/GetUser",
+					Auth:           "victim",
 					UseStoredField: "id",
 				},
 			},

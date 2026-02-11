@@ -46,8 +46,8 @@ type EndpointSelector struct {
 	HasPathParameter bool     `yaml:"has_path_parameter"`
 	RequiresAuth     bool     `yaml:"requires_auth"`
 	Methods          []string `yaml:"methods"`
-	Service          string   `yaml:"service,omitempty"`  // gRPC: exact service name filter
-	Method           string   `yaml:"method,omitempty"`   // gRPC: exact method name filter
+	Service          string   `yaml:"service,omitempty"` // gRPC: exact service name filter
+	Method           string   `yaml:"method,omitempty"`  // gRPC: exact method name filter
 	ReturnsObject    bool     `yaml:"returns_object"`
 	PathPattern      string   `yaml:"path_pattern,omitempty"`
 	Tags             []string `yaml:"tags,omitempty"`
@@ -176,7 +176,7 @@ type Matcher struct {
 	Words     []string `yaml:"words,omitempty"`
 	Regex     []string `yaml:"regex,omitempty"`
 	Status    []int    `yaml:"status,omitempty"`
-	Code      []int    `yaml:"code,omitempty"` // gRPC status codes
+	Code      []int    `yaml:"code,omitempty"`      // gRPC status codes
 	Part      string   `yaml:"part,omitempty"`      // body, header, all
 	Condition string   `yaml:"condition,omitempty"` // and, or
 }
