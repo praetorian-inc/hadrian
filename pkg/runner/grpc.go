@@ -46,6 +46,35 @@ type GRPCConfig struct {
 	Templates   []string // Filter templates by ID or name
 }
 
+// Validate checks the gRPC configuration for common errors before test execution.
+// This mirrors the validation pattern used by REST and GraphQL runners.
+func (c *GRPCConfig) Validate() error {
+	if c.Target == "" {
+		return fmt.Errorf("--target is required")
+	}
+	if c.Proto == "" && !c.Reflection {
+		return fmt.Errorf("either --proto or --reflection must be provided")
+	}
+	if c.Plaintext && c.TLSCACert != "" {
+		return fmt.Errorf("--plaintext and --tls-ca-cert are mutually exclusive")
+	}
+	if c.Insecure && c.TLSCACert != "" {
+		return fmt.Errorf("--insecure and --tls-ca-cert are mutually exclusive")
+	}
+	if c.TLSCACert != "" {
+		if _, err := os.Stat(c.TLSCACert); err != nil {
+			return fmt.Errorf("TLS CA certificate file not found: %s", c.TLSCACert)
+		}
+	}
+	if c.Timeout <= 0 {
+		return fmt.Errorf("--timeout must be positive (got %d)", c.Timeout)
+	}
+	if c.RateLimit <= 0 {
+		return fmt.Errorf("--rate-limit must be positive (got %f)", c.RateLimit)
+	}
+	return nil
+}
+
 // newTestGRPCCmd creates the "test grpc" subcommand
 func newTestGRPCCmd() *cobra.Command {
 	var config GRPCConfig
@@ -116,14 +145,15 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	// Enable verbose logging if requested
 	log.SetVerbose(config.Verbose)
 
+	// Validate configuration early
+	if err := config.Validate(); err != nil {
+		return err
+	}
+
 	// Header output (no [DEBUG] prefix)
 	fmt.Println("Starting gRPC security test")
 	fmt.Printf("Target: %s\n", config.Target)
 
-	// Validation: require either --proto or --reflection
-	if config.Proto == "" && !config.Reflection {
-		return fmt.Errorf("either --proto or --reflection must be provided")
-	}
 
 	// Log proto file if provided
 	if config.Proto != "" {
@@ -230,12 +260,19 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 			Plaintext: config.Plaintext,
 			Insecure:  config.Insecure,
 			Timeout:   time.Duration(config.Timeout) * time.Second,
+			TLSCACert: config.TLSCACert,
+			RateLimit: config.RateLimit,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create gRPC executor: %w", err)
 		}
 		defer executor.Close()
 		grpcVerboseLog(config.Verbose, "Created gRPC executor connection to %s", config.Target)
+
+		// Validate connection before running tests
+		if err := executor.CheckConnection(ctx); err != nil {
+			return err
+		}
 
 		// Create mutation executor for three-phase tests with adapter
 		adapter := &grpcExecutorAdapter{executor: executor}
@@ -285,9 +322,6 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 			for _, tmpl := range templateFiles {
 				// Check if operation matches template's endpoint_selector
 				if !matchesEndpointSelector(op, tmpl) {
-					if config.Verbose {
-						log.Debug("Skipping %s for %s: doesn't match endpoint_selector", tmpl.ID, op.Path)
-					}
 					continue
 				}
 

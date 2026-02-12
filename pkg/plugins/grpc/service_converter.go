@@ -51,7 +51,12 @@ func convertMethodToOperation(svc *ServiceDescriptor, method *MethodDescriptor) 
 	return op
 }
 
-// inferAuthRequirement determines if a method requires authentication based on naming patterns
+// inferAuthRequirement determines if a method requires authentication based on naming patterns.
+//
+// LIMITATION: This uses case-insensitive prefix matching on the method name. Methods that
+// happen to start with a public prefix (e.g., "GetSecretKey", "ListConfidentialReports")
+// will be incorrectly inferred as not requiring auth. When accuracy is critical, override
+// the inferred value in your roles.yaml or template endpoint_selector configuration.
 func inferAuthRequirement(method *MethodDescriptor) bool {
 	name := strings.ToLower(method.Name)
 

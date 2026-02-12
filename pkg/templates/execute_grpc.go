@@ -14,8 +14,10 @@ import (
 	"github.com/jhump/protoreflect/desc"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
+	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -30,12 +32,13 @@ const MaxGRPCResponseBodySize = 10 * 1024 * 1024
 
 // GRPCExecutor handles gRPC test execution
 type GRPCExecutor struct {
-	conn      *grpc.ClientConn
-	stub      grpcdynamic.Stub
-	target    string
-	plaintext bool
-	insecure  bool
-	timeout   time.Duration
+	conn        *grpc.ClientConn
+	stub        grpcdynamic.Stub
+	target      string
+	plaintext   bool
+	insecure    bool
+	timeout     time.Duration
+	rateLimiter *rate.Limiter
 }
 
 // GRPCExecutorConfig holds configuration for the gRPC executor
@@ -45,6 +48,7 @@ type GRPCExecutorConfig struct {
 	Insecure  bool
 	Timeout   time.Duration
 	TLSCACert string
+	RateLimit float64
 }
 
 // NewGRPCExecutor creates a new gRPC executor
@@ -53,9 +57,8 @@ func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 
 	if config.Plaintext {
 		opts = append(opts, grpc.WithTransportCredentials(grpcinsecure.NewCredentials()))
-	} else if config.Insecure {
-		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})))
 	} else if config.TLSCACert != "" {
+		// TLSCACert takes priority over Insecure flag
 		caCert, err := os.ReadFile(config.TLSCACert)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read CA certificate: %w", err)
@@ -65,6 +68,8 @@ func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 			return nil, fmt.Errorf("failed to parse CA certificate")
 		}
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{RootCAs: certPool})))
+	} else if config.Insecure {
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})))
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
@@ -79,13 +84,24 @@ func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 		timeout = 30 * time.Second
 	}
 
+	// Initialize rate limiter if rate limit is positive
+	var rateLimiter *rate.Limiter
+	if config.RateLimit > 0 {
+		burst := int(config.RateLimit) * 2
+		if burst < 1 {
+			burst = 1
+		}
+		rateLimiter = rate.NewLimiter(rate.Limit(config.RateLimit), burst)
+	}
+
 	return &GRPCExecutor{
-		conn:      conn,
-		stub:      grpcdynamic.NewStub(conn),
-		target:    config.Target,
-		plaintext: config.Plaintext,
-		insecure:  config.Insecure,
-		timeout:   timeout,
+		conn:        conn,
+		stub:        grpcdynamic.NewStub(conn),
+		target:      config.Target,
+		plaintext:   config.Plaintext,
+		insecure:    config.Insecure,
+		timeout:     timeout,
+		rateLimiter: rateLimiter,
 	}, nil
 }
 
@@ -95,6 +111,27 @@ func (e *GRPCExecutor) Close() error {
 		return e.conn.Close()
 	}
 	return nil
+}
+
+// CheckConnection verifies the gRPC server is reachable by attempting a connection.
+// grpc.NewClient creates lazy connections, so this ensures we fail fast with a clear
+// error instead of getting UNAVAILABLE on every RPC call.
+func (e *GRPCExecutor) CheckConnection(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	e.conn.Connect()
+	for {
+		state := e.conn.GetState()
+		if state == connectivity.Ready {
+			return nil
+		}
+		if state == connectivity.TransientFailure {
+			return fmt.Errorf("cannot reach gRPC server at %s (connection state: %s). Is the server running?", e.target, state)
+		}
+		if !e.conn.WaitForStateChange(ctx, state) {
+			return fmt.Errorf("timeout connecting to gRPC server at %s (last state: %s). Is the server running?", e.target, state)
+		}
+	}
 }
 
 // ExecuteGRPC executes a gRPC test against an operation
@@ -168,6 +205,8 @@ func (e *GRPCExecutor) executeGRPCTest(
 			} else {
 				md.Set("authorization", authInfo.Value)
 			}
+		default:
+			log.Warn("unsupported gRPC auth method %q (supported: bearer, api_key)", authInfo.Method)
 		}
 	}
 
@@ -195,6 +234,13 @@ func (e *GRPCExecutor) executeGRPCTest(
 		}
 	}
 
+	// Apply rate limiting if configured
+	if e.rateLimiter != nil {
+		if err := e.rateLimiter.Wait(ctx); err != nil {
+			return nil, fmt.Errorf("rate limit wait failed: %w", err)
+		}
+	}
+
 	// Execute the RPC call
 	var respMD metadata.MD
 	respMsg, err := e.stub.InvokeRpc(ctx, methodDesc, reqMsg, grpc.Header(&respMD))
@@ -215,20 +261,20 @@ func (e *GRPCExecutor) executeGRPCTest(
 		statusCode = int(codes.OK)
 	}
 
-	// Build response body
+	// Build response body with size checks to prevent excessive memory allocation
 	var responseBody string
 	if respMsg != nil {
 		if dynMsg, ok := respMsg.(*dynamic.Message); ok {
 			bodyBytes, err := dynMsg.MarshalJSON()
 			if err != nil {
 				log.Debug("failed to marshal gRPC response: %v", err)
+			} else if len(bodyBytes) > MaxGRPCResponseBodySize {
+				// Check size before string conversion to avoid doubling memory allocation
+				return nil, fmt.Errorf("gRPC response exceeds maximum size of %d bytes", MaxGRPCResponseBodySize)
 			} else {
 				responseBody = string(bodyBytes)
 			}
 		}
-	}
-	if len(responseBody) > MaxGRPCResponseBodySize {
-		return nil, fmt.Errorf("gRPC response exceeds maximum size of %d bytes", MaxGRPCResponseBodySize)
 	}
 	if statusMessage != "" && responseBody == "" {
 		errJSON, _ := json.Marshal(map[string]string{"error": statusMessage})

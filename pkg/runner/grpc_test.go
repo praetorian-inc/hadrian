@@ -392,3 +392,395 @@ func TestMatchesEndpointSelector_GRPCServiceAndMethod(t *testing.T) {
 		assert.True(t, result, "should match when service filter and methods glob both match")
 	})
 }
+
+// TestBuildGRPCFinding tests finding construction with various template configurations
+func TestBuildGRPCFinding(t *testing.T) {
+	t.Run("template with custom severity and category", func(t *testing.T) {
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				ID: "test-template-id",
+				Info: templates.TemplateInfo{
+					Severity: "HIGH",
+					Category: "BOLA",
+				},
+			},
+		}
+		op := &model.Operation{
+			Path:   "/example.Service/Method",
+			Method: "GRPC",
+		}
+
+		finding := buildGRPCFinding(tmpl, op, "attacker", "victim")
+
+		assert.Equal(t, "test-template-id", finding.ID)
+		assert.Equal(t, "BOLA", finding.Category)
+		assert.Equal(t, "test-template-id", finding.Name)
+		assert.Equal(t, model.Severity("HIGH"), finding.Severity)
+		assert.True(t, finding.IsVulnerability)
+		assert.Equal(t, "/example.Service/Method", finding.Endpoint)
+		assert.Equal(t, "GRPC", finding.Method)
+		assert.Equal(t, "attacker", finding.AttackerRole)
+		assert.Equal(t, "victim", finding.VictimRole)
+	})
+
+	t.Run("template with defaults (no severity/category set)", func(t *testing.T) {
+		tmpl := &templates.CompiledTemplate{
+			Template: &templates.Template{
+				ID:   "default-template",
+				Info: templates.TemplateInfo{},
+			},
+		}
+		op := &model.Operation{
+			Path:   "/test.Service/TestMethod",
+			Method: "GRPC",
+		}
+
+		finding := buildGRPCFinding(tmpl, op, "user1", "user2")
+
+		assert.Equal(t, "default-template", finding.ID)
+		assert.Equal(t, "default-template", finding.Category) // Uses ID as category
+		assert.Equal(t, model.Severity("MEDIUM"), finding.Severity)
+		assert.Equal(t, "user1", finding.AttackerRole)
+		assert.Equal(t, "user2", finding.VictimRole)
+	})
+}
+
+// TestBuildAuthInfoMap tests auth info map construction
+func TestBuildAuthInfoMap(t *testing.T) {
+	t.Run("nil authCfg returns empty map", func(t *testing.T) {
+		rolesCfg := &roles.RoleConfig{
+			Roles: []*roles.Role{
+				{Name: "user1", ID: "1"},
+			},
+		}
+
+		result := buildAuthInfoMap(nil, rolesCfg)
+
+		assert.NotNil(t, result)
+		assert.Equal(t, 0, len(result))
+	})
+
+	t.Run("nil rolesCfg returns empty map", func(t *testing.T) {
+		authCfg := &auth.AuthConfig{
+			Method: "bearer",
+			Roles: map[string]*auth.RoleAuth{
+				"user1": {Token: "token1"},
+			},
+		}
+
+		result := buildAuthInfoMap(authCfg, nil)
+
+		assert.NotNil(t, result)
+		assert.Equal(t, 0, len(result))
+	})
+
+	t.Run("valid config returns populated map", func(t *testing.T) {
+		authCfg := &auth.AuthConfig{
+			Method: "bearer",
+			Roles: map[string]*auth.RoleAuth{
+				"user1": {Token: "token1"},
+				"user2": {Token: "token2"},
+			},
+		}
+		rolesCfg := &roles.RoleConfig{
+			Roles: []*roles.Role{
+				{Name: "user1", ID: "1"},
+				{Name: "user2", ID: "2"},
+			},
+		}
+
+		result := buildAuthInfoMap(authCfg, rolesCfg)
+
+		assert.Equal(t, 2, len(result))
+		assert.NotNil(t, result["user1"])
+		assert.NotNil(t, result["user2"])
+	})
+}
+
+// TestLoadGRPCTemplates tests template loading from directories
+func TestLoadGRPCTemplates(t *testing.T) {
+	t.Run("load from existing templates/grpc/ directory", func(t *testing.T) {
+		// Use path relative to test file location (pkg/runner/)
+		templatesPath := "../../templates/grpc"
+
+		templates, err := loadGRPCTemplates(templatesPath)
+
+		// Should successfully load templates without error
+		assert.NoError(t, err)
+		assert.NotNil(t, templates)
+		// The directory should contain at least some templates
+		assert.GreaterOrEqual(t, len(templates), 0)
+	})
+
+	t.Run("load from non-existent directory returns error", func(t *testing.T) {
+		templates, err := loadGRPCTemplates("/nonexistent/path")
+
+		assert.Error(t, err)
+		assert.Nil(t, templates)
+	})
+}
+
+// TestBuildTemplateVariablesWithRoles tests variable construction with and without auth/roles
+func TestBuildTemplateVariablesWithRoles(t *testing.T) {
+	t.Run("with nil auth/roles configs uses defaults", func(t *testing.T) {
+		methodDesc := createMockMethodDescriptor(t, []string{"id", "name"})
+		op := &model.Operation{
+			Path:   "/test.Service/TestMethod",
+			Method: "GRPC",
+		}
+
+		variables, attackerRole, victimRole := buildTemplateVariablesWithRoles(op, methodDesc, nil, nil)
+
+		// Check operation variables
+		assert.Equal(t, "/test.Service/TestMethod", variables["operation.path"])
+		assert.Equal(t, "TestMethod", variables["operation.method"])
+		assert.Equal(t, "TestService", variables["operation.service"])
+		assert.Equal(t, "TestService", variables["service.name"])
+
+		// Check owner field fallback (should use first field from descriptor)
+		assert.Equal(t, "id", variables["operation.owner_field"])
+
+		// Check default role names
+		assert.Equal(t, "user1", attackerRole)
+		assert.Equal(t, "user2", victimRole)
+
+		// Check fallback tokens/IDs
+		assert.Equal(t, "test-victim-id", variables["victim_id"])
+		assert.Equal(t, "test-attacker-token", variables["attacker_token"])
+	})
+
+	t.Run("with auth and roles configs uses real values", func(t *testing.T) {
+		methodDesc := createMockMethodDescriptor(t, []string{"user_id", "data"})
+		op := &model.Operation{
+			Path:       "/example.UserService/GetUser",
+			Method:     "GRPC",
+			OwnerField: "user_id",
+		}
+
+		authCfg := &auth.AuthConfig{
+			Method: "bearer",
+			Roles: map[string]*auth.RoleAuth{
+				"user1": {Token: "real-token-1"},
+				"user2": {Token: "real-token-2"},
+			},
+		}
+		rolesCfg := &roles.RoleConfig{
+			Roles: []*roles.Role{
+				{Name: "user1", ID: "attacker-id-123"},
+				{Name: "user2", ID: "victim-id-456"},
+			},
+		}
+
+		variables, attackerRole, victimRole := buildTemplateVariablesWithRoles(op, methodDesc, authCfg, rolesCfg)
+
+		// Check operation variables
+		assert.Equal(t, "/example.UserService/GetUser", variables["operation.path"])
+		assert.Equal(t, "TestMethod", variables["operation.method"]) // From mock
+		assert.Equal(t, "user_id", variables["operation.owner_field"])
+
+		// Check role names from config
+		assert.Equal(t, "user1", attackerRole)
+		assert.Equal(t, "user2", victimRole)
+
+		// Check real tokens/IDs from config
+		assert.Equal(t, "victim-id-456", variables["victim_id"])
+		assert.Equal(t, "real-token-1", variables["attacker_token"])
+	})
+}
+
+// TestGRPCConfigValidate tests all validation paths
+func TestGRPCConfigValidate(t *testing.T) {
+	tests := []struct {
+		name      string
+		config    GRPCConfig
+		wantError bool
+		errorMsg  string
+	}{
+		{
+			name: "valid config (proto mode)",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: 5.0,
+			},
+			wantError: false,
+		},
+		{
+			name: "valid config (reflection mode)",
+			config: GRPCConfig{
+				Target:     "localhost:50051",
+				Reflection: true,
+				Timeout:    30,
+				RateLimit:  5.0,
+			},
+			wantError: false,
+		},
+		{
+			name: "missing target",
+			config: GRPCConfig{
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: 5.0,
+			},
+			wantError: true,
+			errorMsg:  "--target is required",
+		},
+		{
+			name: "missing proto and reflection",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Timeout:   30,
+				RateLimit: 5.0,
+			},
+			wantError: true,
+			errorMsg:  "either --proto or --reflection must be provided",
+		},
+		{
+			name: "plaintext + TLSCACert mutual exclusion",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Plaintext: true,
+				TLSCACert: "/path/to/ca.crt",
+				Timeout:   30,
+				RateLimit: 5.0,
+			},
+			wantError: true,
+			errorMsg:  "--plaintext and --tls-ca-cert are mutually exclusive",
+		},
+		{
+			name: "insecure + TLSCACert mutual exclusion",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Insecure:  true,
+				TLSCACert: "/path/to/ca.crt",
+				Timeout:   30,
+				RateLimit: 5.0,
+			},
+			wantError: true,
+			errorMsg:  "--insecure and --tls-ca-cert are mutually exclusive",
+		},
+		{
+			name: "TLSCACert file not found",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				TLSCACert: "/nonexistent/ca.crt",
+				Timeout:   30,
+				RateLimit: 5.0,
+			},
+			wantError: true,
+			errorMsg:  "TLS CA certificate file not found",
+		},
+		{
+			name: "negative timeout",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   -5,
+				RateLimit: 5.0,
+			},
+			wantError: true,
+			errorMsg:  "--timeout must be positive",
+		},
+		{
+			name: "zero timeout",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   0,
+				RateLimit: 5.0,
+			},
+			wantError: true,
+			errorMsg:  "--timeout must be positive",
+		},
+		{
+			name: "negative rate limit",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: -1.0,
+			},
+			wantError: true,
+			errorMsg:  "--rate-limit must be positive",
+		},
+		{
+			name: "zero rate limit",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: 0,
+			},
+			wantError: true,
+			errorMsg:  "rate-limit must be positive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.config.Validate()
+
+			if tt.wantError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestCountServices tests service counting from operations
+func TestCountServices(t *testing.T) {
+	t.Run("empty operations - 0 services", func(t *testing.T) {
+		operations := []*model.Operation{}
+
+		count := countServices(operations)
+
+		assert.Equal(t, 0, count)
+	})
+
+	t.Run("single service with multiple methods - 1 service", func(t *testing.T) {
+		operations := []*model.Operation{
+			{Path: "/example.UserService/GetUser"},
+			{Path: "/example.UserService/CreateUser"},
+			{Path: "/example.UserService/DeleteUser"},
+		}
+
+		count := countServices(operations)
+
+		assert.Equal(t, 1, count)
+	})
+
+	t.Run("multiple services - correct count", func(t *testing.T) {
+		operations := []*model.Operation{
+			{Path: "/example.UserService/GetUser"},
+			{Path: "/example.UserService/CreateUser"},
+			{Path: "/example.OrderService/GetOrder"},
+			{Path: "/example.OrderService/CreateOrder"},
+			{Path: "/example.ProductService/GetProduct"},
+		}
+
+		count := countServices(operations)
+
+		assert.Equal(t, 3, count)
+	})
+
+	t.Run("handles malformed paths gracefully", func(t *testing.T) {
+		operations := []*model.Operation{
+			{Path: "/example.UserService/GetUser"},
+			{Path: "malformed"},
+			{Path: ""},
+			{Path: "/example.OrderService/GetOrder"},
+		}
+
+		// Should count only valid service paths
+		count := countServices(operations)
+
+		assert.Equal(t, 2, count)
+	})
+}
