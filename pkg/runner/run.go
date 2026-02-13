@@ -73,12 +73,13 @@ func newTestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test",
 		Short: "Run security tests against an API",
-		Long:  `Run security tests against an API. Use 'test rest' for REST APIs or 'test graphql' for GraphQL APIs.`,
+		Long:  `Run security tests against an API. Use 'test rest' for REST APIs, 'test graphql' for GraphQL APIs, or 'test grpc' for gRPC APIs.`,
 	}
 
 	// Add subcommands
 	cmd.AddCommand(newTestRestCmd())
 	cmd.AddCommand(newTestGraphQLCmd())
+	cmd.AddCommand(newTestGRPCCmd())
 
 	return cmd
 }

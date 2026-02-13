@@ -1,0 +1,30 @@
+id: 04-grpc-api2-broken-auth
+info:
+  name: "gRPC Broken Authentication - No Token"
+  category: "API2:2023 Broken Authentication"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["grpc", "authentication", "api2"]
+  requires_llm_triage: false
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+
+role_selector:
+  attacker_permission_level: "none"
+
+grpc:
+  - method: "{{operation.method}}"
+    service: "{{operation.service}}"
+    message: '{}'
+    metadata: {}
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+  failure_indicators:
+    - type: "grpc_status"
+      code: [16]
+  vulnerability_pattern: "grpc_unauthenticated_access"

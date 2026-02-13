@@ -1,0 +1,36 @@
+id: grpc-api8-metadata-injection
+info:
+  name: "gRPC Metadata Header Injection - OrderService"
+  category: "API8:2023 Security Misconfiguration"
+  severity: "MEDIUM"
+  author: "hadrian-test"
+  tags: ["grpc", "injection", "metadata", "api8", "order-service"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.OrderService"
+  method: "CreateOrder"
+
+role_selector:
+  attacker_permission_level: "lower"
+
+grpc:
+  - method: "CreateOrder"
+    service: "vulnerable.v1.OrderService"
+    message: '{"product_id": "prod-123", "quantity": 1, "shipping_address": "123 Main St"}'
+    metadata:
+      authorization: "Bearer user1-token-67890"
+      x-forwarded-for: "127.0.0.1"
+      x-real-ip: "127.0.0.1"
+      x-original-url: "https://admin.internal.com"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+  failure_indicators:
+    - type: "grpc_status"
+      code: [16]
+  vulnerability_pattern: "grpc_metadata_injection_allowed"

@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+package vulnerable.v1;
+
+option go_package = "testdata/grpc-server/pb;pb";
+
+// UserService - vulnerable to BOLA and authentication bypass
+service UserService {
+    // GetUser - VULNERABLE: No ownership check (BOLA)
+    rpc GetUser (GetUserRequest) returns (UserResponse);
+
+    // UpdateUser - VULNERABLE: No ownership check (BOLA write)
+    rpc UpdateUser (UpdateUserRequest) returns (UserResponse);
+
+    // DeleteUser - VULNERABLE: No ownership check (BOLA delete)
+    rpc DeleteUser (DeleteUserRequest) returns (Empty);
+
+    // ListUsers - Requires auth but returns too much data
+    rpc ListUsers (ListUsersRequest) returns (ListUsersResponse);
+}
+
+// ProfileService - exposes sensitive data
+service ProfileService {
+    // GetProfile - VULNERABLE: Returns SSN (sensitive data exposure)
+    rpc GetProfile (GetProfileRequest) returns (ProfileResponse);
+
+    // UpdateProfile - VULNERABLE: No ownership check
+    rpc UpdateProfile (UpdateProfileRequest) returns (ProfileResponse);
+}
+
+// AdminService - vulnerable to BFLA (function level auth)
+service AdminService {
+    // GetSystemConfig - VULNERABLE: Should be admin-only but no role check
+    rpc GetSystemConfig (Empty) returns (SystemConfigResponse);
+
+    // SetSystemConfig - VULNERABLE: Should be admin-only but no role check
+    rpc SetSystemConfig (SystemConfigRequest) returns (Empty);
+
+    // ListAllUsers - VULNERABLE: Admin function accessible to regular users
+    rpc ListAllUsers (Empty) returns (ListUsersResponse);
+
+    // DeleteAnyUser - VULNERABLE: Admin function with no role check
+    rpc DeleteAnyUser (DeleteUserRequest) returns (Empty);
+}
+
+// OrderService - for testing various attack patterns
+service OrderService {
+    // GetOrder - VULNERABLE: BOLA
+    rpc GetOrder (GetOrderRequest) returns (OrderResponse);
+
+    // CreateOrder - Accepts metadata injection
+    rpc CreateOrder (CreateOrderRequest) returns (OrderResponse);
+
+    // StreamOrders - Server streaming vulnerable to deadline manipulation
+    rpc StreamOrders (StreamOrdersRequest) returns (stream OrderResponse);
+}
+
+// Request/Response messages
+message GetUserRequest {
+    string user_id = 1;
+}
+
+message UpdateUserRequest {
+    string user_id = 1;
+    string username = 2;
+    string email = 3;
+}
+
+message DeleteUserRequest {
+    string user_id = 1;
+}
+
+message ListUsersRequest {
+    int32 page_size = 1;
+    string page_token = 2;
+}
+
+message ListUsersResponse {
+    repeated UserResponse users = 1;
+    string next_page_token = 2;
+    int32 total_count = 3;
+}
+
+message UserResponse {
+    string id = 1;
+    string username = 2;
+    string email = 3;
+    string role = 4;
+    string created_at = 5;
+    // VULNERABLE: Exposes internal data
+    string internal_notes = 6;
+}
+
+message GetProfileRequest {
+    string user_id = 1;
+}
+
+message UpdateProfileRequest {
+    string user_id = 1;
+    string full_name = 2;
+    string phone_number = 3;
+    string address = 4;
+}
+
+message ProfileResponse {
+    string id = 1;
+    string user_id = 2;
+    string full_name = 3;
+    // VULNERABLE: Sensitive data exposure
+    string ssn = 4;
+    string phone_number = 5;
+    string address = 6;
+    // VULNERABLE: Exposes internal credit score
+    int32 credit_score = 7;
+}
+
+message SystemConfigResponse {
+    string database_url = 1;
+    string api_secret = 2;
+    bool debug_mode = 3;
+    bool maintenance_mode = 4;
+    repeated string allowed_origins = 5;
+}
+
+message SystemConfigRequest {
+    bool debug_mode = 1;
+    bool maintenance_mode = 2;
+    repeated string allowed_origins = 3;
+}
+
+message GetOrderRequest {
+    string order_id = 1;
+}
+
+message CreateOrderRequest {
+    string product_id = 1;
+    int32 quantity = 2;
+    string shipping_address = 3;
+}
+
+message StreamOrdersRequest {
+    string user_id = 1;
+    int32 limit = 2;
+}
+
+message OrderResponse {
+    string id = 1;
+    string user_id = 2;
+    string product_id = 3;
+    int32 quantity = 4;
+    double total_amount = 5;
+    string status = 6;
+    string created_at = 7;
+    // VULNERABLE: Exposes payment info
+    string payment_card_last4 = 8;
+}
+
+message Empty {}

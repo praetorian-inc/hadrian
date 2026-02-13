@@ -1,0 +1,87 @@
+# Template: gRPC BOLA - Write/Update Operation (Mutation Test)
+# Tests PUT/Update endpoints for unauthorized cross-user resource modification
+# Multi-phase test that verifies an attacker can modify another user's resource:
+# Phase 1 (setup): Victim creates a resource
+# Phase 2 (attack): Attacker attempts to modify victim's resource
+# Phase 3 (verify): Check if resource was actually modified
+
+id: 02-grpc-api1-bola-write
+
+info:
+  name: "gRPC BOLA - Unauthorized Resource Modification"
+  category: "API1:2023 Broken Object Level Authorization"
+  severity: "HIGH"
+  author: "hadrian"
+  description: |
+    Tests for Broken Object Level Authorization (BOLA) vulnerabilities on gRPC update methods using three-phase mutation testing.
+    Phase 1: Victim creates a resource to establish baseline.
+    Phase 2: Attacker attempts to modify the victim's resource using their own credentials.
+    Phase 3: Verify the resource was actually modified by reading it back.
+    A successful test indicates the API does not properly validate object-level permissions
+    for update operations, which could lead to unauthorized data modification.
+  tags: ["grpc", "bola", "api1", "authorization", "write", "update", "mutation"]
+  requires_llm_triage: true
+  test_pattern: "mutation"
+
+# Select update/write endpoints
+endpoint_selector:
+  requires_auth: true
+  methods: ["Update*", "Set*", "Modify*", "Put*", "Edit*"]
+
+# Role configuration:
+# - Attacker: lower permission level user attempting unauthorized modification
+# - Victim: higher permission level user whose resource is targeted
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Three-phase mutation test to prove the vulnerability
+test_phases:
+  # Phase 1: Victim creates a resource to establish baseline
+  setup:
+    - path: "{{operation.service}}/Create{{operation.resource_type}}"
+      operation: "create"
+      auth: "victim"
+      data:
+        name: "victim_resource_{{random_id}}"
+        description: "Resource created by victim for BOLA test"
+      store_response_field: "resource_id"
+      expected_status: 0
+
+  # Phase 2: Attacker attempts to modify victim's resource
+  attack:
+    path: "{{operation.service}}/{{operation.method}}"
+    operation: "update"
+    auth: "attacker"
+    use_stored_field: "resource_id"
+    data:
+      name: "attacker_modified_resource"
+      description: "Modified by unauthorized user"
+    expected_status: 0
+
+  # Phase 3: Verify the resource was actually modified
+  verify:
+    path: "{{operation.service}}/Get{{operation.resource_type}}"
+    operation: "read"
+    auth: "victim"
+    use_stored_field: "resource_id"
+    check_field: "name"
+    expected_value: "attacker_modified_resource"
+    expected_status: 0
+
+# Detection logic:
+# - Attack phase succeeds (status 0): Attacker was able to modify resource
+# - Verify phase confirms the modification: Resource was actually changed
+# - This indicates a BOLA vulnerability (unauthorized modification succeeded)
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+  failure_indicators:
+    - type: "grpc_status"
+      code: [5, 7, 16]
+  vulnerability_pattern: "grpc_attacker_modified_victim_resource"
+  conditions:
+    - attack_phase_status: [0]
+      verify_phase_status: [0]
+      verify_field_changed: true

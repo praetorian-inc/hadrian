@@ -18,7 +18,10 @@ type RoleConfig struct {
 
 type Role struct {
 	Name        string       `yaml:"name"`
+	ID          string       `yaml:"id"`          // User ID for this role (for BOLA testing)
+	Username    string       `yaml:"username"`    // Username for this role
 	Level       int          `yaml:"level"`       // Explicit privilege level (higher = more privilege)
+	Description string       `yaml:"description"` // Human-readable description
 	RawPerms    []string     `yaml:"permissions"` // Raw permission strings from YAML
 	Permissions []Permission `yaml:"-"`           // Parsed permissions
 }

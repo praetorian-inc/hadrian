@@ -1,0 +1,33 @@
+id: grpc-api5-bfla-set-config
+info:
+  name: "gRPC BFLA - Regular User Modifying System Config"
+  category: "API5:2023 Broken Function Level Authorization"
+  severity: "CRITICAL"
+  author: "hadrian-test"
+  tags: ["grpc", "bfla", "api5", "authorization", "admin-service", "privilege-escalation", "write"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.AdminService"
+  method: "SetSystemConfig"
+
+role_selector:
+  attacker_permission_level: "lower"
+
+grpc:
+  - method: "SetSystemConfig"
+    service: "vulnerable.v1.AdminService"
+    message: '{"debug_mode": true, "maintenance_mode": true, "allowed_origins": ["https://evil.com"]}'
+    metadata:
+      authorization: "Bearer user1-token-67890"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+  failure_indicators:
+    - type: "grpc_status"
+      code: [7, 16]
+  vulnerability_pattern: "grpc_unauthorized_admin_function_modification"

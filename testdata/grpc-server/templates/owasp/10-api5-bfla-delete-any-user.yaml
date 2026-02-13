@@ -1,0 +1,33 @@
+id: grpc-api5-bfla-delete-any-user
+info:
+  name: "gRPC BFLA - Regular User Deleting Users via Admin Function"
+  category: "API5:2023 Broken Function Level Authorization"
+  severity: "CRITICAL"
+  author: "hadrian-test"
+  tags: ["grpc", "bfla", "api5", "authorization", "admin-service", "privilege-escalation", "delete"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.AdminService"
+  method: "DeleteAnyUser"
+
+role_selector:
+  attacker_permission_level: "lower"
+
+grpc:
+  - method: "DeleteAnyUser"
+    service: "vulnerable.v1.AdminService"
+    message: '{"user_id": "2"}'
+    metadata:
+      authorization: "Bearer user1-token-67890"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+  failure_indicators:
+    - type: "grpc_status"
+      code: [7, 16]
+  vulnerability_pattern: "grpc_unauthorized_admin_delete"

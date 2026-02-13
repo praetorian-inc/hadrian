@@ -1,0 +1,11 @@
+# gRPC Server Authentication Configuration
+method: bearer
+location: header
+
+roles:
+  admin:
+    token: "admin-token-12345"
+  user1:
+    token: "user1-token-67890"
+  user2:
+    token: "user2-token-abcde"

@@ -1,0 +1,35 @@
+id: grpc-api2-broken-auth-user-service
+info:
+  name: "gRPC Broken Authentication - No Token on Protected Endpoint"
+  category: "API2:2023 Broken Authentication"
+  severity: "CRITICAL"
+  author: "hadrian-test"
+  tags: ["grpc", "authentication", "api2", "user-service"]
+  requires_llm_triage: false
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.UserService"
+  method: "GetUser"
+
+role_selector:
+  attacker_permission_level: "none"
+
+grpc:
+  - method: "GetUser"
+    service: "vulnerable.v1.UserService"
+    message: '{"user_id": "2"}'
+    metadata: {}
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "body_field"
+      body_field: "username"
+      exists: true
+  failure_indicators:
+    - type: "grpc_status"
+      code: [16]
+  vulnerability_pattern: "grpc_unauthenticated_access"

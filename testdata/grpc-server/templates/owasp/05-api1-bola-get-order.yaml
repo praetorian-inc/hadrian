@@ -1,0 +1,40 @@
+id: grpc-bola-get-order
+info:
+  name: "gRPC BOLA - Unauthorized Order Read with Payment Info"
+  category: "API1:2023 Broken Object Level Authorization"
+  severity: "CRITICAL"
+  author: "hadrian-test"
+  tags: ["grpc", "bola", "api1", "authorization", "order-service", "payment-info"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.OrderService"
+  method: "GetOrder"
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+grpc:
+  - method: "GetOrder"
+    service: "vulnerable.v1.OrderService"
+    message: '{"order_id": "order-123"}'
+    metadata:
+      authorization: "Bearer user2-token-abcde"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "body_field"
+      body_field: "payment_card_last4"
+      exists: true
+    - type: "body_field"
+      body_field: "user_id"
+      exists: true
+  failure_indicators:
+    - type: "grpc_status"
+      code: [7, 16]
+  vulnerability_pattern: "grpc_attacker_accessed_victim_payment_info"
