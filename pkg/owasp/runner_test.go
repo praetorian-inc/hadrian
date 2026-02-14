@@ -32,7 +32,7 @@ func TestRunCategory(t *testing.T) {
 	// Create a mock server for HTTP responses
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"id": "123", "name": "test"}`))
+		_, _ = w.Write([]byte(`{"id": "123", "name": "test"}`))
 	}))
 	defer server.Close()
 
@@ -87,7 +87,7 @@ func TestRunCategory(t *testing.T) {
 		countServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			callCount++
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{}`))
+			_, _ = w.Write([]byte(`{}`))
 		}))
 		defer countServer.Close()
 
@@ -264,14 +264,14 @@ func TestRunCategory(t *testing.T) {
 			},
 		}
 
-		// Create cancelled context
+		// Create canceled context
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
 		// Act
 		findings, err := runner.RunCategory(ctx, spec, rolesCfg, "API1")
 
-		// Assert - should return early due to cancelled context
+		// Assert - should return early due to canceled context
 		// The exact behavior depends on implementation, but shouldn't panic
 		assert.NotNil(t, findings) // Returns whatever was collected
 		// Error may or may not be set depending on where cancellation is checked

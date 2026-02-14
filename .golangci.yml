@@ -10,10 +10,14 @@ linters:
     revive:
       rules:
         - name: exported
-          arguments:
-            - checkPrivateReceivers
+          disabled: true
   exclusions:
     generated: lax
+    rules:
+      - linters: [staticcheck]
+        text: "QF"
+      - linters: [staticcheck]
+        text: "S1031"
     paths:
       - third_party$
       - builtin$

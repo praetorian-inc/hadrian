@@ -89,7 +89,7 @@ func (p *RESTPlugin) Parse(input []byte) (*model.APISpec, error) {
 // Helper functions (to be implemented)
 
 func extractBaseURL(doc *openapi3.T) string {
-	if doc.Servers != nil && len(doc.Servers) > 0 {
+	if len(doc.Servers) > 0 {
 		return doc.Servers[0].URL
 	}
 	return ""

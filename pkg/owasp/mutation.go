@@ -238,7 +238,7 @@ func (e *MutationExecutor) executePhase(
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
@@ -360,13 +360,4 @@ func headerMapFromResponse(resp *http.Response) map[string]string {
 		}
 	}
 	return m
-}
-
-// getMapKeys returns the keys of a map for debugging
-func getMapKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }

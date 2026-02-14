@@ -54,13 +54,13 @@ func TestParse_FileTooLarge(t *testing.T) {
 	// Create a large file (>1MB)
 	tmpFile, err := os.CreateTemp("", "large-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	// Write > 1MB
 	data := make([]byte, MaxYAMLSize+1)
 	_, err = tmpFile.Write(data)
 	require.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	_, err = Parse(tmpFile.Name())
 	require.Error(t, err)

@@ -20,10 +20,10 @@ type Client struct {
 }
 
 type Config struct {
-	Proxy       string        // http://localhost:8080
-	CACert      string        // Path to CA certificate (Burp)
-	Insecure    bool          // Skip TLS verification
-	Timeout     time.Duration // Request timeout
+	Proxy    string        // http://localhost:8080
+	CACert   string        // Path to CA certificate (Burp)
+	Insecure bool          // Skip TLS verification
+	Timeout  time.Duration // Request timeout
 }
 
 func New(config *Config) (*Client, error) {
@@ -54,11 +54,11 @@ func New(config *Config) (*Client, error) {
 
 	// Configure transport with proxy support
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,  // Respects HTTP_PROXY env var
+		Proxy: http.ProxyFromEnvironment, // Respects HTTP_PROXY env var
 		TLSClientConfig: &tls.Config{
 			RootCAs:            rootCAs,
 			InsecureSkipVerify: config.Insecure,
-			MinVersion:         tls.VersionTLS13,  // TLS 1.3 enforcement (HR-3)
+			MinVersion:         tls.VersionTLS13, // TLS 1.3 enforcement (HR-3)
 		},
 	}
 

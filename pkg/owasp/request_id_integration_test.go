@@ -26,18 +26,18 @@ func TestExecuteMutation_TracksRequestIDs(t *testing.T) {
 			setupRequestID = requestID
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte(`{"id": "video123"}`))
+			_, _ = w.Write([]byte(`{"id": "video123"}`))
 		case "/api/videos/video123":
 			if r.Header.Get("Authorization") == "Bearer attacker-token" {
 				attackRequestID = requestID
 				// Attack succeeds (BOLA vulnerability)
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`{"id": "video123", "title": "Private Video"}`))
+				_, _ = w.Write([]byte(`{"id": "video123", "title": "Private Video"}`))
 			} else {
 				verifyRequestID = requestID
 				// Verify succeeds
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`{"id": "video123", "title": "Private Video"}`))
+				_, _ = w.Write([]byte(`{"id": "video123", "title": "Private Video"}`))
 			}
 		default:
 			w.WriteHeader(http.StatusNotFound)

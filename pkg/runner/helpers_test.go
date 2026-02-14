@@ -194,7 +194,7 @@ func TestTerminalReporter_ReportFinding(t *testing.T) {
 	// Capture stdout
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	rep := NewTerminalReporter(tmpFile, 1)
 	finding := &model.Finding{
@@ -210,7 +210,7 @@ func TestTerminalReporter_ReportFinding(t *testing.T) {
 	rep.ReportFinding(finding)
 
 	// Read output
-	tmpFile.Seek(0, 0)
+	_, _ = tmpFile.Seek(0, 0)
 	output := make([]byte, 1024)
 	n, _ := tmpFile.Read(output)
 
@@ -222,7 +222,7 @@ func TestTerminalReporter_ReportFinding_WithLLMAnalysis(t *testing.T) {
 	// Capture stdout
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	rep := NewTerminalReporter(tmpFile, 1)
 	finding := &model.Finding{
@@ -242,7 +242,7 @@ func TestTerminalReporter_ReportFinding_WithLLMAnalysis(t *testing.T) {
 	rep.ReportFinding(finding)
 
 	// Read output
-	tmpFile.Seek(0, 0)
+	_, _ = tmpFile.Seek(0, 0)
 	output := make([]byte, 1024)
 	n, _ := tmpFile.Read(output)
 	outputStr := string(output[:n])
@@ -255,7 +255,7 @@ func TestTerminalReporter_ReportFinding_WithoutLLMAnalysis(t *testing.T) {
 	// Capture stdout
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	rep := NewTerminalReporter(tmpFile, 1)
 	finding := &model.Finding{
@@ -272,7 +272,7 @@ func TestTerminalReporter_ReportFinding_WithoutLLMAnalysis(t *testing.T) {
 	rep.ReportFinding(finding)
 
 	// Read output
-	tmpFile.Seek(0, 0)
+	_, _ = tmpFile.Seek(0, 0)
 	output := make([]byte, 1024)
 	n, _ := tmpFile.Read(output)
 	outputStr := string(output[:n])
@@ -286,7 +286,7 @@ func TestTerminalReporter_ReportFinding_WithoutLLMAnalysis(t *testing.T) {
 func TestTerminalReporter_GenerateReport(t *testing.T) {
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	rep := NewTerminalReporter(tmpFile, 1)
 	stats := &Stats{
@@ -305,7 +305,7 @@ func TestTerminalReporter_GenerateReport(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read output
-	tmpFile.Seek(0, 0)
+	_, _ = tmpFile.Seek(0, 0)
 	output := make([]byte, 4096)
 	n, _ := tmpFile.Read(output)
 
@@ -317,7 +317,7 @@ func TestTerminalReporter_GenerateReport(t *testing.T) {
 func TestTerminalReporter_GenerateReport_WithLLMFindings(t *testing.T) {
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	rep := NewTerminalReporter(tmpFile, 1)
 	rep.SetLLMMode(true) // Enable LLM mode
@@ -352,7 +352,7 @@ func TestTerminalReporter_GenerateReport_WithLLMFindings(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read output
-	tmpFile.Seek(0, 0)
+	_, _ = tmpFile.Seek(0, 0)
 	output := make([]byte, 4096)
 	n, _ := tmpFile.Read(output)
 	outputStr := string(output[:n])
@@ -371,7 +371,7 @@ func TestTerminalReporter_GenerateReport_LLMModeWithoutAnalysis(t *testing.T) {
 	// in triageWithLLM as they fail, so GenerateReport only shows summary.
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	rep := NewTerminalReporter(tmpFile, 1)
 	rep.SetLLMMode(true) // LLM mode enabled
@@ -401,7 +401,7 @@ func TestTerminalReporter_GenerateReport_LLMModeWithoutAnalysis(t *testing.T) {
 	require.NoError(t, err)
 
 	// Read output
-	tmpFile.Seek(0, 0)
+	_, _ = tmpFile.Seek(0, 0)
 	output := make([]byte, 4096)
 	n, _ := tmpFile.Read(output)
 	outputStr := string(output[:n])
@@ -492,38 +492,35 @@ func TestMarkdownReporter_GenerateReport(t *testing.T) {
 
 func TestGetTemplateDir_Default(t *testing.T) {
 	// Unset env var
-	os.Unsetenv("HADRIAN_TEMPLATES")
+	_ = os.Unsetenv("HADRIAN_TEMPLATES")
 
 	dir := getTemplateDir()
 	assert.Equal(t, "./templates/owasp", dir)
 }
 
 func TestGetTemplateDir_EnvOverride(t *testing.T) {
-	os.Setenv("HADRIAN_TEMPLATES", "/custom/templates")
-	defer os.Unsetenv("HADRIAN_TEMPLATES")
+	t.Setenv("HADRIAN_TEMPLATES", "/custom/templates")
 
 	dir := getTemplateDir()
 	assert.Equal(t, "/custom/templates", dir)
 }
 
 func TestHasLLMConfig_NoConfig(t *testing.T) {
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	assert.False(t, hasLLMConfig())
 }
 
 func TestHasLLMConfig_WithAnthropic(t *testing.T) {
-	os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer os.Unsetenv("ANTHROPIC_API_KEY")
+	t.Setenv("ANTHROPIC_API_KEY", "test-key")
 
 	assert.True(t, hasLLMConfig())
 }
 
 func TestHasLLMConfig_WithOpenAI(t *testing.T) {
-	os.Setenv("OPENAI_API_KEY", "test-key")
-	defer os.Unsetenv("OPENAI_API_KEY")
+	t.Setenv("OPENAI_API_KEY", "test-key")
 
 	assert.True(t, hasLLMConfig())
 }
@@ -534,9 +531,9 @@ func TestHasLLMConfig_WithOpenAI(t *testing.T) {
 
 func TestTriageWithLLM_NoProvider(t *testing.T) {
 	// Ensure no LLM providers are configured
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	ctx := context.Background()
 	findings := []*model.Finding{
@@ -553,7 +550,7 @@ func TestTriageWithLLM_NoProvider(t *testing.T) {
 	// Create a mock reporter
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 	rep := NewTerminalReporter(tmpFile, 1)
 
 	// Should return findings unchanged (no LLM available)
@@ -578,9 +575,9 @@ func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
 	// For now, we test that the signature accepts a Reporter and the function
 	// doesn't panic. Integration tests would verify the full workflow.
 
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	ctx := context.Background()
 	findings := []*model.Finding{
@@ -595,7 +592,7 @@ func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
 
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 	rep := NewTerminalReporter(tmpFile, 1)
 
 	// Should not panic with reporter parameter
@@ -609,9 +606,9 @@ func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
 
 func TestTriageWithLLM_WithContext(t *testing.T) {
 	// Ensure no LLM providers are configured (so we don't make actual API calls)
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	ctx := context.Background()
 	findings := []*model.Finding{
@@ -628,7 +625,7 @@ func TestTriageWithLLM_WithContext(t *testing.T) {
 	// Create a mock reporter
 	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
 	require.NoError(t, err)
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 	rep := NewTerminalReporter(tmpFile, 1)
 
 	customContext := "This API handles PCI-DSS regulated payment data"
@@ -688,11 +685,11 @@ paths:
 
 	err = parseCmdHandler(tmpFile)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = oldStdout
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
 	require.NoError(t, err)

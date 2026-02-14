@@ -96,11 +96,11 @@ func (o *OllamaClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 	if err != nil {
 		return nil, fmt.Errorf("failed to call Ollama API: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("Ollama API returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		return nil, fmt.Errorf("ollama API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	// Parse Ollama response

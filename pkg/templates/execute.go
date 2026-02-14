@@ -165,7 +165,7 @@ func (e *Executor) Execute(
 
 				// Read response body
 				bodyBytes, err = io.ReadAll(resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if err != nil {
 					return nil, fmt.Errorf("failed to read response body: %w", err)
 				}
@@ -340,11 +340,9 @@ func buildRequest(
 
 	// Substitute path parameters
 	// Replace both {{key}} (template variables) and {key} (OpenAPI path params)
-	if variables != nil {
-		for key, value := range variables {
-			path = strings.ReplaceAll(path, "{{"+key+"}}", value)
-			path = strings.ReplaceAll(path, "{"+key+"}", value)
-		}
+	for key, value := range variables {
+		path = strings.ReplaceAll(path, "{{"+key+"}}", value)
+		path = strings.ReplaceAll(path, "{"+key+"}", value)
 	}
 
 	// Check for unresolved placeholders - error if any remain
@@ -439,10 +437,8 @@ func evaluateWordMatcher(matcher *CompiledMatcher, resp *http.Response, body str
 			if matcher.Condition == "or" {
 				return true // Short-circuit on first match
 			}
-		} else {
-			if matcher.Condition == "and" {
-				return false // Short-circuit on first non-match
-			}
+		} else if matcher.Condition == "and" {
+			return false // Short-circuit on first non-match
 		}
 	}
 
@@ -465,10 +461,8 @@ func evaluateRegexMatcher(matcher *CompiledMatcher, resp *http.Response, body st
 			if matcher.Condition == "or" {
 				return true // Short-circuit
 			}
-		} else {
-			if matcher.Condition == "and" {
-				return false // Short-circuit
-			}
+		} else if matcher.Condition == "and" {
+			return false // Short-circuit
 		}
 	}
 

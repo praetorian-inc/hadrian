@@ -56,7 +56,7 @@ func NewRateLimiter(globalRate, endpointRate float64) *RateLimiter {
 }
 
 // Wait blocks until request is allowed (respects both global and endpoint limits)
-// Returns error if context is cancelled before permission is granted
+// Returns error if context is canceled before permission is granted
 func (rl *RateLimiter) Wait(ctx context.Context, endpoint string) error {
 	// Global rate limit (all endpoints)
 	if err := rl.globalLimiter.Wait(ctx); err != nil {

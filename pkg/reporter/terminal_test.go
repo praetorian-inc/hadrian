@@ -239,7 +239,7 @@ func TestTerminalReporter_GenerateReport_ShowsOperationsAndTemplates(t *testing.
 func TestTerminalReporter_ReportFinding_WithRequestIDs(t *testing.T) {
 	var buf bytes.Buffer
 	reporter := NewTerminalReporter(&buf, false)
-	
+
 	finding := createTestFinding(model.SeverityHigh, "API1")
 	finding.RequestIDs = []string{"req-abc123", "req-def456"}
 
@@ -257,7 +257,7 @@ func TestTerminalReporter_ReportFinding_WithRequestIDs(t *testing.T) {
 func TestTerminalReporter_ReportFinding_NoRequestIDs(t *testing.T) {
 	var buf bytes.Buffer
 	reporter := NewTerminalReporter(&buf, false)
-	
+
 	finding := createTestFinding(model.SeverityHigh, "API1")
 	finding.RequestIDs = []string{} // Empty
 

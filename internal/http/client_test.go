@@ -5,7 +5,6 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -109,7 +108,7 @@ func TestDo(t *testing.T) {
 		assert.Equal(t, "/test", r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("test response"))
+		_, _ = w.Write([]byte("test response"))
 	}))
 	defer server.Close()
 
@@ -126,7 +125,7 @@ func TestDo(t *testing.T) {
 
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	assert.Equal(t, "test response", string(body))
 }
@@ -134,10 +133,8 @@ func TestDo(t *testing.T) {
 func TestNew_ProxyWithAuth(t *testing.T) {
 	// Test proxy authentication from PROXY_USERNAME/PROXY_PASSWORD environment
 	// Set environment variables
-	os.Setenv("PROXY_USERNAME", "testuser")
-	os.Setenv("PROXY_PASSWORD", "testpass")
-	defer os.Unsetenv("PROXY_USERNAME")
-	defer os.Unsetenv("PROXY_PASSWORD")
+	t.Setenv("PROXY_USERNAME", "testuser")
+	t.Setenv("PROXY_PASSWORD", "testpass")
 
 	config := &Config{
 		Proxy:   "http://localhost:8080",

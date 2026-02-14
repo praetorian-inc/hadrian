@@ -28,8 +28,8 @@ func NewRedactor() *Redactor {
 			"sk_key":   regexp.MustCompile(`[sp]k[-_][A-Za-z0-9_]{10,}`),
 			"bearer":   regexp.MustCompile(`(?i)bearer\s+[A-Za-z0-9\-_.]+`),
 			"basic":    regexp.MustCompile(`(?i)basic\s+[A-Za-z0-9+/=]+`),
-			  "api_key":  regexp.MustCompile(`(?i)(api[_-]?(key|token)|apikey)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
-			  "password": regexp.MustCompile(`(?i)(password|passwd|pwd)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
+			"api_key":  regexp.MustCompile(`(?i)(api[_-]?(key|token)|apikey)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
+			"password": regexp.MustCompile(`(?i)(password|passwd|pwd)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
 		},
 	}
 }

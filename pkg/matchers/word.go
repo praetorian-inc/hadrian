@@ -30,10 +30,8 @@ func (m *WordMatcher) Match(response *http.Response, body string) bool {
 			if m.condition == "or" {
 				return true // Short-circuit on first match
 			}
-		} else {
-			if m.condition == "and" {
-				return false // Short-circuit on first non-match
-			}
+		} else if m.condition == "and" {
+			return false // Short-circuit on first non-match
 		}
 	}
 
