@@ -66,10 +66,11 @@ func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient templates
 // createGraphQLHTTPClient creates HTTP client with proxy, TLS, and timeout settings
 func createGraphQLHTTPClient(config GraphQLConfig) (templates.HTTPClient, error) {
 	httpConfig := &internalhttp.Config{
-		Proxy:    config.Proxy,
-		CACert:   config.CACert,
-		Insecure: config.Insecure,
-		Timeout:  time.Duration(config.Timeout) * time.Second,
+		Proxy:         config.Proxy,
+		CACert:        config.CACert,
+		Insecure:      config.Insecure,
+		Timeout:       time.Duration(config.Timeout) * time.Second,
+		AllowInternal: config.AllowInternal,
 	}
 	return internalhttp.New(httpConfig)
 }
