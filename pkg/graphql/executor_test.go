@@ -17,14 +17,14 @@ func TestExecutor_Execute(t *testing.T) {
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
 		var req GraphQLRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		assert.Contains(t, req.Query, "user")
 
 		response := GraphQLResponse{
 			Data: json.RawMessage(`{"user":{"id":"1","name":"Test"}}`),
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -48,7 +48,7 @@ func TestExecutor_WithAuth(t *testing.T) {
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 
 		response := GraphQLResponse{Data: json.RawMessage(`{}`)}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -71,7 +71,7 @@ func TestExecutor_ErrorHandling(t *testing.T) {
 				{Message: "Field not found"},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -114,17 +114,17 @@ func TestExecutor_ResponseSizeLimit(t *testing.T) {
 
 		// Write exactly 10MB + 1 byte to exceed limit
 		// First write the JSON structure opening
-		w.Write([]byte(`{"data":"`))
+		_, _ = w.Write([]byte(`{"data":"`))
 
 		// Write large data
 		largeData := make([]byte, 11*1024*1024) // 11MB
 		for i := range largeData {
 			largeData[i] = 'x'
 		}
-		w.Write(largeData)
+		_, _ = w.Write(largeData)
 
 		// Close JSON structure
-		w.Write([]byte(`"}`))
+		_, _ = w.Write([]byte(`"}`))
 	}))
 	defer server.Close()
 

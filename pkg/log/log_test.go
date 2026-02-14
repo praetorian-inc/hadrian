@@ -186,14 +186,14 @@ func captureStderr(t *testing.T, fn func()) string {
 	fn()
 
 	// Close writer and restore stderr
-	w.Close()
+	_ = w.Close()
 	os.Stderr = oldStderr
 
 	// Read captured output
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
 	require.NoError(t, err)
-	r.Close()
+	_ = r.Close()
 
 	return buf.String()
 }

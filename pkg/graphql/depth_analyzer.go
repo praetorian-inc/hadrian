@@ -82,12 +82,13 @@ func calculateComplexity(query string) int {
 			continue
 		}
 		// Count depth-weighted fields
-		if strings.HasSuffix(word, "{") {
+		switch {
+		case strings.HasSuffix(word, "{"):
 			depth++
 			fieldCount += depth // Fields at deeper levels cost more
-		} else if word == "}" {
+		case word == "}":
 			depth--
-		} else if !strings.HasPrefix(word, "$") && !strings.Contains(word, ":") {
+		case !strings.HasPrefix(word, "$") && !strings.Contains(word, ":"):
 			// This looks like a field name
 			if i+1 < len(words) && (words[i+1] == "{" || words[i+1][0] == '}') {
 				fieldCount += max(1, depth)

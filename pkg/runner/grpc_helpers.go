@@ -35,7 +35,7 @@ func grpcStatusToString(code int) string {
 	case 0:
 		return "OK"
 	case 1:
-		return "CANCELLED"
+		return "CANCELED"
 	case 2:
 		return "UNKNOWN"
 	case 3:

@@ -264,7 +264,7 @@ func TestFetchSchema_Introspection(t *testing.T) {
 				}
 			}
 		}`
-		w.Write([]byte(response))
+		_, _ = w.Write([]byte(response))
 	}))
 	defer server.Close()
 
@@ -304,7 +304,7 @@ func TestFetchSchema_IntrospectionFailure(t *testing.T) {
 	// Create server that returns error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
+		_, _ = w.Write([]byte("Internal Server Error"))
 	}))
 	defer server.Close()
 
@@ -359,7 +359,7 @@ func TestRunTemplateTests_ReturnsTemplateCount(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": {"test": "value"}}`))
+		_, _ = w.Write([]byte(`{"data": {"test": "value"}}`))
 	}))
 	defer server.Close()
 
@@ -399,7 +399,7 @@ func TestRunSecurityChecks_NoTemplates(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"data": {}}`))
+		_, _ = w.Write([]byte(`{"data": {}}`))
 	}))
 	defer server.Close()
 

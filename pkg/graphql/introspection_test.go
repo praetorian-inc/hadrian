@@ -58,7 +58,7 @@ func TestIntrospectionClient_FetchSchema(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -85,7 +85,7 @@ func TestIntrospectionClient_WithAuth(t *testing.T) {
 				},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 
@@ -104,7 +104,7 @@ func TestIntrospectionClient_ErrorHandling(t *testing.T) {
 				{Message: "Introspection is disabled"},
 			},
 		}
-		json.NewEncoder(w).Encode(response)
+		_ = json.NewEncoder(w).Encode(response)
 	}))
 	defer server.Close()
 

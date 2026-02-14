@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -18,7 +17,7 @@ func TestSecurityScanner_CheckIntrospection(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"data":{"__schema":{"types":[{"name":"Query"}]}}}`))
+			_, _ = w.Write([]byte(`{"data":{"__schema":{"types":[{"name":"Query"}]}}}`))
 		}))
 		defer server.Close()
 
@@ -65,7 +64,7 @@ func TestSecurityScanner_CheckDepthLimit(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"data":{"user":{"friend":{"friend":{"friend":{"id":"123"}}}}}}`))
+			_, _ = w.Write([]byte(`{"data":{"user":{"friend":{"friend":{"friend":{"id":"123"}}}}}}`))
 		}))
 		defer server.Close()
 
@@ -119,7 +118,7 @@ func TestSecurityScanner_CheckDepthLimit(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"errors":[{"message":"Query depth limit exceeded"}]}`))
+			_, _ = w.Write([]byte(`{"errors":[{"message":"Query depth limit exceeded"}]}`))
 		}))
 		defer server.Close()
 
@@ -165,7 +164,7 @@ func TestSecurityScanner_CheckBatchingLimit(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"data":{"q1":{"id":"1"},"q2":{"id":"2"},"q3":{"id":"3"}}}`))
+			_, _ = w.Write([]byte(`{"data":{"q1":{"id":"1"},"q2":{"id":"2"},"q3":{"id":"3"}}}`))
 		}))
 		defer server.Close()
 
@@ -217,7 +216,7 @@ func TestSecurityScanner_CheckBatchingLimit(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"errors":[{"message":"Batching limit exceeded"}]}`))
+			_, _ = w.Write([]byte(`{"errors":[{"message":"Batching limit exceeded"}]}`))
 		}))
 		defer server.Close()
 
@@ -263,7 +262,7 @@ func TestSecurityScanner_CheckDepthLimit_UsesSchemaFields(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			// Return success for paste query
-			w.Write([]byte(`{"data":{"paste":{"content":{"content":{"content":"nested"}}}}}}`))
+			_, _ = w.Write([]byte(`{"data":{"paste":{"content":{"content":{"content":"nested"}}}}}}`))
 		}))
 		defer server.Close()
 
@@ -319,7 +318,7 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 
 			// Return victim's data regardless of auth header
-			w.Write([]byte(`{"data":{"user":{"id":"victim-123","email":"victim@example.com"}}}`))
+			_, _ = w.Write([]byte(`{"data":{"user":{"id":"victim-123","email":"victim@example.com"}}}`))
 		}))
 		defer server.Close()
 
@@ -389,12 +388,12 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 			if authHeader == "attacker-token" {
 				// Attacker trying to access victim data - return error
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`{"errors":[{"message":"Unauthorized"}]}`))
+				_, _ = w.Write([]byte(`{"errors":[{"message":"Unauthorized"}]}`))
 				return
 			}
 
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"data":{"user":{"id":"victim-123"}}}`))
+			_, _ = w.Write([]byte(`{"data":{"user":{"id":"victim-123"}}}`))
 		}))
 		defer server.Close()
 
@@ -469,19 +468,15 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 		// Create test server that returns real data
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body := make([]byte, r.ContentLength)
-			r.Body.Read(body)
+			_, _ = r.Body.Read(body)
 			queryLog = append(queryLog, string(body))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 
-			// First query (victim getting their own data) returns their ID
-			if strings.Contains(string(body), "victim-token") || len(queryLog) == 1 {
-				w.Write([]byte(`{"data":{"user":{"id":"victim-real-id-456","email":"victim@example.com"}}}`))
-			} else {
-				// Second query (attacker trying to access victim's data)
-				w.Write([]byte(`{"data":{"user":{"id":"victim-real-id-456","email":"victim@example.com"}}}`))
-			}
+			// Both victim and attacker queries return the same data
+			// (simulating a BOLA vulnerability where attacker can access victim's data)
+			_, _ = w.Write([]byte(`{"data":{"user":{"id":"victim-real-id-456","email":"victim@example.com"}}}`))
 		}))
 		defer server.Close()
 
@@ -526,7 +521,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 
 			// Return success for delete mutation regardless of auth
-			w.Write([]byte(`{"data":{"deleteUser":{"success":true}}}`))
+			_, _ = w.Write([]byte(`{"data":{"deleteUser":{"success":true}}}`))
 		}))
 		defer server.Close()
 
@@ -595,12 +590,12 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			if authHeader == "user-token" {
 				// Low-priv user trying admin mutation - return error
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`{"errors":[{"message":"Insufficient privileges"}]}`))
+				_, _ = w.Write([]byte(`{"errors":[{"message":"Insufficient privileges"}]}`))
 				return
 			}
 
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"data":{"deleteUser":{"success":true}}}`))
+			_, _ = w.Write([]byte(`{"data":{"deleteUser":{"success":true}}}`))
 		}))
 		defer server.Close()
 
@@ -662,7 +657,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(`{"data":{"` + mutationName + `":{"success":true}}}`))
+				_, _ = w.Write([]byte(`{"data":{"` + mutationName + `":{"success":true}}}`))
 			}))
 			defer server.Close()
 
@@ -703,7 +698,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"data":{"deleteUser":{"success":true}}}`))
+			_, _ = w.Write([]byte(`{"data":{"deleteUser":{"success":true}}}`))
 		}))
 		defer server.Close()
 
@@ -751,7 +746,7 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			// Return success for all queries
-			w.Write([]byte(`{"data":{"__schema":{"types":[{"name":"Query"}]}}}`))
+			_, _ = w.Write([]byte(`{"data":{"__schema":{"types":[{"name":"Query"}]}}}`))
 		}))
 		defer server.Close()
 
@@ -793,7 +788,7 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			// Return errors for all queries
-			w.Write([]byte(`{"errors":[{"message":"Forbidden"}]}`))
+			_, _ = w.Write([]byte(`{"errors":[{"message":"Forbidden"}]}`))
 		}))
 		defer server.Close()
 

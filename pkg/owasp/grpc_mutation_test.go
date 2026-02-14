@@ -34,11 +34,12 @@ func (m *mockGRPCExecutor) ExecuteGRPC(
 	if len(tmpl.GRPC) > 0 {
 		method := tmpl.GRPC[0].Method
 		// Determine phase based on method name
-		if strings.Contains(method, "Create") {
+		switch {
+		case strings.Contains(method, "Create"):
 			return m.responses["setup"], nil
-		} else if strings.Contains(method, "Delete") {
+		case strings.Contains(method, "Delete"):
 			return m.responses["attack"], nil
-		} else if strings.Contains(method, "Get") {
+		case strings.Contains(method, "Get"):
 			return m.responses["verify"], nil
 		}
 	}

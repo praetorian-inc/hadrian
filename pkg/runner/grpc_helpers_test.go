@@ -60,7 +60,7 @@ func TestGRPCStatusToString(t *testing.T) {
 		expected string
 	}{
 		{0, "OK"},
-		{1, "CANCELLED"},
+		{1, "CANCELED"},
 		{2, "UNKNOWN"},
 		{3, "INVALID_ARGUMENT"},
 		{4, "DEADLINE_EXCEEDED"},

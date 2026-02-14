@@ -97,9 +97,7 @@ func convertTypeDef(def *ast.Definition) *TypeDef {
 	}
 
 	// Convert interfaces
-	for _, iface := range def.Interfaces {
-		typeDef.Interfaces = append(typeDef.Interfaces, iface)
-	}
+	typeDef.Interfaces = append(typeDef.Interfaces, def.Interfaces...)
 
 	return typeDef
 }

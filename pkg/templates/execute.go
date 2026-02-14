@@ -472,7 +472,7 @@ func (e *Executor) ExecuteGraphQL(
 			if err != nil {
 				return nil, nil, fmt.Errorf("GraphQL request failed: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			// Read with size limit to prevent memory exhaustion
 			limitedReader := io.LimitReader(resp.Body, MaxResponseBodySize)
