@@ -499,7 +499,8 @@ func TestGetTemplateDir_Default(t *testing.T) {
 }
 
 func TestGetTemplateDir_EnvOverride(t *testing.T) {
-	t.Setenv("HADRIAN_TEMPLATES", "/custom/templates")
+	_ = os.Setenv("HADRIAN_TEMPLATES", "/custom/templates")
+	defer func() { _ = os.Unsetenv("HADRIAN_TEMPLATES") }()
 
 	dir := getTemplateDir()
 	assert.Equal(t, "/custom/templates", dir)
@@ -514,13 +515,15 @@ func TestHasLLMConfig_NoConfig(t *testing.T) {
 }
 
 func TestHasLLMConfig_WithAnthropic(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "test-key")
+	_ = os.Setenv("ANTHROPIC_API_KEY", "test-key")
+	defer func() { _ = os.Unsetenv("ANTHROPIC_API_KEY") }()
 
 	assert.True(t, hasLLMConfig())
 }
 
 func TestHasLLMConfig_WithOpenAI(t *testing.T) {
-	t.Setenv("OPENAI_API_KEY", "test-key")
+	_ = os.Setenv("OPENAI_API_KEY", "test-key")
+	defer func() { _ = os.Unsetenv("OPENAI_API_KEY") }()
 
 	assert.True(t, hasLLMConfig())
 }

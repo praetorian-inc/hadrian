@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -133,8 +134,10 @@ func TestDo(t *testing.T) {
 func TestNew_ProxyWithAuth(t *testing.T) {
 	// Test proxy authentication from PROXY_USERNAME/PROXY_PASSWORD environment
 	// Set environment variables
-	t.Setenv("PROXY_USERNAME", "testuser")
-	t.Setenv("PROXY_PASSWORD", "testpass")
+	_ = os.Setenv("PROXY_USERNAME", "testuser")
+	_ = os.Setenv("PROXY_PASSWORD", "testpass")
+	defer func() { _ = os.Unsetenv("PROXY_USERNAME") }()
+	defer func() { _ = os.Unsetenv("PROXY_PASSWORD") }()
 
 	config := &Config{
 		Proxy:   "http://localhost:8080",

@@ -82,7 +82,8 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	t.Setenv("OLLAMA_HOST", server.URL)
+	_ = os.Setenv("OLLAMA_HOST", server.URL)
+	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
 
 	// Act
 	ctx := context.Background()
@@ -94,7 +95,8 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 
 func TestIsOllamaRunning_WithCustomHostNotRunning(t *testing.T) {
 	// Arrange - Set custom host that doesn't exist
-	t.Setenv("OLLAMA_HOST", "http://localhost:99999")
+	_ = os.Setenv("OLLAMA_HOST", "http://localhost:99999")
+	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
 
 	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

@@ -36,7 +36,8 @@ func TestNewOllamaClient_UsesDefaultHost(t *testing.T) {
 func TestNewOllamaClient_UsesCustomHost(t *testing.T) {
 	// Arrange
 	customHost := "http://localhost:11435"
-	t.Setenv("OLLAMA_HOST", customHost)
+	_ = os.Setenv("OLLAMA_HOST", customHost)
+	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
 
 	// Act
 	client := NewOllamaClient()
@@ -82,7 +83,8 @@ func TestNewOllamaClientWithConfig_EmptyModelUsesEnv(t *testing.T) {
 	// Arrange
 	customHost := "http://localhost:11435"
 	envModel := "custom-model:v1"
-	t.Setenv("OLLAMA_MODEL", envModel)
+	_ = os.Setenv("OLLAMA_MODEL", envModel)
+	defer func() { _ = os.Unsetenv("OLLAMA_MODEL") }()
 
 	// Act
 	client := NewOllamaClientWithConfig(customHost, "", 180*time.Second, "")
