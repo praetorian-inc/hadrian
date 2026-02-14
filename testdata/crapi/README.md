@@ -101,7 +101,7 @@ From the repository root:
 ```bash
 # Load environment variables and run tests
 set -a && source testdata/crapi/.env && set +a && \
-HADRIAN_TEMPLATES=testdata/crapi/templates/owasp ./hadrian test \
+HADRIAN_TEMPLATES=testdata/crapi/templates/rest ./hadrian test \
   --api testdata/crapi/crapi-openapi-spec.json \
   --roles testdata/crapi/roles.yaml \
   --auth testdata/crapi/auth.yaml \

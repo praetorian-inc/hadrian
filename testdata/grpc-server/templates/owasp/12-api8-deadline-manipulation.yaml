@@ -1,0 +1,36 @@
+id: grpc-api8-deadline-manipulation
+info:
+  name: "gRPC Deadline Manipulation - Server Ignores Client Deadline"
+  category: "API8:2023 Security Misconfiguration"
+  severity: "LOW"
+  author: "hadrian-test"
+  tags: ["grpc", "deadline", "timeout", "api8", "order-service", "streaming"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.OrderService"
+  method: "StreamOrders"
+
+role_selector:
+  attacker_permission_level: "lower"
+
+grpc:
+  - method: "StreamOrders"
+    service: "vulnerable.v1.OrderService"
+    message: '{"user_id": "3", "limit": 100}'
+    metadata:
+      authorization: "Bearer user2-token-abcde"
+    deadline_ms: 100
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "response_time"
+      min_ms: 150
+  failure_indicators:
+    - type: "grpc_status"
+      code: [4]
+  vulnerability_pattern: "grpc_deadline_ignored"

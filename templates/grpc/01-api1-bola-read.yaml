@@ -1,0 +1,36 @@
+id: 01-grpc-api1-bola-read
+info:
+  name: "gRPC BOLA - Unauthorized Resource Read"
+  category: "API1:2023 Broken Object Level Authorization"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["grpc", "bola", "api1", "authorization"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  methods: ["Get*", "Read*", "Fetch*", "Find*"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+grpc:
+  - method: "{{operation.method}}"
+    service: "{{operation.service}}"
+    message: '{"{{operation.owner_field}}": "{{victim_id}}"}'
+    metadata:
+      authorization: "Bearer {{attacker_token}}"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "body_field"
+      body_field: "data"
+      exists: true
+  failure_indicators:
+    - type: "grpc_status"
+      code: [7, 16]
+  vulnerability_pattern: "grpc_attacker_accessed_victim_data"

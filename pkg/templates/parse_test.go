@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -359,4 +360,81 @@ test_phases:
 	assert.Equal(t, "victim", tmpl.TestPhases.Setup[1].Auth)
 	require.NotNil(t, tmpl.TestPhases.Setup[1].StoreResponseFields)
 	assert.Equal(t, "video_id", tmpl.TestPhases.Setup[1].StoreResponseFields["victim_video_id"])
+}
+
+func TestValidateTemplate_RejectsDSLMatchers(t *testing.T) {
+	tests := []struct {
+		name         string
+		templateID   string
+		testIndex    int
+		matcherIndex int
+	}{
+		{
+			name:         "single DSL matcher",
+			templateID:   "test-template-1",
+			testIndex:    0,
+			matcherIndex: 0,
+		},
+		{
+			name:         "DSL in second matcher",
+			templateID:   "test-template-2",
+			testIndex:    0,
+			matcherIndex: 1,
+		},
+		{
+			name:         "DSL in second test",
+			templateID:   "test-template-3",
+			testIndex:    1,
+			matcherIndex: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpl := &Template{
+				ID: tt.templateID,
+				Info: TemplateInfo{
+					Name:     "Test",
+					Category: "TEST",
+				},
+				HTTP: []HTTPTest{
+					{
+						Method: "GET",
+						Path:   "/test",
+						Matchers: []Matcher{
+							{Type: "status", Status: []int{200}},
+						},
+					},
+				},
+			}
+
+			// Add additional test if needed
+			if tt.testIndex == 1 {
+				tmpl.HTTP = append(tmpl.HTTP, HTTPTest{
+					Method:   "POST",
+					Path:     "/test2",
+					Matchers: []Matcher{},
+				})
+			}
+
+			// Add additional matcher if needed
+			if tt.matcherIndex == 1 {
+				tmpl.HTTP[tt.testIndex].Matchers = append(tmpl.HTTP[tt.testIndex].Matchers, Matcher{Type: "word", Words: []string{"test"}})
+			}
+
+			// Insert DSL matcher at specified position
+			dslMatcher := Matcher{Type: "dsl"}
+			tmpl.HTTP[tt.testIndex].Matchers = append(
+				tmpl.HTTP[tt.testIndex].Matchers[:tt.matcherIndex],
+				append([]Matcher{dslMatcher}, tmpl.HTTP[tt.testIndex].Matchers[tt.matcherIndex:]...)...,
+			)
+
+			err := validateTemplate(tmpl)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "DSL matchers are not supported")
+			assert.Contains(t, err.Error(), tt.templateID)
+			assert.Contains(t, err.Error(), fmt.Sprintf("test %d", tt.testIndex+1))
+			assert.Contains(t, err.Error(), fmt.Sprintf("matcher %d", tt.matcherIndex+1))
+		})
+	}
 }

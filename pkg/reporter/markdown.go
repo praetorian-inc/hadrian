@@ -97,7 +97,7 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 		}
 	}
 
-	return os.WriteFile(r.outputPath, []byte(sb.String()), 0644)
+	return os.WriteFile(r.outputPath, []byte(sb.String()), 0600)
 }
 
 // groupBySeverity groups findings by their severity level

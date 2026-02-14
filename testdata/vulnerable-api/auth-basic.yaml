@@ -15,4 +15,6 @@ roles:
   user2:
     username: "user2"
     password: "user2pass"
-  # anonymous role has no credentials - tests unauthenticated access
+  anonymous:
+    username: ""
+    password: ""  # No authentication for anonymous role

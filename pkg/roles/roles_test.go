@@ -440,24 +440,26 @@ func TestLoad_VulnerableAPIRoles(t *testing.T) {
 
 	user1 := findRole(config.Roles, "user1")
 	require.NotNil(t, user1)
-	assert.Equal(t, 10, user1.Level)
+	assert.Equal(t, 50, user1.Level)
 
 	user2 := findRole(config.Roles, "user2")
 	require.NotNil(t, user2)
-	assert.Equal(t, 10, user2.Level)
+	assert.Equal(t, 5, user2.Level)
 
 	anonymous := findRole(config.Roles, "anonymous")
 	require.NotNil(t, anonymous)
 	assert.Equal(t, 0, anonymous.Level)
 
 	// Verify GetRolesByPermissionLevel behavior
-	// Median of [0, 10, 10, 100] = 10
+	// Median of [0, 5, 50, 100] = 27.5 (rounds to higher roles: user1 and admin)
 	higher := config.GetRolesByPermissionLevel("higher")
-	assert.Len(t, higher, 3) // admin, user1, user2
+	assert.Len(t, higher, 2) // admin, user1
 
 	lower := config.GetRolesByPermissionLevel("lower")
-	assert.Len(t, lower, 1) // anonymous
-	assert.Equal(t, "anonymous", lower[0].Name)
+	assert.Len(t, lower, 2) // anonymous, user2
+	// Lower privilege roles in ascending order
+	assert.Contains(t, []string{lower[0].Name, lower[1].Name}, "anonymous")
+	assert.Contains(t, []string{lower[0].Name, lower[1].Name}, "user2")
 }
 
 // Helper function

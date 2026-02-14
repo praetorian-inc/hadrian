@@ -83,7 +83,7 @@ func (r *JSONReporter) GenerateReport(findings []*model.Finding, stats *Stats) e
 		return err
 	}
 
-	return os.WriteFile(r.outputPath, data, 0644)
+	return os.WriteFile(r.outputPath, data, 0600)
 }
 
 // redactFinding creates a copy of the finding with sensitive data redacted

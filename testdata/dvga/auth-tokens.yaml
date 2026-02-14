@@ -1,0 +1,24 @@
+# DVGA Authentication Configuration
+# Generated: 2026-02-03T04:59:48+00:00
+# Target: http://172.17.0.1:5013/graphql
+
+method: bearer
+location: header
+key_name: Authorization
+
+roles:
+  admin:
+    # High-privilege admin user
+    token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzcwMDk0Nzg4LCJuYmYiOjE3NzAwOTQ3ODgsImp0aSI6ImEwY2E2ODAzLWI0OGEtNDU3NC04NmMzLTEzOGZlNzhiMGQ4MyIsImlkZW50aXR5IjoiYWRtaW4iLCJleHAiOjE3NzAxMDE5ODh9.4vqJU7_rN1pUaMnsD1BxjUVWTTLcL95Y9tl9IHHuUyA"
+    
+  operator:
+    # Mid-privilege operator user
+    token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzcwMDk0Nzg4LCJuYmYiOjE3NzAwOTQ3ODgsImp0aSI6ImEwY2E2ODAzLWI0OGEtNDU3NC04NmMzLTEzOGZlNzhiMGQ4MyIsImlkZW50aXR5IjoiYWRtaW4iLCJleHAiOjE3NzAxMDE5ODh9.4vqJU7_rN1pUaMnsD1BxjUVWTTLcL95Y9tl9IHHuUyA"
+    
+  attacker:
+    # Attacker role for BOLA/BFLA tests (uses operator)
+    token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzcwMDk0Nzg4LCJuYmYiOjE3NzAwOTQ3ODgsImp0aSI6ImEwY2E2ODAzLWI0OGEtNDU3NC04NmMzLTEzOGZlNzhiMGQ4MyIsImlkZW50aXR5IjoiYWRtaW4iLCJleHAiOjE3NzAxMDE5ODh9.4vqJU7_rN1pUaMnsD1BxjUVWTTLcL95Y9tl9IHHuUyA"
+    
+  victim:
+    # Victim role for BOLA/BFLA tests (uses admin data)
+    token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzcwMDk0Nzg4LCJuYmYiOjE3NzAwOTQ3ODgsImp0aSI6ImEwY2E2ODAzLWI0OGEtNDU3NC04NmMzLTEzOGZlNzhiMGQ4MyIsImlkZW50aXR5IjoiYWRtaW4iLCJleHAiOjE3NzAxMDE5ODh9.4vqJU7_rN1pUaMnsD1BxjUVWTTLcL95Y9tl9IHHuUyA"

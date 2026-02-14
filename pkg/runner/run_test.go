@@ -10,7 +10,8 @@ import (
 )
 
 func TestNewTestCmd_FlagDefaults(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand, not "test" parent
+	cmd := newTestRestCmd()
 
 	// Verify default values (Cobra stores defaults as strings)
 	assert.Equal(t, "1", cmd.Flags().Lookup("concurrency").DefValue)
@@ -24,7 +25,8 @@ func TestNewTestCmd_FlagDefaults(t *testing.T) {
 }
 
 func TestNewTestCmd_LLMContextFlag(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Verify llm-context flag exists and has correct properties
 	llmContextFlag := cmd.Flags().Lookup("llm-context")
@@ -34,7 +36,8 @@ func TestNewTestCmd_LLMContextFlag(t *testing.T) {
 }
 
 func TestNewTestCmd_RequiredFlags(t *testing.T) {
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	// Execute without required flags should fail
 	err := cmd.Execute()
@@ -63,7 +66,8 @@ func TestNewVersionCmd(t *testing.T) {
 
 func TestNewTestCmd_ConcurrencyHardcoded(t *testing.T) {
 	// Verify concurrency max is hardcoded in help text (HR-1: DoS prevention)
-	cmd := newTestCmd()
+	// After CLI refactoring, test flags are on "test rest" subcommand
+	cmd := newTestRestCmd()
 
 	concurrencyFlag := cmd.Flags().Lookup("concurrency")
 	assert.NotNil(t, concurrencyFlag)
@@ -90,8 +94,8 @@ func TestRun_NoError(t *testing.T) {
 func TestLoadTemplateFiles_DeterministicOrder(t *testing.T) {
 	// Create temp dir with templates in non-alphabetical filesystem order
 	tmpDir := t.TempDir()
-	owaspDir := filepath.Join(tmpDir, "owasp")
-	err := os.MkdirAll(owaspDir, 0755)
+	restDir := filepath.Join(tmpDir, "rest")
+	err := os.MkdirAll(restDir, 0755)
 	assert.NoError(t, err)
 
 	// Create templates with names that would be out of order if not sorted
@@ -159,13 +163,13 @@ detection:
 	}
 
 	for _, tmpl := range templates {
-		err := os.WriteFile(filepath.Join(owaspDir, tmpl.name), []byte(tmpl.content), 0644)
+		err := os.WriteFile(filepath.Join(restDir, tmpl.name), []byte(tmpl.content), 0644)
 		assert.NoError(t, err)
 	}
 
 	// Load templates multiple times and verify order is always the same
 	for i := 0; i < 5; i++ {
-		loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
+		loaded, err := loadTemplateFiles(tmpDir, []string{"rest"})
 		assert.NoError(t, err)
 		assert.Len(t, loaded, 3)
 

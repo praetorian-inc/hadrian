@@ -8,7 +8,7 @@ roles:
       - "*:*:all"           # Full access to everything
 
   - name: user1
-    level: 10           # Normal user privilege
+    level: 50           # Higher user privilege (victim role)
     permissions:
       - "read:users:own"      # Can read own user
       - "write:users:own"     # Can update own user
@@ -23,7 +23,7 @@ roles:
       - "read:documents:public" # Can read public documents
 
   - name: user2
-    level: 10           # Normal user privilege
+    level: 5            # Lower user privilege (attacker role for BOLA tests)
     permissions:
       - "read:users:own"
       - "write:users:own"

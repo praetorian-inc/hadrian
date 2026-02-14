@@ -68,14 +68,30 @@ func Run() error {
 	return rootCmd.Execute()
 }
 
-// newTestCmd creates the test command
+// newTestCmd creates the test command with subcommands
 func newTestCmd() *cobra.Command {
-	var config Config
-
 	cmd := &cobra.Command{
 		Use:   "test",
 		Short: "Run security tests against an API",
-		Long:  `Run security tests against an API using the provided specification and roles configuration.`,
+		Long:  `Run security tests against an API. Use 'test rest' for REST APIs, 'test graphql' for GraphQL APIs, or 'test grpc' for gRPC APIs.`,
+	}
+
+	// Add subcommands
+	cmd.AddCommand(newTestRestCmd())
+	cmd.AddCommand(newTestGraphQLCmd())
+	cmd.AddCommand(newTestGRPCCmd())
+
+	return cmd
+}
+
+// newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
+func newTestRestCmd() *cobra.Command {
+	var config Config
+
+	cmd := &cobra.Command{
+		Use:   "rest",
+		Short: "Run security tests against a REST API",
+		Long:  `Run security tests against a REST API using OpenAPI/Swagger specification.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runTest(cmd.Context(), config)
 		},
@@ -104,7 +120,7 @@ func newTestCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
 	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Test categories (owasp, custom)")
-	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/owasp)")
+	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)")
 	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 	cmd.Flags().StringVar(&config.AuditLog, "audit-log", ".hadrian/audit.log", "Audit log file")
 	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
@@ -343,8 +359,8 @@ func getTemplateDir() string {
 		return dir
 	}
 
-	// Default to ./templates/owasp/ relative to current directory
-	return "./templates/owasp"
+	// Default to ./templates/rest/ relative to current directory
+	return "./templates/rest"
 }
 
 // loadTemplateFiles loads and compiles templates from directory
@@ -452,7 +468,7 @@ func hasLLMConfig() bool {
 // Matching is case-insensitive. Supports:
 //   - Template ID (e.g., "bola-idor-basic")
 //   - Filename with or without extension (e.g., "bola-idor-basic.yaml" or "bola-idor-basic")
-//   - Path suffix (e.g., "templates/owasp/bola-idor-basic.yaml")
+//   - Path suffix (e.g., "templates/rest/bola-idor-basic.yaml")
 //
 // If templateFilters is empty, returns all templates unchanged.
 func filterByTemplates(tmpls []*templates.CompiledTemplate, templateFilters []string) []*templates.CompiledTemplate {

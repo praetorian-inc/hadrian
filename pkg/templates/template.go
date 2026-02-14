@@ -21,6 +21,12 @@ type Template struct {
 	// Simple single-phase test (for non-mutation tests)
 	HTTP []HTTPTest `yaml:"http,omitempty"`
 
+	// GraphQL test execution (for GraphQL APIs)
+	GraphQL []GraphQLTest `yaml:"graphql,omitempty"`
+
+	// gRPC test execution (for gRPC APIs)
+	GRPC []GRPCTest `yaml:"grpc,omitempty"`
+
 	// Detection logic
 	Detection Detection `yaml:"detection"`
 }
@@ -30,6 +36,7 @@ type TemplateInfo struct {
 	Category          string   `yaml:"category"`
 	Severity          string   `yaml:"severity"`
 	Author            string   `yaml:"author"`
+	Description       string   `yaml:"description"`
 	Tags              []string `yaml:"tags"`
 	RequiresLLMTriage bool     `yaml:"requires_llm_triage"`
 	TestPattern       string   `yaml:"test_pattern"`
@@ -39,6 +46,8 @@ type EndpointSelector struct {
 	HasPathParameter bool     `yaml:"has_path_parameter"`
 	RequiresAuth     bool     `yaml:"requires_auth"`
 	Methods          []string `yaml:"methods"`
+	Service          string   `yaml:"service,omitempty"` // gRPC: exact service name filter
+	Method           string   `yaml:"method,omitempty"`  // gRPC: exact method name filter
 	ReturnsObject    bool     `yaml:"returns_object"`
 	PathPattern      string   `yaml:"path_pattern,omitempty"`
 	Tags             []string `yaml:"tags,omitempty"`
@@ -125,17 +134,56 @@ type HTTPTest struct {
 	Matchers []Matcher `yaml:"matchers"`
 }
 
+// GraphQLTest defines a GraphQL query/mutation test
+type GraphQLTest struct {
+	Query         string      `yaml:"query"`
+	Variables     interface{} `yaml:"variables,omitempty"` // Accepts any JSON-compatible structure
+	OperationName string      `yaml:"operation_name,omitempty"`
+
+	// Auth
+	Auth string `yaml:"auth,omitempty"` // attacker, victim
+
+	// Matchers
+	Matchers []Matcher `yaml:"matchers,omitempty"`
+
+	// For attack testing
+	Repeat    int        `yaml:"repeat,omitempty"`
+	RateLimit *RateLimit `yaml:"rate_limit,omitempty"`
+	Backoff   *Backoff   `yaml:"backoff,omitempty"`
+
+	// Store/Use fields for multi-phase
+	StoreResponseFields map[string]string `yaml:"store_response_fields,omitempty"`
+	UseStoredField      string            `yaml:"use_stored_field,omitempty"`
+}
+
+// GRPCTest represents a gRPC test configuration
+type GRPCTest struct {
+	Method              string            `yaml:"method"`
+	Service             string            `yaml:"service"`
+	Message             string            `yaml:"message"`
+	Metadata            map[string]string `yaml:"metadata,omitempty"`
+	DeadlineMs          int               `yaml:"deadline_ms,omitempty"`
+	Repeat              int               `yaml:"repeat,omitempty"`
+	RateLimit           *RateLimit        `yaml:"rate_limit,omitempty"`
+	Backoff             *Backoff          `yaml:"backoff,omitempty"`
+	Matchers            []Matcher         `yaml:"matchers,omitempty"`
+	StoreResponseFields map[string]string `yaml:"store_response_fields,omitempty"`
+	UseStoredField      string            `yaml:"use_stored_field,omitempty"`
+}
+
 type Matcher struct {
 	Type      string   `yaml:"type"` // word, regex, status, size, dsl
 	Words     []string `yaml:"words,omitempty"`
 	Regex     []string `yaml:"regex,omitempty"`
 	Status    []int    `yaml:"status,omitempty"`
+	Code      []int    `yaml:"code,omitempty"`      // gRPC status codes
 	Part      string   `yaml:"part,omitempty"`      // body, header, all
 	Condition string   `yaml:"condition,omitempty"` // and, or
 }
 
 type Detection struct {
 	SuccessIndicators    []Indicator `yaml:"success_indicators"`
+	FailureIndicators    []Indicator `yaml:"failure_indicators,omitempty"`
 	VulnerabilityPattern string      `yaml:"vulnerability_pattern"`
 	Conditions           []Condition `yaml:"conditions"`
 	ResourceShouldExist  *bool       `yaml:"resource_should_exist,omitempty"`
@@ -143,11 +191,16 @@ type Detection struct {
 }
 
 type Indicator struct {
-	Type       string      `yaml:"type,omitempty"`        // status_code, body_field
+	Type       string      `yaml:"type,omitempty"`        // status_code, body_field, regex_match, sensitive_fields_exposed
 	StatusCode interface{} `yaml:"status_code,omitempty"` // Can be int or "{{var}}"
+	Code       interface{} `yaml:"code,omitempty"`        // gRPC status code
 	BodyField  string      `yaml:"body_field,omitempty"`
 	Value      interface{} `yaml:"value,omitempty"`
+	Pattern    string      `yaml:"pattern,omitempty"`  // For regex_match type indicators
+	Patterns   []string    `yaml:"patterns,omitempty"` // For body_contains checks
+	Fields     []string    `yaml:"fields,omitempty"`   // For sensitive_fields_exposed type indicators
 	Exists     *bool       `yaml:"exists,omitempty"`
+	MinMs      int         `yaml:"min_ms,omitempty"`
 }
 
 type Condition struct {

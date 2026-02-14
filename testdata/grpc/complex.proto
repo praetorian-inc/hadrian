@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package complex.v1;
+
+option go_package = "testdata/grpc;grpc";
+
+service OrderService {
+    rpc CreateOrder (CreateOrderRequest) returns (Order);
+    rpc GetOrder (GetOrderRequest) returns (Order);
+    rpc StreamOrders (StreamOrdersRequest) returns (stream Order);
+}
+
+message CreateOrderRequest {
+    string user_id = 1;
+    repeated OrderItem items = 2;
+    Address shipping_address = 3;
+    PaymentInfo payment = 4;
+}
+
+message GetOrderRequest {
+    string order_id = 1;
+}
+
+message StreamOrdersRequest {
+    string user_id = 1;
+}
+
+message Order {
+    string id = 1;
+    string user_id = 2;
+    repeated OrderItem items = 3;
+    OrderStatus status = 4;
+    Address shipping_address = 5;
+}
+
+message OrderItem {
+    string product_id = 1;
+    int32 quantity = 2;
+    double price = 3;
+}
+
+message Address {
+    string street = 1;
+    string city = 2;
+    string state = 3;
+    string postal_code = 4;
+    string country = 5;
+}
+
+message PaymentInfo {
+    string card_number = 1;
+    string expiry = 2;
+    string cvv = 3;
+}
+
+enum OrderStatus {
+    ORDER_STATUS_UNSPECIFIED = 0;
+    ORDER_STATUS_PENDING = 1;
+    ORDER_STATUS_CONFIRMED = 2;
+    ORDER_STATUS_SHIPPED = 3;
+    ORDER_STATUS_DELIVERED = 4;
+}

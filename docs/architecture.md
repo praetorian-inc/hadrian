@@ -172,7 +172,7 @@ hadrian-api-tester/
 │   ├── llm/                 # LLM integration (Claude, OpenAI, Ollama)
 │   └── matchers/            # Detection matchers
 ├── internal/http/           # HTTP client with proxy support
-└── templates/owasp/         # Built-in OWASP security templates
+└── templates/rest/          # Built-in REST API security templates
 ```
 
 ## How Testing Works

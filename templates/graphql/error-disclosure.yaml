@@ -1,0 +1,46 @@
+id: graphql-error-disclosure
+info:
+  name: "GraphQL Verbose Error Disclosure"
+  category: "API8:2023 Security Misconfiguration"
+  severity: "MEDIUM"
+  author: "hadrian"
+  description: "Tests for verbose error messages in GraphQL responses that may disclose sensitive information about the server, database structure, file paths, or internal implementation details. Production GraphQL APIs should sanitize error messages."
+  tags: ["graphql", "information-disclosure", "error-handling", "debug-mode"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      query ErrorDisclosure {
+        user(id: "' OR 1=1--") {
+          id
+          name
+          email
+        }
+      }
+    matchers:
+      - type: status
+        status: [200, 400, 500]
+      - type: regex
+        regex:
+          - "(at |line |column |file|path|stack|trace|Exception|Error|mysql|postgres|mongodb|redis|/var/|/usr/|/home/|C:\\\\|node_modules)"
+        part: body
+      - type: word
+        words: ["errors"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: body_field
+      body_field: "errors"
+      exists: true
+    - type: regex_match
+      pattern: "(Exception|StackTrace|SQLException|at \\w+\\.\\w+|line \\d+|column \\d+|/[a-z]+/[a-z]+/)"
+  vulnerability_pattern: "graphql_verbose_error_messages"
