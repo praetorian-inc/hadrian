@@ -1,6 +1,8 @@
 # Hadrian
 
-**API Security Testing Framework**
+[![CI](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml/badge.svg)](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/praetorian-inc/hadrian)](https://goreportcard.com/report/github.com/praetorian-inc/hadrian)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that tests for OWASP API vulnerabilities and custom security issues using role-based authorization testing.
 
@@ -8,6 +10,7 @@ Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that te
 
 - **OWASP API Top 10 Coverage**: Test for BOLA, broken authentication, and more
 - **Role-Based Testing**: Define roles with permissions and test cross-role access
+- **Mutation Testing Engine**: Three-phase setup/attack/verify tests for BFLA and BOPLA
 - **Template-Driven**: YAML templates for customizable security tests
 - **Mutation Testing**: Setup/Attack/Verify three-phase testing pattern for proving write/delete vulnerabilities
 - **Multiple Output Formats**: Terminal, JSON, and Markdown reports
@@ -63,13 +66,15 @@ Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that te
 
 ## Installation
 
-```bash
-# Build from source
-go build -o hadrian ./cmd/hadrian
+### From source
 
-# Or install directly
+```bash
 go install github.com/praetorian-inc/hadrian/cmd/hadrian@latest
 ```
+
+### From releases
+
+Download the latest binary from the [Releases](https://github.com/praetorian-inc/hadrian/releases) page.
 
 ## Quick Start
 
@@ -584,6 +589,54 @@ detection:
       status_code: 401
 ```
 
+### Mutation Tests (Three-Phase)
+
+For complex vulnerability patterns like BFLA and BOPLA, templates use `test_phases` with a setup/attack/verify pipeline:
+
+```yaml
+id: api5-bfla-delete
+info:
+  name: "BFLA - Unauthorized Resource Deletion"
+  category: "API5:2023"
+  severity: "HIGH"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["DELETE"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+test_phases:
+  setup:
+    # Multiple setup phases supported (array syntax)
+    - path: "/api/user/dashboard"
+      auth: "victim"
+      store_response_fields:
+        victim_id: "id"
+        victim_video_id: "video_id"
+    - path: "/api/user/dashboard"
+      auth: "attacker"
+      store_response_fields:
+        attacker_video_id: "video_id"
+  attack:
+    path: "/api/resource/{victim_video_id}"
+    auth: "attacker"
+    operation: "delete"
+    expected_status: 200
+  verify:
+    path: "/api/resource/{victim_video_id}"
+    auth: "victim"
+    check_field: "status"
+    expected_value: "deleted"
+```
+
+- **`setup`**: One or more phases that establish state and store response fields (e.g., resource IDs) for later substitution
+- **`attack`**: Attempts the unauthorized action using the attacker's credentials with `{placeholder}` substitution from stored fields
+- **`verify`**: Confirms whether the attack succeeded by checking the resource state as the victim
+
 ### Template Fields
 
 - **endpoint_selector**: Filter which endpoints to test
@@ -655,7 +708,32 @@ Summary: 2 findings (1 CRITICAL, 1 HIGH)
 }
 ```
 
-## Testing
+## Development
+
+### Prerequisites
+
+- [Go 1.24+](https://go.dev/dl/)
+- [golangci-lint](https://golangci-lint.run/welcome/install/)
+
+### Getting started
+
+```bash
+git clone https://github.com/praetorian-inc/hadrian.git
+cd hadrian
+make build
+```
+
+### Common commands
+
+```bash
+make build       # Build the binary
+make test        # Run tests
+make lint        # Run linters
+make fmt         # Format code
+make check       # Run all checks (fmt, vet, lint, test)
+```
+
+### Testing
 
 ```bash
 # Run unit tests
@@ -722,15 +800,20 @@ The backoff respects the server's `Retry-After` header when present, capping at 
 - `HADRIAN_TEMPLATES` - Custom templates directory path
 - `OLLAMA_HOST` - Ollama host for local LLM triage (default: http://localhost:11434)
 
-## License
-
-Apache License 2.0 - See [LICENSE](LICENSE) for details.
-
 ## Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes with tests
-4. Submit a pull request
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Commit your changes (`git commit -am 'Add my feature'`)
+4. Push to the branch (`git push origin feature/my-feature`)
+5. Open a Pull Request
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+Please ensure all CI checks pass before requesting review.
+
+## License
+
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
+
+## About Praetorian
+
+[Praetorian](https://www.praetorian.com/) is a cybersecurity company that helps organizations secure their most critical assets through offensive security services and the [Praetorian Guard](https://www.praetorian.com/guard) attack surface management platform.

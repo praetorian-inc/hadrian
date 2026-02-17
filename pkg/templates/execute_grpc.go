@@ -55,9 +55,10 @@ type GRPCExecutorConfig struct {
 func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 	var opts []grpc.DialOption
 
-	if config.Plaintext {
+	switch {
+	case config.Plaintext:
 		opts = append(opts, grpc.WithTransportCredentials(grpcinsecure.NewCredentials()))
-	} else if config.TLSCACert != "" {
+	case config.TLSCACert != "":
 		// TLSCACert takes priority over Insecure flag
 		caCert, err := os.ReadFile(config.TLSCACert)
 		if err != nil {
@@ -68,9 +69,9 @@ func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 			return nil, fmt.Errorf("failed to parse CA certificate")
 		}
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{RootCAs: certPool})))
-	} else if config.Insecure {
+	case config.Insecure:
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{InsecureSkipVerify: true})))
-	} else {
+	default:
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 
@@ -266,12 +267,13 @@ func (e *GRPCExecutor) executeGRPCTest(
 	if respMsg != nil {
 		if dynMsg, ok := respMsg.(*dynamic.Message); ok {
 			bodyBytes, err := dynMsg.MarshalJSON()
-			if err != nil {
+			switch {
+			case err != nil:
 				log.Debug("failed to marshal gRPC response: %v", err)
-			} else if len(bodyBytes) > MaxGRPCResponseBodySize {
+			case len(bodyBytes) > MaxGRPCResponseBodySize:
 				// Check size before string conversion to avoid doubling memory allocation
 				return nil, fmt.Errorf("gRPC response exceeds maximum size of %d bytes", MaxGRPCResponseBodySize)
-			} else {
+			default:
 				responseBody = string(bodyBytes)
 			}
 		}

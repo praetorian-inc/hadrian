@@ -28,7 +28,7 @@ func TestTrackedHTTPClient_AddsRequestIDHeader(t *testing.T) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Verify request ID was added
 	assert.NotEmpty(t, capturedRequestID, "X-Hadrian-Request-Id header should be set")
@@ -58,7 +58,7 @@ func TestTrackedHTTPClient_TracksMultipleRequests(t *testing.T) {
 
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 
 	// Verify all request IDs tracked
@@ -86,7 +86,7 @@ func TestTrackedHTTPClient_ClearRequestIDs(t *testing.T) {
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	assert.Len(t, client.GetRequestIDs(), 1, "Should have 1 request ID")
 

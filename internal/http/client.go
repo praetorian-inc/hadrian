@@ -79,11 +79,11 @@ func New(config *Config) (*Client, error) {
 
 	// Configure transport with proxy support
 	transport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,  // Respects HTTP_PROXY env var
+		Proxy: http.ProxyFromEnvironment, // Respects HTTP_PROXY env var
 		TLSClientConfig: &tls.Config{
 			RootCAs:            rootCAs,
 			InsecureSkipVerify: config.Insecure,
-			MinVersion:         tls.VersionTLS13,  // TLS 1.3 enforcement (HR-3)
+			MinVersion:         tls.VersionTLS13, // TLS 1.3 enforcement (HR-3)
 		},
 		// Custom DialContext prevents SSRF via DNS rebinding (TOCTOU)
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {

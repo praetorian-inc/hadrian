@@ -90,7 +90,7 @@ func newTestGRPCCmd() *cobra.Command {
 
 	// Required flags
 	cmd.Flags().StringVar(&config.Target, "target", "", "Target gRPC server address (e.g., localhost:50051)")
-	cmd.MarkFlagRequired("target")
+	_ = cmd.MarkFlagRequired("target")
 
 	// Schema source (proto file OR reflection)
 	cmd.Flags().StringVar(&config.Proto, "proto", "", "Proto file path (uses reflection if not provided)")
@@ -153,7 +153,6 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	// Header output (no [DEBUG] prefix)
 	fmt.Println("Starting gRPC security test")
 	fmt.Printf("Target: %s\n", config.Target)
-
 
 	// Log proto file if provided
 	if config.Proto != "" {
@@ -266,7 +265,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 		if err != nil {
 			return fmt.Errorf("failed to create gRPC executor: %w", err)
 		}
-		defer executor.Close()
+		defer func() { _ = executor.Close() }()
 		grpcVerboseLog(config.Verbose, "Created gRPC executor connection to %s", config.Target)
 
 		// Validate connection before running tests
@@ -284,7 +283,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
-	defer rep.Close()
+	defer func() { _ = rep.Close() }()
 
 	// 5. Section header for template execution
 	if len(templateFiles) > 0 {
@@ -378,10 +377,8 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 						allFindings = append(allFindings, finding)
 						rep.ReportFinding(finding)
-					} else {
-						if config.Verbose {
-							fmt.Printf("  [PASS] %s (mutation test)\n", tmpl.ID)
-						}
+					} else if config.Verbose {
+						fmt.Printf("  [PASS] %s (mutation test)\n", tmpl.ID)
 					}
 					continue
 				}
@@ -407,10 +404,8 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 					allFindings = append(allFindings, finding)
 					rep.ReportFinding(finding)
-				} else {
-					if config.Verbose {
-						fmt.Printf("  [PASS] %s (status: %d)\n", tmpl.ID, result.Response.StatusCode)
-					}
+				} else if config.Verbose {
+					fmt.Printf("  [PASS] %s (status: %d)\n", tmpl.ID, result.Response.StatusCode)
 				}
 			}
 		}

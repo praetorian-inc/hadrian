@@ -117,11 +117,11 @@ func TestLoad_InvalidYAML(t *testing.T) {
 	// Create invalid YAML file
 	tmpfile, err := os.CreateTemp("", "invalid-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 	_, err = tmpfile.WriteString("invalid: yaml: content: [")
 	require.NoError(t, err)
-	tmpfile.Close()
+	_ = tmpfile.Close()
 
 	_, err = Load(tmpfile.Name())
 	require.Error(t, err)
@@ -132,7 +132,7 @@ func TestLoad_InvalidPermissionFormat(t *testing.T) {
 	// Create YAML with invalid permission format
 	tmpfile, err := os.CreateTemp("", "invalid-perm-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpfile.Name())
+	defer func() { _ = os.Remove(tmpfile.Name()) }()
 
 	content := `objects:
   - users
@@ -143,7 +143,7 @@ roles:
 `
 	_, err = tmpfile.WriteString(content)
 	require.NoError(t, err)
-	tmpfile.Close()
+	_ = tmpfile.Close()
 
 	_, err = Load(tmpfile.Name())
 	require.Error(t, err)

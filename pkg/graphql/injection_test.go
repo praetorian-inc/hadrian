@@ -21,19 +21,15 @@ func TestGraphQLInjection_SecurityScanner_CheckBOLA(t *testing.T) {
 		// Create test server that logs queries
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			body := make([]byte, r.ContentLength)
-			r.Body.Read(body)
+			_, _ = r.Body.Read(body)
 			receivedQueries = append(receivedQueries, string(body))
 
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 
-			// First query: return victim ID with quotes to test injection
-			if len(receivedQueries) == 1 {
-				w.Write([]byte(`{"data":{"user":{"id":"victim\"}{evil:__schema{types{name}}}"}}}`))
-			} else {
-				// Second query: should still work despite malicious ID
-				w.Write([]byte(`{"data":{"user":{"id":"victim\"}{evil:__schema{types{name}}}"}}}`))
-			}
+			// Return victim ID with quotes to test injection
+			// Both first and subsequent queries return the same response
+			_, _ = w.Write([]byte(`{"data":{"user":{"id":"victim\"}{evil:__schema{types{name}}}"}}}`))
 		}))
 		defer server.Close()
 

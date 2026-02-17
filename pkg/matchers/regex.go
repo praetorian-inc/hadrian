@@ -30,10 +30,8 @@ func (m *RegexMatcher) Match(response *http.Response, body string) bool {
 			if m.condition == "or" {
 				return true // Short-circuit
 			}
-		} else {
-			if m.condition == "and" {
-				return false // Short-circuit
-			}
+		} else if m.condition == "and" {
+			return false // Short-circuit
 		}
 	}
 

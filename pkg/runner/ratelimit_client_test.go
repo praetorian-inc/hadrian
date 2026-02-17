@@ -77,7 +77,7 @@ func TestRateLimitingClient_ProactiveRateLimiting(t *testing.T) {
 		resp, err := client.Do(req)
 		require.NoError(t, err)
 		require.NotNil(t, resp)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	}
 	elapsed := time.Since(start)
 
@@ -116,7 +116,7 @@ func TestRateLimitingClient_ExponentialBackoff(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, 200, resp.StatusCode)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Exponential backoff: 100ms (attempt 0) + 200ms (attempt 1) = 300ms minimum
 	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(250), "Exponential backoff should double wait time")
@@ -153,7 +153,7 @@ func TestRateLimitingClient_FixedBackoff(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, 200, resp.StatusCode)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	// Fixed backoff: 100ms * 2 retries = 200ms minimum
 	assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(150), "Fixed backoff should use constant wait time")
@@ -223,7 +223,7 @@ func TestRateLimitingClient_RetryAfterHeader(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 		assert.Equal(t, 200, resp.StatusCode)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 
 		// Should respect Retry-After: 1 second
 		assert.GreaterOrEqual(t, elapsed.Milliseconds(), int64(900), "Should honor Retry-After header")
@@ -292,7 +292,7 @@ func TestRateLimitingClient_MultipleStatusCodes(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 		assert.Equal(t, 200, resp.StatusCode)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	})
 
 	t.Run("Status 503", func(t *testing.T) {
@@ -310,7 +310,7 @@ func TestRateLimitingClient_MultipleStatusCodes(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 		assert.Equal(t, 200, resp.StatusCode)
-		resp.Body.Close()
+		_ = resp.Body.Close()
 	})
 }
 
@@ -340,7 +340,7 @@ func TestRateLimitingClient_DisabledRateLimiting(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	assert.Equal(t, 429, resp.StatusCode) // Should return 429 without retrying
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	assert.Equal(t, 1, mockClient.callCount, "Should only make 1 attempt when disabled")
 }
 

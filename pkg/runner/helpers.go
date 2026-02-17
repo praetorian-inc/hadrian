@@ -235,22 +235,22 @@ func (r *TerminalReporter) SetLLMMode(enabled bool) {
 
 func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 	severityColor := getSeverityColor(finding.Severity)
-	fmt.Fprintf(r.writer, "%s[%s]%s %s - %s %s\n",
+	_, _ = fmt.Fprintf(r.writer, "%s[%s]%s %s - %s %s\n",
 		severityColor, finding.Severity, colorReset,
 		finding.Category, finding.Name,
 		finding.Method+" "+finding.Endpoint)
 
 	// Show role information
 	if finding.AttackerRole != "" && finding.VictimRole != "" {
-		fmt.Fprintf(r.writer, "  Roles: attacker=%s, victim=%s\n", finding.AttackerRole, finding.VictimRole)
+		_, _ = fmt.Fprintf(r.writer, "  Roles: attacker=%s, victim=%s\n", finding.AttackerRole, finding.VictimRole)
 	} else if finding.AttackerRole != "" {
-		fmt.Fprintf(r.writer, "  Role: %s\n", finding.AttackerRole)
+		_, _ = fmt.Fprintf(r.writer, "  Role: %s\n", finding.AttackerRole)
 	}
 
 	if finding.LLMAnalysis != nil {
-		fmt.Fprintf(r.writer, "  LLM Analysis: Confidence %.0f%%\n", finding.LLMAnalysis.Confidence*100)
+		_, _ = fmt.Fprintf(r.writer, "  LLM Analysis: Confidence %.0f%%\n", finding.LLMAnalysis.Confidence*100)
 		if finding.LLMAnalysis.Reasoning != "" {
-			fmt.Fprintf(r.writer, "  Reasoning: %s\n", finding.LLMAnalysis.Reasoning)
+			_, _ = fmt.Fprintf(r.writer, "  Reasoning: %s\n", finding.LLMAnalysis.Reasoning)
 		}
 	}
 
@@ -261,7 +261,7 @@ func (r *TerminalReporter) ReportFinding(finding *model.Finding) {
 		if r.requestIDsLimit > 0 && len(requestIDs) > r.requestIDsLimit {
 			requestIDs = requestIDs[len(requestIDs)-r.requestIDsLimit:]
 		}
-		fmt.Fprintf(r.writer, "  Request IDs: %s\n", strings.Join(requestIDs, ", "))
+		_, _ = fmt.Fprintf(r.writer, "  Request IDs: %s\n", strings.Join(requestIDs, ", "))
 	}
 }
 
@@ -269,31 +269,31 @@ func (r *TerminalReporter) GenerateReport(findings []*model.Finding, stats *Stat
 	// Findings are now printed in real-time during triage (in LLM mode) or
 	// immediately after detection (in non-LLM mode), so we just print the summary
 
-	fmt.Fprintf(r.writer, "\n=== Hadrian Security Test Results ===\n\n")
+	_, _ = fmt.Fprintf(r.writer, "\n=== Hadrian Security Test Results ===\n\n")
 
-	fmt.Fprintf(r.writer, "Duration: %s\n", stats.Duration.Round(time.Second))
-	fmt.Fprintf(r.writer, "Operations tested: %d\n", stats.OperationCount)
-	fmt.Fprintf(r.writer, "Roles tested: %d\n", stats.RoleCount)
-	fmt.Fprintf(r.writer, "Templates loaded: %d\n\n", stats.TemplatesLoaded)
+	_, _ = fmt.Fprintf(r.writer, "Duration: %s\n", stats.Duration.Round(time.Second))
+	_, _ = fmt.Fprintf(r.writer, "Operations tested: %d\n", stats.OperationCount)
+	_, _ = fmt.Fprintf(r.writer, "Roles tested: %d\n", stats.RoleCount)
+	_, _ = fmt.Fprintf(r.writer, "Templates loaded: %d\n\n", stats.TemplatesLoaded)
 
-	fmt.Fprintf(r.writer, "Findings Summary:\n")
+	_, _ = fmt.Fprintf(r.writer, "Findings Summary:\n")
 	if stats.Critical > 0 {
-		fmt.Fprintf(r.writer, "  %sCRITICAL: %d%s\n", colorRed, stats.Critical, colorReset)
+		_, _ = fmt.Fprintf(r.writer, "  %sCRITICAL: %d%s\n", colorRed, stats.Critical, colorReset)
 	}
 	if stats.High > 0 {
-		fmt.Fprintf(r.writer, "  %sHIGH: %d%s\n", colorOrange, stats.High, colorReset)
+		_, _ = fmt.Fprintf(r.writer, "  %sHIGH: %d%s\n", colorOrange, stats.High, colorReset)
 	}
 	if stats.Medium > 0 {
-		fmt.Fprintf(r.writer, "  %sMEDIUM: %d%s\n", colorYellow, stats.Medium, colorReset)
+		_, _ = fmt.Fprintf(r.writer, "  %sMEDIUM: %d%s\n", colorYellow, stats.Medium, colorReset)
 	}
 	if stats.Low > 0 {
-		fmt.Fprintf(r.writer, "  %sLOW: %d%s\n", colorBlue, stats.Low, colorReset)
+		_, _ = fmt.Fprintf(r.writer, "  %sLOW: %d%s\n", colorBlue, stats.Low, colorReset)
 	}
 	if stats.Info > 0 {
-		fmt.Fprintf(r.writer, "  %sINFO: %d%s\n", colorGreen, stats.Info, colorReset)
+		_, _ = fmt.Fprintf(r.writer, "  %sINFO: %d%s\n", colorGreen, stats.Info, colorReset)
 	}
 
-	fmt.Fprintf(r.writer, "\nTotal findings: %d\n", stats.Findings)
+	_, _ = fmt.Fprintf(r.writer, "\nTotal findings: %d\n", stats.Findings)
 	return nil
 }
 
@@ -346,7 +346,7 @@ func (r *JSONReporter) GenerateReport(findings []*model.Finding, stats *Stats) e
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer output.Close()
+		defer func() { _ = output.Close() }()
 	} else {
 		output = os.Stdout
 	}
@@ -389,38 +389,38 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 		if err != nil {
 			return fmt.Errorf("failed to create output file: %w", err)
 		}
-		defer output.Close()
+		defer func() { _ = output.Close() }()
 	} else {
 		output = os.Stdout
 	}
 
 	// Write markdown header
-	fmt.Fprintf(output, "# Hadrian Security Test Report\n\n")
-	fmt.Fprintf(output, "**Duration:** %s\n\n", stats.Duration.Round(time.Second))
+	_, _ = fmt.Fprintf(output, "# Hadrian Security Test Report\n\n")
+	_, _ = fmt.Fprintf(output, "**Duration:** %s\n\n", stats.Duration.Round(time.Second))
 
 	// Summary table
-	fmt.Fprintf(output, "## Summary\n\n")
-	fmt.Fprintf(output, "| Severity | Count |\n")
-	fmt.Fprintf(output, "|----------|-------|\n")
-	fmt.Fprintf(output, "| Critical | %d |\n", stats.Critical)
-	fmt.Fprintf(output, "| High | %d |\n", stats.High)
-	fmt.Fprintf(output, "| Medium | %d |\n", stats.Medium)
-	fmt.Fprintf(output, "| Low | %d |\n", stats.Low)
-	fmt.Fprintf(output, "| Info | %d |\n", stats.Info)
-	fmt.Fprintf(output, "| **Total** | **%d** |\n\n", stats.Findings)
+	_, _ = fmt.Fprintf(output, "## Summary\n\n")
+	_, _ = fmt.Fprintf(output, "| Severity | Count |\n")
+	_, _ = fmt.Fprintf(output, "|----------|-------|\n")
+	_, _ = fmt.Fprintf(output, "| Critical | %d |\n", stats.Critical)
+	_, _ = fmt.Fprintf(output, "| High | %d |\n", stats.High)
+	_, _ = fmt.Fprintf(output, "| Medium | %d |\n", stats.Medium)
+	_, _ = fmt.Fprintf(output, "| Low | %d |\n", stats.Low)
+	_, _ = fmt.Fprintf(output, "| Info | %d |\n", stats.Info)
+	_, _ = fmt.Fprintf(output, "| **Total** | **%d** |\n\n", stats.Findings)
 
 	// Findings
-	fmt.Fprintf(output, "## Findings\n\n")
+	_, _ = fmt.Fprintf(output, "## Findings\n\n")
 	for i, f := range findings {
-		fmt.Fprintf(output, "### %d. [%s] %s - %s\n\n", i+1, f.Severity, f.Category, f.Name)
-		fmt.Fprintf(output, "**Endpoint:** `%s %s`\n\n", f.Method, f.Endpoint)
-		fmt.Fprintf(output, "**Description:** %s\n\n", f.Description)
+		_, _ = fmt.Fprintf(output, "### %d. [%s] %s - %s\n\n", i+1, f.Severity, f.Category, f.Name)
+		_, _ = fmt.Fprintf(output, "**Endpoint:** `%s %s`\n\n", f.Method, f.Endpoint)
+		_, _ = fmt.Fprintf(output, "**Description:** %s\n\n", f.Description)
 
 		if f.AttackerRole != "" {
-			fmt.Fprintf(output, "**Attacker Role:** %s\n\n", f.AttackerRole)
+			_, _ = fmt.Fprintf(output, "**Attacker Role:** %s\n\n", f.AttackerRole)
 		}
 		if f.VictimRole != "" {
-			fmt.Fprintf(output, "**Victim Role:** %s\n\n", f.VictimRole)
+			_, _ = fmt.Fprintf(output, "**Victim Role:** %s\n\n", f.VictimRole)
 		}
 
 		// Show limited request IDs if available
@@ -429,16 +429,16 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 			if r.requestIDsLimit > 0 && len(requestIDs) > r.requestIDsLimit {
 				requestIDs = requestIDs[len(requestIDs)-r.requestIDsLimit:]
 			}
-			fmt.Fprintf(output, "**Request IDs:** %s\n\n", strings.Join(requestIDs, ", "))
+			_, _ = fmt.Fprintf(output, "**Request IDs:** %s\n\n", strings.Join(requestIDs, ", "))
 		}
 
 		if f.LLMAnalysis != nil {
-			fmt.Fprintf(output, "**LLM Analysis:**\n")
-			fmt.Fprintf(output, "- Vulnerability: %t (%.0f%% confidence)\n", f.LLMAnalysis.IsVulnerability, f.LLMAnalysis.Confidence*100)
-			fmt.Fprintf(output, "- Reasoning: %s\n\n", f.LLMAnalysis.Reasoning)
+			_, _ = fmt.Fprintf(output, "**LLM Analysis:**\n")
+			_, _ = fmt.Fprintf(output, "- Vulnerability: %t (%.0f%% confidence)\n", f.LLMAnalysis.IsVulnerability, f.LLMAnalysis.Confidence*100)
+			_, _ = fmt.Fprintf(output, "- Reasoning: %s\n\n", f.LLMAnalysis.Reasoning)
 		}
 
-		fmt.Fprintf(output, "---\n\n")
+		_, _ = fmt.Fprintf(output, "---\n\n")
 	}
 
 	return nil

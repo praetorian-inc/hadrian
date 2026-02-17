@@ -58,7 +58,7 @@ func (c *RateLimitingClient) retryWithBackoff(req *http.Request, endpoint string
 		}
 
 		if c.isRateLimited(resp) {
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if attempt < c.config.MaxRetries {
 				backoff := c.calculateBackoff(attempt, resp)
@@ -75,7 +75,7 @@ func (c *RateLimitingClient) retryWithBackoff(req *http.Request, endpoint string
 
 			// Defensive cleanup before returning error
 			if resp != nil && resp.Body != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 			}
 			return nil, fmt.Errorf("max retries (%d) exceeded for rate-limited endpoint: %s", c.config.MaxRetries, endpoint)
 		}

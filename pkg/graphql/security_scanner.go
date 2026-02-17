@@ -469,7 +469,7 @@ func (s *SecurityScanner) RunAllChecks(ctx context.Context, authConfigs map[stri
 	}
 
 	// Check BOLA (if auth configs provided)
-	if authConfigs != nil && len(authConfigs) >= 2 {
+	if len(authConfigs) >= 2 {
 		log.Debug("Checking BOLA...")
 		if finding := s.CheckBOLA(ctx, authConfigs); finding != nil {
 			if onFinding != nil {

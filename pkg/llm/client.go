@@ -51,7 +51,7 @@ func NewClientWithConfig(ctx context.Context, host, model string, timeout time.D
 		if IsOllamaRunningAt(ctx, host) {
 			return NewOllamaClientWithConfig(host, model, timeout, customContext), nil
 		}
-		return nil, fmt.Errorf("Ollama not reachable at %s", host)
+		return nil, fmt.Errorf("ollama not reachable at %s", host)
 	}
 	// Fall back to existing env var logic
 	return NewClient(ctx)
@@ -69,7 +69,7 @@ func IsOllamaRunningAt(ctx context.Context, baseURL string) bool {
 	if err != nil {
 		return false
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return resp.StatusCode == 200
 }
 

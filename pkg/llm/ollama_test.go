@@ -23,7 +23,7 @@ func TestOllamaClient_Name(t *testing.T) {
 
 func TestNewOllamaClient_UsesDefaultHost(t *testing.T) {
 	// Arrange
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	// Act
 	client := NewOllamaClient()
@@ -36,8 +36,8 @@ func TestNewOllamaClient_UsesDefaultHost(t *testing.T) {
 func TestNewOllamaClient_UsesCustomHost(t *testing.T) {
 	// Arrange
 	customHost := "http://localhost:11435"
-	os.Setenv("OLLAMA_HOST", customHost)
-	defer os.Unsetenv("OLLAMA_HOST")
+	_ = os.Setenv("OLLAMA_HOST", customHost)
+	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
 
 	// Act
 	client := NewOllamaClient()
@@ -51,8 +51,8 @@ func TestNewOllamaClientWithConfig_CustomHostAndModel(t *testing.T) {
 	// Arrange
 	customHost := "http://localhost:11435"
 	customModel := "llama3.2:latest"
-	os.Unsetenv("OLLAMA_HOST")
-	os.Unsetenv("OLLAMA_MODEL")
+	_ = os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("OLLAMA_MODEL")
 
 	// Act
 	client := NewOllamaClientWithConfig(customHost, customModel, 180*time.Second, "")
@@ -67,7 +67,7 @@ func TestNewOllamaClientWithConfig_CustomHostAndModel(t *testing.T) {
 func TestNewOllamaClientWithConfig_EmptyModelUsesEnvOrDefault(t *testing.T) {
 	// Arrange
 	customHost := "http://localhost:11435"
-	os.Unsetenv("OLLAMA_MODEL")
+	_ = os.Unsetenv("OLLAMA_MODEL")
 
 	// Act
 	client := NewOllamaClientWithConfig(customHost, "", 180*time.Second, "")
@@ -83,8 +83,8 @@ func TestNewOllamaClientWithConfig_EmptyModelUsesEnv(t *testing.T) {
 	// Arrange
 	customHost := "http://localhost:11435"
 	envModel := "custom-model:v1"
-	os.Setenv("OLLAMA_MODEL", envModel)
-	defer os.Unsetenv("OLLAMA_MODEL")
+	_ = os.Setenv("OLLAMA_MODEL", envModel)
+	defer func() { _ = os.Unsetenv("OLLAMA_MODEL") }()
 
 	// Act
 	client := NewOllamaClientWithConfig(customHost, "", 180*time.Second, "")
@@ -141,7 +141,7 @@ func TestOllamaClient_Triage_Success(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -172,7 +172,7 @@ func TestOllamaClient_Triage_ParseError(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -192,7 +192,7 @@ func TestOllamaClient_Triage_HTTPError(t *testing.T) {
 	// Arrange - Mock server returning 500 error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal server error"))
+		_, _ = w.Write([]byte("Internal server error"))
 	}))
 	defer server.Close()
 
@@ -205,7 +205,7 @@ func TestOllamaClient_Triage_HTTPError(t *testing.T) {
 	// Assert
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "Ollama API returned status 500")
+	assert.Contains(t, err.Error(), "ollama API returned status 500")
 }
 
 func TestOllamaClient_BuildPrompt(t *testing.T) {
@@ -361,7 +361,7 @@ func TestOllamaClient_Triage_RecommendationsAsArray(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -399,7 +399,7 @@ func TestOllamaClient_Triage_ReasoningAsArray(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -437,7 +437,7 @@ func TestOllamaClient_Triage_BothFieldsAsArray(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 

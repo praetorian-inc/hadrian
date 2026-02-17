@@ -178,11 +178,11 @@ func (e *Executor) Execute(
 				// Check if response was truncated (more data available after limit)
 				var buf [1]byte
 				if n, _ := resp.Body.Read(buf[:]); n > 0 {
-					resp.Body.Close()
+					_ = resp.Body.Close()
 					return nil, fmt.Errorf("failed to read response body: response exceeds maximum size of %d bytes", MaxResponseBodySize)
 				}
 
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if err != nil {
 					return nil, fmt.Errorf("failed to read response body: %w", err)
 				}
@@ -472,7 +472,7 @@ func (e *Executor) ExecuteGraphQL(
 			if err != nil {
 				return nil, nil, fmt.Errorf("GraphQL request failed: %w", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			// Read with size limit to prevent memory exhaustion
 			limitedReader := io.LimitReader(resp.Body, MaxResponseBodySize)
@@ -654,10 +654,8 @@ func evaluateWordMatcher(matcher *CompiledMatcher, resp *http.Response, body str
 			if matcher.Condition == "or" {
 				return true // Short-circuit on first match
 			}
-		} else {
-			if matcher.Condition == "and" {
-				return false // Short-circuit on first non-match
-			}
+		} else if matcher.Condition == "and" {
+			return false // Short-circuit on first non-match
 		}
 	}
 
@@ -680,10 +678,8 @@ func evaluateRegexMatcher(matcher *CompiledMatcher, resp *http.Response, body st
 			if matcher.Condition == "or" {
 				return true // Short-circuit
 			}
-		} else {
-			if matcher.Condition == "and" {
-				return false // Short-circuit
-			}
+		} else if matcher.Condition == "and" {
+			return false // Short-circuit
 		}
 	}
 

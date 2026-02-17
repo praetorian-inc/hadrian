@@ -21,8 +21,8 @@ func TestNewClient_OllamaRunning(t *testing.T) {
 	}))
 	defer server.Close()
 
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
 
 	// Test IsOllamaRunningAt directly with mock server
 	ctx := context.Background()
@@ -82,8 +82,8 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	os.Setenv("OLLAMA_HOST", server.URL)
-	defer os.Unsetenv("OLLAMA_HOST")
+	_ = os.Setenv("OLLAMA_HOST", server.URL)
+	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
 
 	// Act
 	ctx := context.Background()
@@ -95,8 +95,8 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 
 func TestIsOllamaRunning_WithCustomHostNotRunning(t *testing.T) {
 	// Arrange - Set custom host that doesn't exist
-	os.Setenv("OLLAMA_HOST", "http://localhost:99999")
-	defer os.Unsetenv("OLLAMA_HOST")
+	_ = os.Setenv("OLLAMA_HOST", "http://localhost:99999")
+	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
 
 	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -118,9 +118,9 @@ func TestNewClientWithConfig_WithOllamaHost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	// Act
 	ctx := context.Background()
@@ -141,10 +141,10 @@ func TestNewClientWithConfig_WithEmptyModel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
-	os.Unsetenv("OLLAMA_MODEL")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("OLLAMA_MODEL")
 
 	// Act
 	ctx := context.Background()
@@ -158,9 +158,9 @@ func TestNewClientWithConfig_WithEmptyModel(t *testing.T) {
 
 func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
 	// Arrange
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -176,9 +176,9 @@ func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
 
 func TestNewClientWithConfig_EmptyHostFallsBackToEnv(t *testing.T) {
 	// Arrange
-	os.Unsetenv("ANTHROPIC_API_KEY")
-	os.Unsetenv("OPENAI_API_KEY")
-	os.Unsetenv("OLLAMA_HOST")
+	_ = os.Unsetenv("ANTHROPIC_API_KEY")
+	_ = os.Unsetenv("OPENAI_API_KEY")
+	_ = os.Unsetenv("OLLAMA_HOST")
 
 	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

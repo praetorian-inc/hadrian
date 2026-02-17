@@ -217,7 +217,7 @@ func (c *IntrospectionClient) FetchSchema(ctx context.Context) (*Schema, error) 
 	if err != nil {
 		return nil, fmt.Errorf("introspection request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		// Read error body with size limit

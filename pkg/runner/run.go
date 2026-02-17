@@ -100,8 +100,8 @@ func newTestRestCmd() *cobra.Command {
 	// Required flags
 	cmd.Flags().StringVar(&config.API, "api", "", "API specification (OpenAPI, Swagger, Postman)")
 	cmd.Flags().StringVar(&config.Roles, "roles", "", "Roles and permissions YAML file")
-	cmd.MarkFlagRequired("api")
-	cmd.MarkFlagRequired("roles")
+	_ = cmd.MarkFlagRequired("api")
+	_ = cmd.MarkFlagRequired("roles")
 
 	// Optional flags
 	cmd.Flags().StringVar(&config.Auth, "auth", "", "Authentication configuration YAML file")
@@ -231,7 +231,7 @@ func runTest(ctx context.Context, config Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
-	defer rep.Close()
+	defer func() { _ = rep.Close() }()
 
 	// 7a. Set LLM mode on terminal reporter if LLM is enabled
 	llmEnabled := hasLLMConfig() || config.LLMHost != ""
@@ -507,13 +507,13 @@ func filterTemplatesByOWASP(tmpls []*templates.CompiledTemplate, owaspCategories
 // verboseLog writes a formatted message to w only if verbose mode is enabled.
 func verboseLog(w io.Writer, verbose bool, format string, args ...interface{}) {
 	if verbose {
-		fmt.Fprintf(w, "[VERBOSE] "+format+"\n", args...)
+		_, _ = fmt.Fprintf(w, "[VERBOSE] "+format+"\n", args...)
 	}
 }
 
 // dryRunLog writes a formatted message to w only if dry-run mode is enabled.
 func dryRunLog(w io.Writer, dryRun bool, format string, args ...interface{}) {
 	if dryRun {
-		fmt.Fprintf(w, "[DRY-RUN] "+format+"\n", args...)
+		_, _ = fmt.Fprintf(w, "[DRY-RUN] "+format+"\n", args...)
 	}
 }

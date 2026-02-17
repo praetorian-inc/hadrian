@@ -25,7 +25,7 @@ func Example_requestIDTracking() {
 			fmt.Println("Setup request received with X-Hadrian-Request-Id")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]string{"id": "video123"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": "video123"})
 
 		case "/api/videos/video123":
 			// Attack/Verify phases
@@ -35,7 +35,7 @@ func Example_requestIDTracking() {
 				fmt.Println("Verify request received with X-Hadrian-Request-Id")
 			}
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{"id": "video123", "title": "Video"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"id": "video123", "title": "Video"})
 		}
 	}))
 	defer server.Close()

@@ -37,7 +37,7 @@ func TestE2E_RequestIDsInTerminalOutput(t *testing.T) {
 		// Return vulnerable response (200 OK for anonymous access)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"id": "123", "name": "admin", "role": "administrator"}`))
+		_, _ = w.Write([]byte(`{"id": "123", "name": "admin", "role": "administrator"}`))
 	}))
 	defer server.Close()
 

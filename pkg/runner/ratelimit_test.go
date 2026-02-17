@@ -127,7 +127,7 @@ func TestRateLimiter_ContextCancellation(t *testing.T) {
 
 	// Next request should hit context timeout (rate is 1 req/s, so would wait 1s)
 	err := rl.Wait(ctxTimeout, endpoint)
-	assert.Error(t, err, "Wait should return error when context cancelled")
+	assert.Error(t, err, "Wait should return error when context canceled")
 	assert.Contains(t, err.Error(), "context deadline", "error should indicate context timeout")
 }
 

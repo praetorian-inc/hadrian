@@ -90,7 +90,7 @@ func newTestGraphQLCmd() *cobra.Command {
 
 	// Required flags
 	cmd.Flags().StringVar(&config.Target, "target", "", "Target base URL (e.g., https://api.example.com)")
-	cmd.MarkFlagRequired("target")
+	_ = cmd.MarkFlagRequired("target")
 
 	// Schema source
 	cmd.Flags().StringVar(&config.Schema, "schema", "", "GraphQL SDL schema file (uses introspection if not provided)")
@@ -244,7 +244,7 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
-	defer reporter.Close()
+	defer func() { _ = reporter.Close() }()
 
 	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint

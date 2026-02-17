@@ -66,10 +66,11 @@ func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient templates
 // createGraphQLHTTPClient creates HTTP client with proxy, TLS, and timeout settings
 func createGraphQLHTTPClient(config GraphQLConfig) (templates.HTTPClient, error) {
 	httpConfig := &internalhttp.Config{
-		Proxy:    config.Proxy,
-		CACert:   config.CACert,
-		Insecure: config.Insecure,
-		Timeout:  time.Duration(config.Timeout) * time.Second,
+		Proxy:         config.Proxy,
+		CACert:        config.CACert,
+		Insecure:      config.Insecure,
+		Timeout:       time.Duration(config.Timeout) * time.Second,
+		AllowInternal: config.AllowInternal,
 	}
 	return internalhttp.New(httpConfig)
 }
@@ -176,9 +177,10 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 	return authConfigs, nil
 }
 
-// reportFindings prints security findings to stdout with color-coded severity
-// DEPRECATED: Use Reporter pattern (createReporter) for consistent output
-// NOTE: This function is deprecated and kept for backward compatibility only
+// reportFindings prints security findings to stdout with color-coded severity.
+// NOTE: This function is deprecated and kept for backward compatibility only.
+//
+// Deprecated: Use Reporter pattern (createReporter) for consistent output.
 func reportFindings(findings []*model.Finding) {
 	if len(findings) == 0 {
 		fmt.Println("\nNo security issues found.")

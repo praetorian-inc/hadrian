@@ -9,8 +9,8 @@ import (
 
 func TestLoad_Success(t *testing.T) {
 	// Set environment variable for test
-	os.Setenv("ADMIN_TOKEN", "test-admin-token-123")
-	defer os.Unsetenv("ADMIN_TOKEN")
+	_ = os.Setenv("ADMIN_TOKEN", "test-admin-token-123")
+	defer func() { _ = os.Unsetenv("ADMIN_TOKEN") }()
 
 	config, err := Load("testdata/auth.yaml")
 	if err != nil {
@@ -111,13 +111,13 @@ roles:
 	}
 
 	// Set environment variables
-	os.Setenv("TEST_USERNAME", "admin_user")
-	os.Setenv("TEST_PASSWORD", "secret_pass")
-	os.Setenv("TEST_API_KEY", "api-key-123")
+	_ = os.Setenv("TEST_USERNAME", "admin_user")
+	_ = os.Setenv("TEST_PASSWORD", "secret_pass")
+	_ = os.Setenv("TEST_API_KEY", "api-key-123")
 	defer func() {
-		os.Unsetenv("TEST_USERNAME")
-		os.Unsetenv("TEST_PASSWORD")
-		os.Unsetenv("TEST_API_KEY")
+		_ = os.Unsetenv("TEST_USERNAME")
+		_ = os.Unsetenv("TEST_PASSWORD")
+		_ = os.Unsetenv("TEST_API_KEY")
 	}()
 
 	config, err := Load(testFile)

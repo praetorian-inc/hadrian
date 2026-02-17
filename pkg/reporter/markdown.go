@@ -36,16 +36,16 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 
 	// Header
 	sb.WriteString("# Hadrian Security Report\n\n")
-	sb.WriteString(fmt.Sprintf("**Generated:** %s\n\n", time.Now().Format(time.RFC3339)))
+	fmt.Fprintf(&sb, "**Generated:** %s\n\n", time.Now().Format(time.RFC3339))
 
 	// Summary section
 	sb.WriteString("## Summary\n\n")
 	sb.WriteString("| Metric | Value |\n")
 	sb.WriteString("|--------|-------|\n")
-	sb.WriteString(fmt.Sprintf("| Duration | %s |\n", stats.Duration.String()))
-	sb.WriteString(fmt.Sprintf("| Operations | %d |\n", stats.TotalOperations))
-	sb.WriteString(fmt.Sprintf("| Templates | %d |\n", stats.TotalTemplates))
-	sb.WriteString(fmt.Sprintf("| Total Findings | %d |\n", stats.TotalFindings))
+	fmt.Fprintf(&sb, "| Duration | %s |\n", stats.Duration.String())
+	fmt.Fprintf(&sb, "| Operations | %d |\n", stats.TotalOperations)
+	fmt.Fprintf(&sb, "| Templates | %d |\n", stats.TotalTemplates)
+	fmt.Fprintf(&sb, "| Total Findings | %d |\n", stats.TotalFindings)
 	sb.WriteString("\n")
 
 	// Severity breakdown
@@ -61,7 +61,7 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 	}
 	for _, sev := range severityOrder {
 		count := stats.BySeverity[sev]
-		sb.WriteString(fmt.Sprintf("| %s | %d |\n", sev, count))
+		fmt.Fprintf(&sb, "| %s | %d |\n", sev, count)
 	}
 	sb.WriteString("\n")
 
@@ -71,7 +71,7 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 		sb.WriteString("| Category | Count |\n")
 		sb.WriteString("|----------|-------|\n")
 		for category, count := range stats.ByCategory {
-			sb.WriteString(fmt.Sprintf("| %s | %d |\n", category, count))
+			fmt.Fprintf(&sb, "| %s | %d |\n", category, count)
 		}
 		sb.WriteString("\n")
 	}
@@ -88,7 +88,7 @@ func (r *MarkdownReporter) GenerateReport(findings []*model.Finding, stats *Stat
 
 		for _, sev := range severityOrder {
 			if sevFindings, ok := grouped[sev]; ok && len(sevFindings) > 0 {
-				sb.WriteString(fmt.Sprintf("### %s\n\n", r.formatSeverityTitle(sev)))
+				fmt.Fprintf(&sb, "### %s\n\n", r.formatSeverityTitle(sev))
 
 				for i, finding := range sevFindings {
 					r.writeFinding(&sb, finding, i+1)
@@ -138,22 +138,22 @@ func (r *MarkdownReporter) formatSeverityTitle(sev model.Severity) string {
 // writeFinding writes a single finding to the markdown output
 func (r *MarkdownReporter) writeFinding(sb *strings.Builder, finding *model.Finding, index int) {
 	// Finding header
-	sb.WriteString(fmt.Sprintf("#### %d. %s (%s)\n\n", index, finding.Name, finding.Category))
+	fmt.Fprintf(sb, "#### %d. %s (%s)\n\n", index, finding.Name, finding.Category)
 
 	// Description
-	sb.WriteString(fmt.Sprintf("**Description:** %s\n\n", finding.Description))
+	fmt.Fprintf(sb, "**Description:** %s\n\n", finding.Description)
 
 	// Metadata
-	sb.WriteString(fmt.Sprintf("- **Endpoint:** `%s`\n", finding.Endpoint))
-	sb.WriteString(fmt.Sprintf("- **Confidence:** %.0f%%\n", finding.Confidence*100))
+	fmt.Fprintf(sb, "- **Endpoint:** `%s`\n", finding.Endpoint)
+	fmt.Fprintf(sb, "- **Confidence:** %.0f%%\n", finding.Confidence*100)
 	if finding.AttackerRole != "" {
-		sb.WriteString(fmt.Sprintf("- **Attacker Role:** %s\n", finding.AttackerRole))
+		fmt.Fprintf(sb, "- **Attacker Role:** %s\n", finding.AttackerRole)
 	}
 	if finding.VictimRole != "" {
-		sb.WriteString(fmt.Sprintf("- **Victim Role:** %s\n", finding.VictimRole))
+		fmt.Fprintf(sb, "- **Victim Role:** %s\n", finding.VictimRole)
 	}
 	if len(finding.RequestIDs) > 0 {
-		sb.WriteString(fmt.Sprintf("- **Request IDs:** %s\n", strings.Join(finding.RequestIDs, ", ")))
+		fmt.Fprintf(sb, "- **Request IDs:** %s\n", strings.Join(finding.RequestIDs, ", "))
 	}
 	sb.WriteString("\n")
 
@@ -163,9 +163,9 @@ func (r *MarkdownReporter) writeFinding(sb *strings.Builder, finding *model.Find
 	// Request
 	sb.WriteString("*Request:*\n")
 	sb.WriteString("```http\n")
-	sb.WriteString(fmt.Sprintf("%s %s\n", finding.Evidence.Request.Method, finding.Evidence.Request.URL))
+	fmt.Fprintf(sb, "%s %s\n", finding.Evidence.Request.Method, finding.Evidence.Request.URL)
 	for k, v := range finding.Evidence.Request.Headers {
-		sb.WriteString(fmt.Sprintf("%s: %s\n", k, r.redactor.Redact(v)))
+		fmt.Fprintf(sb, "%s: %s\n", k, r.redactor.Redact(v))
 	}
 	if finding.Evidence.Request.Body != "" {
 		sb.WriteString("\n")
@@ -177,9 +177,9 @@ func (r *MarkdownReporter) writeFinding(sb *strings.Builder, finding *model.Find
 	// Response
 	sb.WriteString("*Response:*\n")
 	sb.WriteString("```http\n")
-	sb.WriteString(fmt.Sprintf("HTTP %d\n", finding.Evidence.Response.StatusCode))
+	fmt.Fprintf(sb, "HTTP %d\n", finding.Evidence.Response.StatusCode)
 	for k, v := range finding.Evidence.Response.Headers {
-		sb.WriteString(fmt.Sprintf("%s: %s\n", k, r.redactor.Redact(v)))
+		fmt.Fprintf(sb, "%s: %s\n", k, r.redactor.Redact(v))
 	}
 	if finding.Evidence.Response.Body != "" {
 		sb.WriteString("\n")
