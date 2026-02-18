@@ -251,10 +251,20 @@ if echo "$TARGETS" | grep -q "crapi"; then
 
     COMPOSE_DIR="${CRAPI_DIR}/deploy/docker"
 
-    # Restore original docker-compose.yml if previously patched
-    if [ -f "${COMPOSE_DIR}/docker-compose.yml.bak" ]; then
+    # Reset docker-compose.yml to original state (undo any previous sed patches)
+    if [ -d "${CRAPI_DIR}/.git" ]; then
+        (cd "$CRAPI_DIR" && git checkout -- deploy/docker/docker-compose.yml 2>/dev/null) || true
+        log_info "Reset docker-compose.yml to original"
+    elif [ -f "${COMPOSE_DIR}/docker-compose.yml.bak" ]; then
         cp "${COMPOSE_DIR}/docker-compose.yml.bak" "${COMPOSE_DIR}/docker-compose.yml"
-        log_info "Restored original docker-compose.yml from backup"
+        log_info "Restored docker-compose.yml from backup"
+    fi
+
+    # Patch docker-compose port if not default (crAPI hardcodes 8888)
+    if [ "$CRAPI_PORT" != "8888" ]; then
+        log_info "Patching crAPI docker-compose to use port $CRAPI_PORT..."
+        sed -i.bak "s/8888:80/${CRAPI_PORT}:80/g" "${COMPOSE_DIR}/docker-compose.yml"
+        log_ok "Patched crAPI to port $CRAPI_PORT"
     fi
 fi
 
@@ -271,7 +281,7 @@ if [ "$SKIP_START" = false ]; then
 
     if echo "$TARGETS" | grep -q "crapi"; then
         log_info "Starting crapi services on port $CRAPI_PORT (this may take 1-2 minutes)..."
-        if (cd "${CRAPI_DIR}/deploy/docker" && CRAPI_SITE_PORT="$CRAPI_PORT" docker compose up -d 2>&1); then
+        if (cd "${CRAPI_DIR}/deploy/docker" && docker compose up -d 2>&1); then
             log_ok "crapi containers started"
         else
             log_warn "Some crapi containers may have failed to start (check output above)"
