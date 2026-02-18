@@ -68,15 +68,21 @@ DO_BUILD=true
 DO_START=true
 
 # Track results per target (plain variables, no associative arrays)
-STATUS_vulnerable_api="NOT_RUN"
+STATUS_vulnerable_api_bearer="NOT_RUN"
+STATUS_vulnerable_api_apikey="NOT_RUN"
+STATUS_vulnerable_api_basic="NOT_RUN"
 STATUS_dvga="NOT_RUN"
 STATUS_grpc="NOT_RUN"
 STATUS_crapi="NOT_RUN"
-FINDINGS_vulnerable_api="0"
+FINDINGS_vulnerable_api_bearer="0"
+FINDINGS_vulnerable_api_apikey="0"
+FINDINGS_vulnerable_api_basic="0"
 FINDINGS_dvga="0"
 FINDINGS_grpc="0"
 FINDINGS_crapi="0"
-DURATION_vulnerable_api="0"
+DURATION_vulnerable_api_bearer="0"
+DURATION_vulnerable_api_apikey="0"
+DURATION_vulnerable_api_basic="0"
 DURATION_dvga="0"
 DURATION_grpc="0"
 DURATION_crapi="0"
@@ -275,41 +281,67 @@ mkdir -p "$OUTPUT_DIR"
 
 # ==== Test: vulnerable-api ====
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    log_header "Target 1: vulnerable-api (REST)"
+    # Test all three auth methods: bearer, api_key, basic
+    VULN_API_AUTH_METHODS="bearer api_key basic"
+    VULN_API_SKIP_ALL=false
 
-    if [ "$DO_START" = true ]; then
-        # Kill any existing instance
-        pkill -f "vulnerable-api$" 2>/dev/null || true
-        sleep 1
+    for auth_method in $VULN_API_AUTH_METHODS; do
+        # Map auth_method to target name suffix (api_key -> apikey for variable names)
+        case "$auth_method" in
+            bearer)  target_suffix="bearer" ; auth_label="Bearer JWT" ;;
+            api_key) target_suffix="apikey" ; auth_label="API Key" ;;
+            basic)   target_suffix="basic"  ; auth_label="Basic Auth" ;;
+        esac
 
-        log_info "Starting vulnerable-api on port $VULN_API_PORT..."
-        (cd "${SCRIPT_DIR}/vulnerable-api" && PORT="${VULN_API_PORT}" ./vulnerable-api) &
-        PIDS_TO_CLEANUP="$PIDS_TO_CLEANUP $!"
-        wait_for_http "http://localhost:${VULN_API_PORT}/health" "vulnerable-api" 15 || {
-            set_status "vulnerable-api" "SKIP"
-            log_warn "Skipping vulnerable-api tests"
-        }
-    fi
+        target_name="vulnerable-api-${target_suffix}"
+        log_header "Target 1: vulnerable-api (REST - ${auth_label})"
 
-    if [ "$(get_status vulnerable-api)" != "SKIP" ]; then
-        log_info "Acquiring JWT tokens..."
-        ADMIN_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
-            -H "Content-Type: application/json" \
-            -d '{"username":"admin","password":"admin123"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
-        USER1_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
-            -H "Content-Type: application/json" \
-            -d '{"username":"user1","password":"user1pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
-        USER2_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
-            -H "Content-Type: application/json" \
-            -d '{"username":"user2","password":"user2pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+        if [ "$VULN_API_SKIP_ALL" = true ]; then
+            set_status "$target_name" "SKIP"
+            continue
+        fi
 
-        if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER1_TOKEN" ] || [ -z "$USER2_TOKEN" ]; then
-            log_fail "Failed to acquire JWT tokens"
-            set_status "vulnerable-api" "ERROR"
-        else
+        if [ "$DO_START" = true ]; then
+            # Kill any existing instance
+            pkill -f "vulnerable-api$" 2>/dev/null || true
+            sleep 1
+
+            log_info "Starting vulnerable-api on port $VULN_API_PORT (auth: ${auth_method})..."
+            (cd "${SCRIPT_DIR}/vulnerable-api" && AUTH_METHOD="${auth_method}" PORT="${VULN_API_PORT}" ./vulnerable-api) &
+            LAST_PID=$!
+            PIDS_TO_CLEANUP="$PIDS_TO_CLEANUP $LAST_PID"
+            wait_for_http "http://localhost:${VULN_API_PORT}/health" "vulnerable-api" 15 || {
+                set_status "$target_name" "SKIP"
+                log_warn "Skipping vulnerable-api ${auth_label} tests"
+                VULN_API_SKIP_ALL=true
+                continue
+            }
+        fi
+
+        # Reset API data between auth method runs
+        curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/reset" >/dev/null 2>&1 || true
+
+        AUTH_FILE="${OUTPUT_DIR}/vuln-api-auth-${target_suffix}.yaml"
+
+        if [ "$auth_method" = "bearer" ]; then
+            log_info "Acquiring JWT tokens..."
+            ADMIN_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
+                -H "Content-Type: application/json" \
+                -d '{"username":"admin","password":"admin123"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+            USER1_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
+                -H "Content-Type: application/json" \
+                -d '{"username":"user1","password":"user1pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+            USER2_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
+                -H "Content-Type: application/json" \
+                -d '{"username":"user2","password":"user2pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+
+            if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER1_TOKEN" ] || [ -z "$USER2_TOKEN" ]; then
+                log_fail "Failed to acquire JWT tokens"
+                set_status "$target_name" "ERROR"
+                continue
+            fi
             log_ok "Tokens acquired for admin, user1, user2"
 
-            AUTH_FILE="${OUTPUT_DIR}/vuln-api-auth.yaml"
             cat > "$AUTH_FILE" <<EOF
 method: bearer
 location: header
@@ -324,23 +356,57 @@ roles:
   anonymous:
     token: ""
 EOF
-
-            RESULT_FILE="${OUTPUT_DIR}/vulnerable-api-results.json"
-            run_hadrian "vulnerable-api" test rest \
-                --api "${SCRIPT_DIR}/vulnerable-api/openapi.yaml" \
-                --roles "${SCRIPT_DIR}/vulnerable-api/roles.yaml" \
-                --auth "$AUTH_FILE" \
-                --template-dir "${SCRIPT_DIR}/vulnerable-api/templates/owasp" \
-                --allow-internal \
-                --output json \
-                --output-file "$RESULT_FILE" \
-                --concurrency 1 \
-                $VERBOSE
-
-            set_findings "vulnerable-api" "$(extract_finding_count "$RESULT_FILE")"
-            log_ok "vulnerable-api: $(get_findings vulnerable-api) findings in $(get_duration vulnerable-api)s"
+        elif [ "$auth_method" = "api_key" ]; then
+            log_info "Using static API keys..."
+            cat > "$AUTH_FILE" <<EOF
+method: api_key
+location: header
+key_name: X-API-Key
+roles:
+  admin:
+    api_key: "admin-api-key-12345"
+  user1:
+    api_key: "user1-api-key-67890"
+  user2:
+    api_key: "user2-api-key-abcde"
+  anonymous:
+    api_key: ""
+EOF
+        elif [ "$auth_method" = "basic" ]; then
+            log_info "Using basic auth credentials..."
+            cat > "$AUTH_FILE" <<EOF
+method: basic
+roles:
+  admin:
+    username: "admin"
+    password: "admin123"
+  user1:
+    username: "user1"
+    password: "user1pass"
+  user2:
+    username: "user2"
+    password: "user2pass"
+  anonymous:
+    username: ""
+    password: ""
+EOF
         fi
-    fi
+
+        RESULT_FILE="${OUTPUT_DIR}/vulnerable-api-${target_suffix}-results.json"
+        run_hadrian "$target_name" test rest \
+            --api "${SCRIPT_DIR}/vulnerable-api/openapi.yaml" \
+            --roles "${SCRIPT_DIR}/vulnerable-api/roles.yaml" \
+            --auth "$AUTH_FILE" \
+            --template-dir "${SCRIPT_DIR}/vulnerable-api/templates/owasp" \
+            --allow-internal \
+            --output json \
+            --output-file "$RESULT_FILE" \
+            --concurrency 1 \
+            $VERBOSE
+
+        set_findings "$target_name" "$(extract_finding_count "$RESULT_FILE")"
+        log_ok "vulnerable-api (${auth_label}): $(get_findings "$target_name") findings in $(get_duration "$target_name")s"
+    done
 fi
 
 # ==== Test: dvga (GraphQL) ====
@@ -638,18 +704,25 @@ fi
 log_header "Test Summary"
 
 echo ""
-printf "${BOLD}%-20s %-10s %-12s %-10s${NC}\n" "TARGET" "STATUS" "FINDINGS" "DURATION"
-printf "%-20s %-10s %-12s %-10s\n" "--------------------" "----------" "------------" "----------"
+printf "${BOLD}%-25s %-10s %-12s %-10s${NC}\n" "TARGET" "STATUS" "FINDINGS" "DURATION"
+printf "%-25s %-10s %-12s %-10s\n" "-------------------------" "----------" "------------" "----------"
 
 TOTAL_FINDINGS=0
 TOTAL_PASS=0
 TOTAL_FAIL=0
 TOTAL_SKIP=0
 
-for target in vulnerable-api dvga grpc crapi; do
-    if ! echo "$TARGETS" | grep -q "${target}"; then
-        continue
+ALL_TARGETS=""
+if echo "$TARGETS" | grep -q "vulnerable-api"; then
+    ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic"
+fi
+for extra in dvga grpc crapi; do
+    if echo "$TARGETS" | grep -q "${extra}"; then
+        ALL_TARGETS="$ALL_TARGETS $extra"
     fi
+done
+
+for target in $ALL_TARGETS; do
 
     status="$(get_status "$target")"
     findings="$(get_findings "$target")"
@@ -684,7 +757,7 @@ for target in vulnerable-api dvga grpc crapi; do
         duration_str="-"
     fi
 
-    printf "${status_color}%-20s %-10s %-12s %-10s${NC}\n" "$target" "$status" "$findings" "$duration_str"
+    printf "${status_color}%-25s %-10s %-12s %-10s${NC}\n" "$target" "$status" "$findings" "$duration_str"
 done
 
 echo ""
