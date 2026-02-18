@@ -270,7 +270,7 @@ if [ "$SKIP_START" = false ]; then
 
     if echo "$TARGETS" | grep -q "crapi"; then
         log_info "Starting crapi services (this may take 1-2 minutes)..."
-        (cd "${CRAPI_DIR}/deploy/docker" && docker compose up -d 2>&1)
+        (cd "${CRAPI_DIR}/deploy/docker" && DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose up -d 2>&1)
         log_ok "crapi containers started"
     fi
 
@@ -298,6 +298,10 @@ if [ "$SKIP_START" = false ]; then
             elapsed=$((elapsed + 5))
             if [ $elapsed -ge 180 ]; then
                 log_fail "crapi did not respond within 180s"
+                log_warn "Container status:"
+                (cd "${CRAPI_DIR}/deploy/docker" && docker compose ps 2>&1) || true
+                log_warn "crapi-web logs:"
+                (cd "${CRAPI_DIR}/deploy/docker" && docker compose logs crapi-web 2>&1 | tail -10) || true
                 exit 1
             fi
             printf "."
