@@ -247,14 +247,14 @@ if [ "$DO_BUILD" = true ]; then
                             service.proto
                         log_ok "Protobuf code generated"
                     else
-                        log_error "protoc not found. Install with: brew install protobuf"
-                        log_error "Then install Go plugins:"
-                        log_error "  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
-                        log_error "  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"
+                        log_fail "protoc not found. Install with: brew install protobuf"
+                        log_fail "Then install Go plugins:"
+                        log_fail "  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+                        log_fail "  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"
                         exit 1
                     fi
                 else
-                    log_error "Skipping grpc-server (pb/ directory required). Run 'make proto' in testdata/grpc-server/ first."
+                    log_fail "Skipping grpc-server (pb/ directory required). Run 'make proto' in testdata/grpc-server/ first."
                     exit 1
                 fi
             fi
@@ -508,7 +508,7 @@ if echo "$TARGETS" | grep -q "crapi"; then
 
     CRAPI_URL="http://localhost:${CRAPI_PORT}"
 
-    if ! curl -sf -o /dev/null "${CRAPI_URL}/identity/api/auth/signup" 2>/dev/null; then
+    if ! curl -s -o /dev/null -w "%{http_code}" "${CRAPI_URL}/identity/api/auth/login" 2>/dev/null | grep -qE "^[2-4]"; then
         log_warn "crapi not detected on port $CRAPI_PORT"
         log_info "To set up crapi:"
         log_info "  git clone https://github.com/OWASP/crAPI.git"
