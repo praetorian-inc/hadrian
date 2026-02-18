@@ -231,7 +231,24 @@ if [ "$DO_BUILD" = true ]; then
 
     if echo "$TARGETS" | grep -q "grpc"; then
         log_info "Building grpc-server..."
-        (cd "${SCRIPT_DIR}/grpc-server" && go build -o grpc-server .)
+        (cd "${SCRIPT_DIR}/grpc-server" && {
+            # Generate protobuf Go code if pb/ directory doesn't exist
+            if [ ! -d pb ]; then
+                log_info "Generating protobuf code..."
+                if command -v protoc >/dev/null 2>&1; then
+                    mkdir -p pb
+                    protoc --go_out=pb --go_opt=paths=source_relative \
+                        --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+                        service.proto
+                elif command -v make >/dev/null 2>&1; then
+                    make proto
+                else
+                    log_error "protoc not found. Install protobuf compiler or run 'make proto' in testdata/grpc-server/"
+                    exit 1
+                fi
+            fi
+            go build -o grpc-server .
+        })
         log_ok "grpc-server built"
     fi
 fi
