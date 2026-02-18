@@ -550,10 +550,10 @@ if echo "$TARGETS" | grep -q "crapi"; then
         CRAPI_MECHANIC_EMAIL="hadrian-mechanic@test.com"
         CRAPI_PASSWORD="HadrianTest123!"
 
-        crapi_signup "$CRAPI_ADMIN_EMAIL" "Hadrian Admin" "1111111111" "$CRAPI_PASSWORD"
-        crapi_signup "$CRAPI_USER_EMAIL" "Hadrian User1" "2222222222" "$CRAPI_PASSWORD"
-        crapi_signup "$CRAPI_USER2_EMAIL" "Hadrian User2" "3333333333" "$CRAPI_PASSWORD"
-        crapi_mechanic_signup "$CRAPI_MECHANIC_EMAIL" "Hadrian Mechanic" "4444444444" "$CRAPI_PASSWORD" "TRAC_MECH1"
+        crapi_signup "$CRAPI_ADMIN_EMAIL" "Hadrian Admin" "1111111111" "$CRAPI_PASSWORD" >/dev/null
+        crapi_signup "$CRAPI_USER_EMAIL" "Hadrian User1" "2222222222" "$CRAPI_PASSWORD" >/dev/null
+        crapi_signup "$CRAPI_USER2_EMAIL" "Hadrian User2" "3333333333" "$CRAPI_PASSWORD" >/dev/null
+        crapi_mechanic_signup "$CRAPI_MECHANIC_EMAIL" "Hadrian Mechanic" "4444444444" "$CRAPI_PASSWORD" "TRAC_MECH1" >/dev/null
         log_ok "crapi users created/verified"
 
         CRAPI_ADMIN_TOKEN=$(crapi_login "$CRAPI_ADMIN_EMAIL" "$CRAPI_PASSWORD")
@@ -603,8 +603,17 @@ EOF
 
             RESULT_FILE="${OUTPUT_DIR}/crapi-results.json"
 
+            # If using a non-default port, patch the OpenAPI spec
+            CRAPI_SPEC="${SCRIPT_DIR}/crapi/crapi-openapi-spec.json"
+            if [ "$CRAPI_PORT" != "8888" ]; then
+                CRAPI_SPEC="${OUTPUT_DIR}/crapi-openapi-spec.json"
+                sed "s|http://localhost:8888|http://localhost:${CRAPI_PORT}|g" \
+                    "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" > "$CRAPI_SPEC"
+                log_info "Patched OpenAPI spec to use port $CRAPI_PORT"
+            fi
+
             run_hadrian "crapi" test rest \
-                --api "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
+                --api "$CRAPI_SPEC" \
                 --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
                 --auth "$CRAPI_AUTH_FILE" \
                 --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
