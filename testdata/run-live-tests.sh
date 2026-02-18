@@ -355,7 +355,9 @@ if echo "$TARGETS" | grep -q "dvga"; then
             }
 
             if [ "$(get_status dvga)" != "SKIP" ]; then
-                wait_for_http "http://localhost:${DVGA_PORT}/graphql" "dvga" 30 || {
+                wait_for_http "http://localhost:${DVGA_PORT}/graphql" "dvga" 60 || {
+                    log_warn "dvga container logs:"
+                    docker logs hadrian-dvga 2>&1 | tail -20
                     set_status "dvga" "SKIP"
                     log_warn "Skipping dvga tests"
                 }
