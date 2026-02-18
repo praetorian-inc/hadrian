@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # run-live-tests.sh
 #
@@ -35,7 +35,7 @@
 set -euo pipefail
 
 # ==== Configuration ====
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HADRIAN_BIN="${HADRIAN_BIN:-${REPO_ROOT}/hadrian}"
 OUTPUT_DIR="${SCRIPT_DIR}/.results"
@@ -61,14 +61,24 @@ VERBOSE=""
 DO_BUILD=true
 DO_START=true
 
-# Track results
-declare -A TARGET_STATUS
-declare -A TARGET_FINDINGS
-declare -A TARGET_DURATION
-PIDS_TO_CLEANUP=()
+# Track results per target (plain variables, no associative arrays)
+STATUS_vulnerable_api="NOT_RUN"
+STATUS_dvga="NOT_RUN"
+STATUS_grpc="NOT_RUN"
+STATUS_crapi="NOT_RUN"
+FINDINGS_vulnerable_api="0"
+FINDINGS_dvga="0"
+FINDINGS_grpc="0"
+FINDINGS_crapi="0"
+DURATION_vulnerable_api="0"
+DURATION_dvga="0"
+DURATION_grpc="0"
+DURATION_crapi="0"
+
+PIDS_TO_CLEANUP=""
 
 # ==== Argument parsing ====
-while [[ $# -gt 0 ]]; do
+while [ $# -gt 0 ]; do
     case $1 in
         --targets)
             TARGETS="$2"
@@ -91,7 +101,7 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help)
-            sed -n '2,/^# =====/p' "$0" | head -n -1 | sed 's/^# \?//'
+            sed -n '2,/^# =====/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
@@ -100,6 +110,14 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# ==== Result helpers (no associative arrays) ====
+set_status() { eval "STATUS_$(echo "$1" | tr '-' '_')=$2"; }
+get_status() { eval "echo \${STATUS_$(echo "$1" | tr '-' '_')}"; }
+set_findings() { eval "FINDINGS_$(echo "$1" | tr '-' '_')=$2"; }
+get_findings() { eval "echo \${FINDINGS_$(echo "$1" | tr '-' '_')}"; }
+set_duration() { eval "DURATION_$(echo "$1" | tr '-' '_')=$2"; }
+get_duration() { eval "echo \${DURATION_$(echo "$1" | tr '-' '_')}"; }
 
 # ==== Helper functions ====
 
@@ -126,24 +144,6 @@ log_fail() {
     echo -e "${RED}[FAIL]${NC} $1"
 }
 
-wait_for_port() {
-    local port=$1
-    local name=$2
-    local max_wait=${3:-30}
-    local elapsed=0
-
-    while ! nc -z localhost "$port" 2>/dev/null; do
-        sleep 1
-        elapsed=$((elapsed + 1))
-        if [ $elapsed -ge $max_wait ]; then
-            log_fail "$name did not start within ${max_wait}s on port $port"
-            return 1
-        fi
-    done
-    log_ok "$name is ready on port $port"
-    return 0
-}
-
 wait_for_http() {
     local url=$1
     local name=$2
@@ -164,7 +164,7 @@ wait_for_http() {
 
 cleanup() {
     log_header "Cleanup"
-    for pid in "${PIDS_TO_CLEANUP[@]}"; do
+    for pid in $PIDS_TO_CLEANUP; do
         if kill -0 "$pid" 2>/dev/null; then
             log_info "Stopping process $pid"
             kill "$pid" 2>/dev/null || true
@@ -173,9 +173,11 @@ cleanup() {
     done
 
     # Stop dvga container if we started it
-    if [ "$DO_START" = true ] && docker ps -q --filter "name=hadrian-dvga" 2>/dev/null | grep -q .; then
-        log_info "Stopping dvga container"
-        docker rm -f hadrian-dvga 2>/dev/null || true
+    if [ "$DO_START" = true ] && command -v docker >/dev/null 2>&1; then
+        if docker ps -q --filter "name=hadrian-dvga" 2>/dev/null | grep -q .; then
+            log_info "Stopping dvga container"
+            docker rm -f hadrian-dvga 2>/dev/null || true
+        fi
     fi
 }
 
@@ -184,7 +186,6 @@ trap cleanup EXIT
 extract_finding_count() {
     local json_file=$1
     if [ -f "$json_file" ]; then
-        # Extract finding count from JSON output
         python3 -c "import json,sys; d=json.load(open('$json_file')); print(d.get('stats',{}).get('findings',len(d.get('findings',[]))))" 2>/dev/null || echo "?"
     else
         echo "?"
@@ -199,40 +200,35 @@ run_hadrian() {
 
     log_info "Running: $HADRIAN_BIN $*"
 
-    if "$HADRIAN_BIN" "$@" 2>&1; then
-        TARGET_STATUS[$name]="PASS"
+    local exit_code=0
+    "$HADRIAN_BIN" "$@" 2>&1 || exit_code=$?
+
+    # Exit code 0 or 1 (findings detected) are both success
+    if [ $exit_code -le 1 ]; then
+        set_status "$name" "PASS"
     else
-        local exit_code=$?
-        # Exit code 1 with findings is expected (vulnerabilities found)
-        if [ $exit_code -eq 1 ]; then
-            TARGET_STATUS[$name]="PASS"
-        else
-            TARGET_STATUS[$name]="ERROR"
-        fi
+        set_status "$name" "ERROR"
     fi
 
     local end_time
     end_time=$(date +%s)
-    TARGET_DURATION[$name]=$(( end_time - start_time ))
+    set_duration "$name" $(( end_time - start_time ))
 }
 
 # ==== Build phase ====
 if [ "$DO_BUILD" = true ]; then
     log_header "Building Hadrian and Targets"
 
-    # Build hadrian
     log_info "Building hadrian..."
     (cd "$REPO_ROOT" && go build -o hadrian ./cmd/hadrian)
     log_ok "hadrian built: $HADRIAN_BIN"
 
-    # Build vulnerable-api if target is requested
     if echo "$TARGETS" | grep -q "vulnerable-api"; then
         log_info "Building vulnerable-api..."
         (cd "${SCRIPT_DIR}/vulnerable-api" && go build -o vulnerable-api .)
         log_ok "vulnerable-api built"
     fi
 
-    # Build grpc-server if target is requested
     if echo "$TARGETS" | grep -q "grpc"; then
         log_info "Building grpc-server..."
         (cd "${SCRIPT_DIR}/grpc-server" && go build -o grpc-server .)
@@ -248,22 +244,20 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
     log_header "Target 1: vulnerable-api (REST)"
 
     if [ "$DO_START" = true ]; then
-        # Kill any existing instance (match the binary, not this script)
-        pkill -xf ".*/vulnerable-api\$" 2>/dev/null || true
+        # Kill any existing instance
+        pkill -f "vulnerable-api$" 2>/dev/null || true
         sleep 1
 
-        # Start with bearer auth (default)
         log_info "Starting vulnerable-api on port $VULN_API_PORT..."
         (cd "${SCRIPT_DIR}/vulnerable-api" && PORT="${VULN_API_PORT}" ./vulnerable-api) &
-        PIDS_TO_CLEANUP+=($!)
+        PIDS_TO_CLEANUP="$PIDS_TO_CLEANUP $!"
         wait_for_http "http://localhost:${VULN_API_PORT}/health" "vulnerable-api" 15 || {
-            TARGET_STATUS[vulnerable-api]="SKIP"
+            set_status "vulnerable-api" "SKIP"
             log_warn "Skipping vulnerable-api tests"
         }
     fi
 
-    if [ "${TARGET_STATUS[vulnerable-api]:-}" != "SKIP" ]; then
-        # Get fresh JWT tokens
+    if [ "$(get_status vulnerable-api)" != "SKIP" ]; then
         log_info "Acquiring JWT tokens..."
         ADMIN_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
             -H "Content-Type: application/json" \
@@ -277,11 +271,10 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
 
         if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER1_TOKEN" ] || [ -z "$USER2_TOKEN" ]; then
             log_fail "Failed to acquire JWT tokens"
-            TARGET_STATUS[vulnerable-api]="ERROR"
+            set_status "vulnerable-api" "ERROR"
         else
             log_ok "Tokens acquired for admin, user1, user2"
 
-            # Write dynamic auth config with fresh tokens
             AUTH_FILE="${OUTPUT_DIR}/vuln-api-auth.yaml"
             cat > "$AUTH_FILE" <<EOF
 method: bearer
@@ -310,8 +303,8 @@ EOF
                 --concurrency 1 \
                 $VERBOSE
 
-            TARGET_FINDINGS[vulnerable-api]=$(extract_finding_count "$RESULT_FILE")
-            log_ok "vulnerable-api: ${TARGET_FINDINGS[vulnerable-api]} findings in ${TARGET_DURATION[vulnerable-api]}s"
+            set_findings "vulnerable-api" "$(extract_finding_count "$RESULT_FILE")"
+            log_ok "vulnerable-api: $(get_findings vulnerable-api) findings in $(get_duration vulnerable-api)s"
         fi
     fi
 fi
@@ -321,36 +314,33 @@ if echo "$TARGETS" | grep -q "dvga"; then
     log_header "Target 2: dvga (GraphQL)"
 
     if [ "$DO_START" = true ]; then
-        # Check if docker is available
-        if ! command -v docker &>/dev/null; then
+        if ! command -v docker >/dev/null 2>&1; then
             log_warn "Docker not available, skipping dvga"
-            TARGET_STATUS[dvga]="SKIP"
+            set_status "dvga" "SKIP"
         else
-            # Start dvga container
             docker rm -f hadrian-dvga 2>/dev/null || true
             log_info "Starting dvga container on port $DVGA_PORT..."
             docker run -d -p "${DVGA_PORT}:5013" --name hadrian-dvga dolevf/dvga:latest 2>/dev/null || {
                 log_warn "Failed to start dvga container (image may not be pulled)"
                 log_info "Pull with: docker pull dolevf/dvga:latest"
-                TARGET_STATUS[dvga]="SKIP"
+                set_status "dvga" "SKIP"
             }
 
-            if [ "${TARGET_STATUS[dvga]:-}" != "SKIP" ]; then
+            if [ "$(get_status dvga)" != "SKIP" ]; then
                 wait_for_http "http://localhost:${DVGA_PORT}/graphql" "dvga" 30 || {
-                    TARGET_STATUS[dvga]="SKIP"
+                    set_status "dvga" "SKIP"
                     log_warn "Skipping dvga tests"
                 }
             fi
         fi
     fi
 
-    if [ "${TARGET_STATUS[dvga]:-}" != "SKIP" ]; then
+    if [ "$(get_status dvga)" != "SKIP" ]; then
         DVGA_ENDPOINT="http://localhost:${DVGA_PORT}/graphql"
 
         # ---- Setup: Acquire auth tokens for BOLA testing ----
         log_info "Setting up dvga auth tokens..."
 
-        # Function to login to dvga and get token
         dvga_get_token() {
             local username="$1"
             local password="$2"
@@ -361,7 +351,6 @@ if echo "$TARGETS" | grep -q "dvga"; then
             echo "$result" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['data']['login']['accessToken'])" 2>/dev/null || echo ""
         }
 
-        # Try common passwords for admin
         DVGA_ADMIN_TOKEN=""
         for pass in "changeme" "admin" "password" "admin123"; do
             DVGA_ADMIN_TOKEN=$(dvga_get_token "admin" "$pass")
@@ -371,7 +360,6 @@ if echo "$TARGETS" | grep -q "dvga"; then
             fi
         done
 
-        # Try to get operator token
         DVGA_OPERATOR_TOKEN=""
         for pass in "changeme" "operator" "password"; do
             DVGA_OPERATOR_TOKEN=$(dvga_get_token "operator" "$pass")
@@ -380,7 +368,6 @@ if echo "$TARGETS" | grep -q "dvga"; then
                 break
             fi
         done
-        # Fall back to admin token if operator unavailable
         if [ -z "$DVGA_OPERATOR_TOKEN" ]; then
             DVGA_OPERATOR_TOKEN="$DVGA_ADMIN_TOKEN"
             log_info "operator token unavailable, using admin token"
@@ -389,7 +376,6 @@ if echo "$TARGETS" | grep -q "dvga"; then
         if [ -z "$DVGA_ADMIN_TOKEN" ]; then
             log_warn "Failed to acquire dvga tokens, running without auth"
         else
-            # Create test data for BOLA testing
             log_info "Creating dvga test data (pastes for BOLA)..."
             curl -sf -X POST "$DVGA_ENDPOINT" \
                 -H "Content-Type: application/json" \
@@ -402,7 +388,6 @@ if echo "$TARGETS" | grep -q "dvga"; then
                 -d '{"query": "mutation { createPaste(title: \"Victim PII\", content: \"SSN: 123-45-6789, Credit Card: 4111-1111-1111-1111\", public: false) { paste { id } } }"}' >/dev/null 2>&1 && \
                 log_ok "Created victim PII paste" || log_warn "Failed to create victim paste"
 
-            # Write auth config with acquired tokens
             DVGA_AUTH_FILE="${OUTPUT_DIR}/dvga-auth.yaml"
             cat > "$DVGA_AUTH_FILE" <<EOF
 method: bearer
@@ -424,9 +409,9 @@ EOF
         # ---- Run tests ----
         RESULT_FILE="${OUTPUT_DIR}/dvga-results.json"
 
-        DVGA_AUTH_FLAG=""
-        if [ -n "$DVGA_ADMIN_TOKEN" ]; then
-            DVGA_AUTH_FLAG="--auth ${DVGA_AUTH_FILE} --roles ${SCRIPT_DIR}/dvga/dvga-roles.yaml"
+        DVGA_AUTH_FLAGS=""
+        if [ -n "${DVGA_ADMIN_TOKEN:-}" ]; then
+            DVGA_AUTH_FLAGS="--auth ${DVGA_AUTH_FILE} --roles ${SCRIPT_DIR}/dvga/dvga-roles.yaml"
         fi
 
         # shellcheck disable=SC2086
@@ -438,11 +423,11 @@ EOF
             --allow-internal \
             --output json \
             --output-file "$RESULT_FILE" \
-            $DVGA_AUTH_FLAG \
+            $DVGA_AUTH_FLAGS \
             $VERBOSE
 
-        TARGET_FINDINGS[dvga]=$(extract_finding_count "$RESULT_FILE")
-        log_ok "dvga: ${TARGET_FINDINGS[dvga]} findings in ${TARGET_DURATION[dvga]}s"
+        set_findings "dvga" "$(extract_finding_count "$RESULT_FILE")"
+        log_ok "dvga: $(get_findings dvga) findings in $(get_duration dvga)s"
     fi
 fi
 
@@ -451,25 +436,25 @@ if echo "$TARGETS" | grep -q "grpc"; then
     log_header "Target 3: grpc-server (gRPC)"
 
     if [ "$DO_START" = true ]; then
-        # Kill any existing instance (match the binary, not this script)
-        pkill -xf ".*/grpc-server\$" 2>/dev/null || true
+        pkill -f "grpc-server$" 2>/dev/null || true
         sleep 1
 
         log_info "Starting grpc-server on port $GRPC_PORT..."
         (cd "${SCRIPT_DIR}/grpc-server" && GRPC_PORT="${GRPC_PORT}" ./grpc-server) &
-        PIDS_TO_CLEANUP+=($!)
+        LAST_PID=$!
+        PIDS_TO_CLEANUP="$PIDS_TO_CLEANUP $LAST_PID"
         # gRPC servers may not respond to raw TCP probes; wait briefly then check process
         sleep 3
-        if kill -0 "${PIDS_TO_CLEANUP[-1]}" 2>/dev/null; then
-            log_ok "grpc-server started (pid ${PIDS_TO_CLEANUP[-1]})"
+        if kill -0 "$LAST_PID" 2>/dev/null; then
+            log_ok "grpc-server started (pid $LAST_PID)"
         else
             log_fail "grpc-server process died"
-            TARGET_STATUS[grpc]="SKIP"
+            set_status "grpc" "SKIP"
             log_warn "Skipping gRPC tests"
         fi
     fi
 
-    if [ "${TARGET_STATUS[grpc]:-}" != "SKIP" ]; then
+    if [ "$(get_status grpc)" != "SKIP" ]; then
         RESULT_FILE="${OUTPUT_DIR}/grpc-results.json"
 
         run_hadrian "grpc" test grpc \
@@ -484,8 +469,8 @@ if echo "$TARGETS" | grep -q "grpc"; then
             --output-file "$RESULT_FILE" \
             $VERBOSE
 
-        TARGET_FINDINGS[grpc]=$(extract_finding_count "$RESULT_FILE")
-        log_ok "grpc: ${TARGET_FINDINGS[grpc]} findings in ${TARGET_DURATION[grpc]}s"
+        set_findings "grpc" "$(extract_finding_count "$RESULT_FILE")"
+        log_ok "grpc: $(get_findings grpc) findings in $(get_duration grpc)s"
     fi
 fi
 
@@ -495,35 +480,25 @@ if echo "$TARGETS" | grep -q "crapi"; then
 
     CRAPI_URL="http://localhost:${CRAPI_PORT}"
 
-    # crapi requires external docker-compose setup; check if it's running
     if ! curl -sf -o /dev/null "${CRAPI_URL}/identity/api/auth/signup" 2>/dev/null; then
         log_warn "crapi not detected on port $CRAPI_PORT"
         log_info "To set up crapi:"
         log_info "  git clone https://github.com/OWASP/crAPI.git"
         log_info "  cd crAPI/deploy/docker && docker-compose up -d"
-        TARGET_STATUS[crapi]="SKIP"
+        set_status "crapi" "SKIP"
     fi
 
-    if [ "${TARGET_STATUS[crapi]:-}" != "SKIP" ]; then
+    if [ "$(get_status crapi)" != "SKIP" ]; then
         # ---- Setup: Auto-create users and acquire tokens ----
         log_info "Setting up crapi test users and tokens..."
 
-        # Helper: signup a crapi user (idempotent - returns success if already exists)
         crapi_signup() {
             local email="$1" name="$2" number="$3" password="$4"
-            local result
-            result=$(curl -sf -X POST "${CRAPI_URL}/identity/api/auth/signup" \
+            curl -sf -X POST "${CRAPI_URL}/identity/api/auth/signup" \
                 -H "Content-Type: application/json" \
-                -d "{\"email\":\"$email\",\"name\":\"$name\",\"number\":\"$number\",\"password\":\"$password\"}" 2>/dev/null)
-            # Success or "already registered" are both OK
-            if echo "$result" | grep -qi "success\|already\|exists\|registered" 2>/dev/null; then
-                return 0
-            fi
-            # Also OK if HTTP 200 was returned
-            return 0
+                -d "{\"email\":\"$email\",\"name\":\"$name\",\"number\":\"$number\",\"password\":\"$password\"}" 2>/dev/null || true
         }
 
-        # Helper: login and extract JWT token
         crapi_login() {
             local email="$1" password="$2"
             curl -sf -X POST "${CRAPI_URL}/identity/api/auth/login" \
@@ -532,7 +507,6 @@ if echo "$TARGETS" | grep -q "crapi"; then
                 python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo ""
         }
 
-        # Helper: signup a mechanic (needs mechanic_code)
         crapi_mechanic_signup() {
             local email="$1" name="$2" number="$3" password="$4" code="$5"
             curl -sf -X POST "${CRAPI_URL}/workshop/api/mechanic/signup" \
@@ -540,21 +514,18 @@ if echo "$TARGETS" | grep -q "crapi"; then
                 -d "{\"email\":\"$email\",\"name\":\"$name\",\"number\":\"$number\",\"password\":\"$password\",\"mechanic_code\":\"$code\"}" 2>/dev/null || true
         }
 
-        # Define test users
         CRAPI_ADMIN_EMAIL="hadrian-admin@test.com"
         CRAPI_USER_EMAIL="hadrian-user1@test.com"
         CRAPI_USER2_EMAIL="hadrian-user2@test.com"
         CRAPI_MECHANIC_EMAIL="hadrian-mechanic@test.com"
         CRAPI_PASSWORD="HadrianTest123!"
 
-        # Create accounts (idempotent)
         crapi_signup "$CRAPI_ADMIN_EMAIL" "Hadrian Admin" "1111111111" "$CRAPI_PASSWORD"
         crapi_signup "$CRAPI_USER_EMAIL" "Hadrian User1" "2222222222" "$CRAPI_PASSWORD"
         crapi_signup "$CRAPI_USER2_EMAIL" "Hadrian User2" "3333333333" "$CRAPI_PASSWORD"
         crapi_mechanic_signup "$CRAPI_MECHANIC_EMAIL" "Hadrian Mechanic" "4444444444" "$CRAPI_PASSWORD" "TRAC_MECH1"
         log_ok "crapi users created/verified"
 
-        # Login and get tokens
         CRAPI_ADMIN_TOKEN=$(crapi_login "$CRAPI_ADMIN_EMAIL" "$CRAPI_PASSWORD")
         CRAPI_USER_TOKEN=$(crapi_login "$CRAPI_USER_EMAIL" "$CRAPI_PASSWORD")
         CRAPI_USER2_TOKEN=$(crapi_login "$CRAPI_USER2_EMAIL" "$CRAPI_PASSWORD")
@@ -562,17 +533,16 @@ if echo "$TARGETS" | grep -q "crapi"; then
 
         if [ -z "$CRAPI_USER_TOKEN" ] || [ -z "$CRAPI_USER2_TOKEN" ]; then
             log_fail "Failed to acquire crapi tokens"
-            TARGET_STATUS[crapi]="ERROR"
+            set_status "crapi" "ERROR"
         else
             log_ok "crapi tokens acquired"
 
-            # Upload test videos for BFLA/BOPLA tests (idempotent)
+            # Upload test videos for BFLA/BOPLA tests
             log_info "Setting up crapi test videos..."
             TMP_VIDEO="/tmp/hadrian_test_video.mp4"
             echo "test video content for hadrian security testing" > "$TMP_VIDEO"
 
-            for token_var in CRAPI_USER_TOKEN CRAPI_USER2_TOKEN CRAPI_MECHANIC_TOKEN; do
-                token="${!token_var}"
+            for token in "$CRAPI_USER_TOKEN" "$CRAPI_USER2_TOKEN" "$CRAPI_MECHANIC_TOKEN"; do
                 if [ -n "$token" ]; then
                     curl -sf -X POST "${CRAPI_URL}/identity/api/v2/user/videos" \
                         -H "Authorization: Bearer $token" \
@@ -583,7 +553,6 @@ if echo "$TARGETS" | grep -q "crapi"; then
             rm -f "$TMP_VIDEO"
             log_ok "crapi test videos uploaded"
 
-            # Write auth config with fresh tokens
             CRAPI_AUTH_FILE="${OUTPUT_DIR}/crapi-auth.yaml"
             cat > "$CRAPI_AUTH_FILE" <<EOF
 method: bearer
@@ -602,7 +571,6 @@ roles:
     token: ""
 EOF
 
-            # ---- Run tests ----
             RESULT_FILE="${OUTPUT_DIR}/crapi-results.json"
 
             run_hadrian "crapi" test rest \
@@ -615,8 +583,8 @@ EOF
                 --output-file "$RESULT_FILE" \
                 $VERBOSE
 
-            TARGET_FINDINGS[crapi]=$(extract_finding_count "$RESULT_FILE")
-            log_ok "crapi: ${TARGET_FINDINGS[crapi]} findings in ${TARGET_DURATION[crapi]}s"
+            set_findings "crapi" "$(extract_finding_count "$RESULT_FILE")"
+            log_ok "crapi: $(get_findings crapi) findings in $(get_duration crapi)s"
         fi
     fi
 fi
@@ -626,7 +594,7 @@ log_header "Test Summary"
 
 echo ""
 printf "${BOLD}%-20s %-10s %-12s %-10s${NC}\n" "TARGET" "STATUS" "FINDINGS" "DURATION"
-printf "%-20s %-10s %-12s %-10s\n" "────────────────────" "──────────" "────────────" "──────────"
+printf "%-20s %-10s %-12s %-10s\n" "--------------------" "----------" "------------" "----------"
 
 TOTAL_FINDINGS=0
 TOTAL_PASS=0
@@ -634,14 +602,13 @@ TOTAL_FAIL=0
 TOTAL_SKIP=0
 
 for target in vulnerable-api dvga grpc crapi; do
-    # Only show targets that were requested
     if ! echo "$TARGETS" | grep -q "${target}"; then
         continue
     fi
 
-    status="${TARGET_STATUS[$target]:-NOT_RUN}"
-    findings="${TARGET_FINDINGS[$target]:-0}"
-    duration="${TARGET_DURATION[$target]:-0}"
+    status="$(get_status "$target")"
+    findings="$(get_findings "$target")"
+    duration="$(get_duration "$target")"
 
     case "$status" in
         PASS)
