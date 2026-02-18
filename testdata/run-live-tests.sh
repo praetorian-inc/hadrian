@@ -9,9 +9,8 @@
 #   4. crapi (REST - OWASP crAPI, requires external setup)
 #
 # Prerequisites:
-#   - Go 1.21+ installed
-#   - Docker installed (for dvga)
-#   - hadrian binary built (or will be built automatically)
+#   - Run ./testdata/setup-live-targets.sh first (one-time setup)
+#   - Or manually: Go 1.21+, Docker (for dvga/crapi), hadrian binary
 #
 # Usage:
 #   ./testdata/run-live-tests.sh [options]
@@ -39,8 +38,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 HADRIAN_BIN="${HADRIAN_BIN:-${REPO_ROOT}/hadrian}"
 OUTPUT_DIR="${SCRIPT_DIR}/.results"
+CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
-# Target ports
+# Load config from setup script if it exists (ports, paths)
+if [ -f "$CONFIG_FILE" ]; then
+    # shellcheck disable=SC1090
+    . "$CONFIG_FILE"
+fi
+
+# Target ports (env vars > config file > defaults)
 VULN_API_PORT="${VULN_API_PORT:-8080}"
 DVGA_PORT="${DVGA_PORT:-5013}"
 GRPC_PORT="${GRPC_PORT:-50051}"
