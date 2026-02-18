@@ -514,7 +514,7 @@ if echo "$TARGETS" | grep -q "crapi"; then
         log_warn "crapi not detected on port $CRAPI_PORT"
         log_info "To set up crapi:"
         log_info "  git clone https://github.com/OWASP/crAPI.git"
-        log_info "  cd crAPI/deploy/docker && docker-compose up -d"
+        log_info "  cd crAPI/deploy/docker && docker compose up -d"
         set_status "crapi" "SKIP"
     fi
 
