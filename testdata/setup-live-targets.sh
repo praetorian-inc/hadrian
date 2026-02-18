@@ -80,7 +80,8 @@ if [ "$TEARDOWN" = true ]; then
 
     if command -v docker >/dev/null 2>&1; then
         docker rm -f hadrian-dvga 2>/dev/null && log_ok "Removed dvga container" || true
-        (cd "${CRAPI_DIR:-${SCRIPT_DIR}/.crapi-repo/deploy/docker}" 2>/dev/null && \
+        CRAPI_COMPOSE="${CRAPI_DIR:-${SCRIPT_DIR}/.crapi-repo}/deploy/docker"
+        (cd "$CRAPI_COMPOSE" 2>/dev/null && \
             docker compose down 2>/dev/null && log_ok "Stopped crapi containers") || true
     fi
 
@@ -248,12 +249,12 @@ if echo "$TARGETS" | grep -q "crapi"; then
         log_ok "crAPI repo exists at $CRAPI_DIR"
     fi
 
-    # Patch docker-compose port if not default
     COMPOSE_DIR="${CRAPI_DIR}/deploy/docker"
-    if [ "$CRAPI_PORT" != "8888" ]; then
-        log_info "Patching crAPI docker-compose to use port $CRAPI_PORT..."
-        sed -i.bak "s/8888:80/${CRAPI_PORT}:80/g" "${COMPOSE_DIR}/docker-compose.yml"
-        log_ok "Patched crAPI to port $CRAPI_PORT"
+
+    # Restore original docker-compose.yml if previously patched
+    if [ -f "${COMPOSE_DIR}/docker-compose.yml.bak" ]; then
+        cp "${COMPOSE_DIR}/docker-compose.yml.bak" "${COMPOSE_DIR}/docker-compose.yml"
+        log_info "Restored original docker-compose.yml from backup"
     fi
 fi
 
@@ -269,8 +270,8 @@ if [ "$SKIP_START" = false ]; then
     fi
 
     if echo "$TARGETS" | grep -q "crapi"; then
-        log_info "Starting crapi services (this may take 1-2 minutes)..."
-        if (cd "${CRAPI_DIR}/deploy/docker" && docker compose up -d 2>&1); then
+        log_info "Starting crapi services on port $CRAPI_PORT (this may take 1-2 minutes)..."
+        if (cd "${CRAPI_DIR}/deploy/docker" && CRAPI_SITE_PORT="$CRAPI_PORT" docker compose up -d 2>&1); then
             log_ok "crapi containers started"
         else
             log_warn "Some crapi containers may have failed to start (check output above)"
