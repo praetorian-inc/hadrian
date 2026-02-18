@@ -270,8 +270,12 @@ if [ "$SKIP_START" = false ]; then
 
     if echo "$TARGETS" | grep -q "crapi"; then
         log_info "Starting crapi services (this may take 1-2 minutes)..."
-        (cd "${CRAPI_DIR}/deploy/docker" && DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose up -d 2>&1)
-        log_ok "crapi containers started"
+        if (cd "${CRAPI_DIR}/deploy/docker" && docker compose up -d 2>&1); then
+            log_ok "crapi containers started"
+        else
+            log_warn "Some crapi containers may have failed to start (check output above)"
+            log_info "Continuing anyway - health check will verify readiness..."
+        fi
     fi
 
     # Wait for Docker services
@@ -292,22 +296,29 @@ if [ "$SKIP_START" = false ]; then
 
     if echo "$TARGETS" | grep -q "crapi"; then
         log_info "Waiting for crapi to be ready (may take up to 2 minutes)..."
+        CRAPI_READY=true
         elapsed=0
         while ! curl -s -o /dev/null -w "%{http_code}" "http://localhost:${CRAPI_PORT}/identity/api/auth/login" 2>/dev/null | grep -qE "^[2-4]"; do
             sleep 5
             elapsed=$((elapsed + 5))
             if [ $elapsed -ge 180 ]; then
-                log_fail "crapi did not respond within 180s"
+                log_warn "crapi did not respond within 180s"
                 log_warn "Container status:"
                 (cd "${CRAPI_DIR}/deploy/docker" && docker compose ps 2>&1) || true
                 log_warn "crapi-web logs:"
                 (cd "${CRAPI_DIR}/deploy/docker" && docker compose logs crapi-web 2>&1 | tail -10) || true
-                exit 1
+                log_warn "crapi will be skipped during test run. Debug with:"
+                log_info "  cd ${CRAPI_DIR}/deploy/docker && docker compose ps"
+                log_info "  docker compose logs <container-name>"
+                CRAPI_READY=false
+                break
             fi
             printf "."
         done
         echo ""
-        log_ok "crapi is ready on port $CRAPI_PORT"
+        if [ "$CRAPI_READY" = true ]; then
+            log_ok "crapi is ready on port $CRAPI_PORT"
+        fi
     fi
 fi
 
@@ -342,7 +353,11 @@ if echo "$TARGETS" | grep -q "grpc"; then
     echo -e "  grpc-server     ${GREEN}built${NC}     (will start on port $GRPC_PORT)"
 fi
 if echo "$TARGETS" | grep -q "crapi"; then
-    echo -e "  crapi           ${GREEN}running${NC}   http://localhost:$CRAPI_PORT"
+    if [ "$CRAPI_READY" = false ]; then
+        echo -e "  crapi           ${YELLOW}warning${NC}   may not be ready (check containers)"
+    else
+        echo -e "  crapi           ${GREEN}running${NC}   http://localhost:$CRAPI_PORT"
+    fi
 fi
 echo ""
 echo -e "${BOLD}Next step:${NC}"
