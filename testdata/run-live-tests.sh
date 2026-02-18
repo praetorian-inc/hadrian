@@ -348,7 +348,7 @@ if echo "$TARGETS" | grep -q "dvga"; then
         else
             docker rm -f hadrian-dvga 2>/dev/null || true
             log_info "Starting dvga container on port $DVGA_PORT..."
-            docker run -d -p "${DVGA_PORT}:5013" --name hadrian-dvga dolevf/dvga:latest 2>/dev/null || {
+            docker run -d -p "${DVGA_PORT}:5013" -e WEB_HOST=0.0.0.0 --name hadrian-dvga dolevf/dvga:latest 2>/dev/null || {
                 log_warn "Failed to start dvga container (image may not be pulled)"
                 log_info "Pull with: docker pull dolevf/dvga:latest"
                 set_status "dvga" "SKIP"
