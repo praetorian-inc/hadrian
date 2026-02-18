@@ -234,16 +234,27 @@ if [ "$DO_BUILD" = true ]; then
         (cd "${SCRIPT_DIR}/grpc-server" && {
             # Generate protobuf Go code if pb/ directory doesn't exist
             if [ ! -d pb ]; then
-                log_info "Generating protobuf code..."
-                if command -v protoc >/dev/null 2>&1; then
-                    mkdir -p pb
-                    protoc --go_out=pb --go_opt=paths=source_relative \
-                        --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-                        service.proto
-                elif command -v make >/dev/null 2>&1; then
-                    make proto
+                printf "[?] gRPC server requires generated protobuf code (pb/ directory).\n"
+                printf "    This will run protoc to generate Go code from service.proto.\n"
+                printf "    Generate protobuf code now? [y/N] "
+                read -r REPLY
+                if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
+                    if command -v protoc >/dev/null 2>&1; then
+                        log_info "Generating protobuf code..."
+                        mkdir -p pb
+                        protoc --go_out=pb --go_opt=paths=source_relative \
+                            --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+                            service.proto
+                        log_ok "Protobuf code generated"
+                    else
+                        log_error "protoc not found. Install with: brew install protobuf"
+                        log_error "Then install Go plugins:"
+                        log_error "  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
+                        log_error "  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"
+                        exit 1
+                    fi
                 else
-                    log_error "protoc not found. Install protobuf compiler or run 'make proto' in testdata/grpc-server/"
+                    log_error "Skipping grpc-server (pb/ directory required). Run 'make proto' in testdata/grpc-server/ first."
                     exit 1
                 fi
             fi
