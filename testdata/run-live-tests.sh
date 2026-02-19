@@ -42,6 +42,11 @@ CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
 # Load config from setup script if it exists (ports, paths)
 if [ -f "$CONFIG_FILE" ]; then
+    # Validate config contains only comments, blank lines, or safe KEY=VALUE assignments
+    if grep -qvE '^[[:space:]]*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_./:@,+" -]*$' "$CONFIG_FILE"; then
+        echo "ERROR: Config file $CONFIG_FILE contains unsafe content. Only KEY=VALUE lines are allowed." >&2
+        exit 1
+    fi
     # shellcheck disable=SC1090
     . "$CONFIG_FILE"
 fi
@@ -67,25 +72,13 @@ VERBOSE=""
 DO_BUILD=true
 DO_START=true
 
-# Track results per target (plain variables, no associative arrays)
-STATUS_vulnerable_api_bearer="NOT_RUN"
-STATUS_vulnerable_api_apikey="NOT_RUN"
-STATUS_vulnerable_api_basic="NOT_RUN"
-STATUS_dvga="NOT_RUN"
-STATUS_grpc="NOT_RUN"
-STATUS_crapi="NOT_RUN"
-FINDINGS_vulnerable_api_bearer="0"
-FINDINGS_vulnerable_api_apikey="0"
-FINDINGS_vulnerable_api_basic="0"
-FINDINGS_dvga="0"
-FINDINGS_grpc="0"
-FINDINGS_crapi="0"
-DURATION_vulnerable_api_bearer="0"
-DURATION_vulnerable_api_apikey="0"
-DURATION_vulnerable_api_basic="0"
-DURATION_dvga="0"
-DURATION_grpc="0"
-DURATION_crapi="0"
+# Track results per target using associative arrays
+declare -A STATUS FINDINGS DURATION
+for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic dvga grpc crapi; do
+    STATUS["$_t"]="NOT_RUN"
+    FINDINGS["$_t"]="0"
+    DURATION["$_t"]="0"
+done
 
 PIDS_TO_CLEANUP=""
 
@@ -123,13 +116,13 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# ==== Result helpers (no associative arrays) ====
-set_status() { eval "STATUS_$(echo "$1" | tr '-' '_')=$2"; }
-get_status() { eval "echo \${STATUS_$(echo "$1" | tr '-' '_')}"; }
-set_findings() { eval "FINDINGS_$(echo "$1" | tr '-' '_')=$2"; }
-get_findings() { eval "echo \${FINDINGS_$(echo "$1" | tr '-' '_')}"; }
-set_duration() { eval "DURATION_$(echo "$1" | tr '-' '_')=$2"; }
-get_duration() { eval "echo \${DURATION_$(echo "$1" | tr '-' '_')}"; }
+# ==== Result helpers (associative arrays) ====
+set_status() { STATUS["$1"]="$2"; }
+get_status() { echo "${STATUS[$1]:-NOT_RUN}"; }
+set_findings() { FINDINGS["$1"]="$2"; }
+get_findings() { echo "${FINDINGS[$1]:-0}"; }
+set_duration() { DURATION["$1"]="$2"; }
+get_duration() { echo "${DURATION[$1]:-0}"; }
 
 # ==== Helper functions ====
 
@@ -198,7 +191,7 @@ trap cleanup EXIT
 extract_finding_count() {
     local json_file=$1
     if [ -f "$json_file" ]; then
-        python3 -c "import json,sys; d=json.load(open('$json_file')); print(d.get('stats',{}).get('findings',len(d.get('findings',[]))))" 2>/dev/null || echo "?"
+        python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('stats',{}).get('findings',len(d.get('findings',[]))))" "$json_file" 2>/dev/null || echo "?"
     else
         echo "?"
     fi
@@ -327,13 +320,13 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
             log_info "Acquiring JWT tokens..."
             ADMIN_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
                 -H "Content-Type: application/json" \
-                -d '{"username":"admin","password":"admin123"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+                --data-binary @- <<< '{"username":"admin","password":"admin123"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
             USER1_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
                 -H "Content-Type: application/json" \
-                -d '{"username":"user1","password":"user1pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+                --data-binary @- <<< '{"username":"user1","password":"user1pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
             USER2_TOKEN=$(curl -sf -X POST "http://localhost:${VULN_API_PORT}/api/auth/login" \
                 -H "Content-Type: application/json" \
-                -d '{"username":"user2","password":"user2pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
+                --data-binary @- <<< '{"username":"user2","password":"user2pass"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
 
             if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER1_TOKEN" ] || [ -z "$USER2_TOKEN" ]; then
                 log_fail "Failed to acquire JWT tokens"
@@ -342,7 +335,7 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
             fi
             log_ok "Tokens acquired for admin, user1, user2"
 
-            cat > "$AUTH_FILE" <<EOF
+            (umask 077; cat > "$AUTH_FILE" <<EOF
 method: bearer
 location: header
 key_name: Authorization
@@ -356,9 +349,10 @@ roles:
   anonymous:
     token: ""
 EOF
+            )
         elif [ "$auth_method" = "api_key" ]; then
             log_info "Using static API keys..."
-            cat > "$AUTH_FILE" <<EOF
+            (umask 077; cat > "$AUTH_FILE" <<EOF
 method: api_key
 location: header
 key_name: X-API-Key
@@ -372,9 +366,10 @@ roles:
   anonymous:
     api_key: ""
 EOF
+            )
         elif [ "$auth_method" = "basic" ]; then
             log_info "Using basic auth credentials..."
-            cat > "$AUTH_FILE" <<EOF
+            (umask 077; cat > "$AUTH_FILE" <<EOF
 method: basic
 roles:
   admin:
@@ -390,6 +385,7 @@ roles:
     username: ""
     password: ""
 EOF
+            )
         fi
 
         RESULT_FILE="${OUTPUT_DIR}/vulnerable-api-${target_suffix}-results.json"
@@ -491,7 +487,7 @@ if echo "$TARGETS" | grep -q "dvga"; then
                 log_ok "Created victim PII paste" || log_warn "Failed to create victim paste"
 
             DVGA_AUTH_FILE="${OUTPUT_DIR}/dvga-auth.yaml"
-            cat > "$DVGA_AUTH_FILE" <<EOF
+            (umask 077; cat > "$DVGA_AUTH_FILE" <<EOF
 method: bearer
 location: header
 key_name: Authorization
@@ -505,6 +501,7 @@ roles:
   victim:
     token: "${DVGA_ADMIN_TOKEN}"
 EOF
+            )
             log_ok "dvga auth config written"
         fi
 
@@ -596,24 +593,27 @@ if echo "$TARGETS" | grep -q "crapi"; then
 
         crapi_signup() {
             local email="$1" name="$2" number="$3" password="$4"
-            curl -sf -X POST "${CRAPI_URL}/identity/api/auth/signup" \
-                -H "Content-Type: application/json" \
-                -d "{\"email\":\"$email\",\"name\":\"$name\",\"number\":\"$number\",\"password\":\"$password\"}" 2>/dev/null || true
+            printf '{"email":"%s","name":"%s","number":"%s","password":"%s"}' "$email" "$name" "$number" "$password" | \
+                curl -sf -X POST "${CRAPI_URL}/identity/api/auth/signup" \
+                    -H "Content-Type: application/json" \
+                    --data-binary @- 2>/dev/null || true
         }
 
         crapi_login() {
             local email="$1" password="$2"
-            curl -sf -X POST "${CRAPI_URL}/identity/api/auth/login" \
-                -H "Content-Type: application/json" \
-                -d "{\"email\":\"$email\",\"password\":\"$password\"}" 2>/dev/null | \
+            printf '{"email":"%s","password":"%s"}' "$email" "$password" | \
+                curl -sf -X POST "${CRAPI_URL}/identity/api/auth/login" \
+                    -H "Content-Type: application/json" \
+                    --data-binary @- 2>/dev/null | \
                 python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo ""
         }
 
         crapi_mechanic_signup() {
             local email="$1" name="$2" number="$3" password="$4" code="$5"
-            curl -sf -X POST "${CRAPI_URL}/workshop/api/mechanic/signup" \
-                -H "Content-Type: application/json" \
-                -d "{\"email\":\"$email\",\"name\":\"$name\",\"number\":\"$number\",\"password\":\"$password\",\"mechanic_code\":\"$code\"}" 2>/dev/null || true
+            printf '{"email":"%s","name":"%s","number":"%s","password":"%s","mechanic_code":"%s"}' "$email" "$name" "$number" "$password" "$code" | \
+                curl -sf -X POST "${CRAPI_URL}/workshop/api/mechanic/signup" \
+                    -H "Content-Type: application/json" \
+                    --data-binary @- 2>/dev/null || true
         }
 
         CRAPI_ADMIN_EMAIL="hadrian-admin@test.com"
@@ -641,7 +641,7 @@ if echo "$TARGETS" | grep -q "crapi"; then
 
             # Upload test videos for BFLA/BOPLA tests
             log_info "Setting up crapi test videos..."
-            TMP_VIDEO="/tmp/hadrian_test_video.mp4"
+            TMP_VIDEO=$(mktemp "${TMPDIR:-/tmp}/hadrian_test_video.XXXXXXXXXX.mp4")
             echo "test video content for hadrian security testing" > "$TMP_VIDEO"
 
             for token in "$CRAPI_USER_TOKEN" "$CRAPI_USER2_TOKEN" "$CRAPI_MECHANIC_TOKEN"; do
@@ -656,7 +656,7 @@ if echo "$TARGETS" | grep -q "crapi"; then
             log_ok "crapi test videos uploaded"
 
             CRAPI_AUTH_FILE="${OUTPUT_DIR}/crapi-auth.yaml"
-            cat > "$CRAPI_AUTH_FILE" <<EOF
+            (umask 077; cat > "$CRAPI_AUTH_FILE" <<EOF
 method: bearer
 location: header
 key_name: Authorization
@@ -672,6 +672,7 @@ roles:
   anonymous:
     token: ""
 EOF
+            )
 
             RESULT_FILE="${OUTPUT_DIR}/crapi-results.json"
 
