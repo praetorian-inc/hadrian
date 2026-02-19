@@ -128,8 +128,8 @@ hadrian test grpc --target localhost:50051 --proto service.proto --templates 02-
 
 ## Tutorials
 
-- **REST API Testing**: [crAPI Tutorial](testdata/crapi/README.md) - Test OWASP crAPI (intentionally vulnerable REST API)
-- **GraphQL API Testing**: [DVGA Tutorial](testdata/dvga/README.md) - Test DVGA (Damn Vulnerable GraphQL Application)
+- **REST API Testing**: [crAPI Tutorial](test/crapi/README.md) - Test OWASP crAPI (intentionally vulnerable REST API)
+- **GraphQL API Testing**: [DVGA Tutorial](test/dvga/README.md) - Test DVGA (Damn Vulnerable GraphQL Application)
 
 ## Configuration Files
 
@@ -502,7 +502,7 @@ Hadrian provides comprehensive REST API security testing with 8 built-in templat
 hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 ```
 
-For a hands-on tutorial with an intentionally vulnerable API, see [crAPI Tutorial](testdata/crapi/README.md).
+For a hands-on tutorial with an intentionally vulnerable API, see [crAPI Tutorial](test/crapi/README.md).
 
 ## GraphQL Testing
 
@@ -515,7 +515,7 @@ Hadrian supports comprehensive GraphQL API security testing with 13 built-in tem
 
 For complete GraphQL documentation including example commands, security checks, and template development, see [docs/graphql.md](docs/graphql.md).
 
-For a hands-on tutorial, see [DVGA Tutorial](testdata/dvga/README.md).
+For a hands-on tutorial, see [DVGA Tutorial](test/dvga/README.md).
 
 ## gRPC Testing
 
@@ -540,7 +540,7 @@ Hadrian provides security testing for gRPC APIs with support for both simple and
 
 For complete gRPC documentation including template structure, examples, and vulnerable test server, see [docs/grpc.md](docs/grpc.md).
 
-For a hands-on tutorial with a vulnerable gRPC server, see [gRPC Server Tutorial](testdata/grpc-server/README.md).
+For a hands-on tutorial with a vulnerable gRPC server, see [gRPC Server Tutorial](test/grpc-server/README.md).
 
 ## Writing Custom Templates
 

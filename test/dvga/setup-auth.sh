@@ -9,8 +9,8 @@ set -e
 
 # Configuration
 DVGA_ENDPOINT="${DVGA_ENDPOINT:-http://172.17.0.1:5013/graphql}"
-OUTPUT_FILE="${OUTPUT_FILE:-testdata/dvga/auth-tokens.yaml}"
-ENV_FILE="${ENV_FILE:-testdata/dvga/.env}"
+OUTPUT_FILE="${OUTPUT_FILE:-test/dvga/auth-tokens.yaml}"
+ENV_FILE="${ENV_FILE:-test/dvga/.env}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -180,14 +180,14 @@ echo ""
 echo -e "${CYAN}Quick Start:${NC}"
 echo ""
 echo "  # Load environment variables"
-echo "  source testdata/dvga/.env"
+echo "  source test/dvga/.env"
 echo ""
 echo "  # Run GraphQL security tests"
 echo "  ./hadrian test graphql \\"
 echo "    --target http://172.17.0.1:5013 \\"
 echo "    --templates templates/graphql \\"
-echo "    --auth testdata/dvga/auth-tokens.yaml \\"
-echo "    --roles testdata/dvga/dvga-roles.yaml \\"
+echo "    --auth test/dvga/auth-tokens.yaml \\"
+echo "    --roles test/dvga/dvga-roles.yaml \\"
 echo "    --verbose"
 echo ""
 echo "  # Or run integration tests"

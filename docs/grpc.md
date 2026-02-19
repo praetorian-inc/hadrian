@@ -811,16 +811,16 @@ Hadrian includes an intentionally vulnerable gRPC server for testing:
 
 ```bash
 # Start the vulnerable server
-cd testdata/grpc-server
+cd test/grpc-server
 make run
 
 # In another terminal, run Hadrian
 hadrian grpc \
   --server localhost:50051 \
-  --templates testdata/grpc-server/templates/owasp/ \
-  --auth testdata/grpc-server/auth.yaml \
-  --roles testdata/grpc-server/roles.yaml \
+  --templates test/grpc-server/templates/owasp/ \
+  --auth test/grpc-server/auth.yaml \
+  --roles test/grpc-server/roles.yaml \
   --verbose
 ```
 
-For complete details on the vulnerable server, test data, and expected findings, see [testdata/grpc-server/README.md](../testdata/grpc-server/README.md).
+For complete details on the vulnerable server, test data, and expected findings, see [test/grpc-server/README.md](../test/grpc-server/README.md).

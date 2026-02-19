@@ -144,7 +144,7 @@ detection:
 ## Running Tests
 
 These templates are designed to be run against the vulnerable gRPC server at:
-`/workspaces/praetorian-dev/modules/hadrian/testdata/grpc-server/`
+`/workspaces/praetorian-dev/modules/hadrian/test/grpc-server/`
 
 Reference the proto file for full service definitions:
-`/workspaces/praetorian-dev/modules/hadrian/testdata/grpc-server/service.proto`
+`/workspaces/praetorian-dev/modules/hadrian/test/grpc-server/service.proto`

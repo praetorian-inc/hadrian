@@ -78,7 +78,7 @@ curl -X POST http://localhost:5013/graphql \
 Create a `.env` file in this directory with your tokens:
 
 ```bash
-# testdata/dvga/.env
+# test/dvga/.env
 DVGA_ADMIN_TOKEN=eyJ...
 DVGA_USER1_TOKEN=eyJ...
 DVGA_USER2_TOKEN=eyJ...
@@ -119,8 +119,8 @@ go build -o hadrian ./cmd/hadrian
 # Run with DVGA-specific templates
 ./hadrian test graphql \
   --target http://localhost:5013 \
-  --schema testdata/dvga/schema.graphql \
-  --templates testdata/dvga/templates/owasp \
+  --schema test/dvga/schema.graphql \
+  --templates test/dvga/templates/owasp \
   --allow-internal \
   --verbose
 ```
@@ -129,13 +129,13 @@ go build -o hadrian ./cmd/hadrian
 
 ```bash
 # Load environment variables and run tests
-set -a && source testdata/dvga/.env && set +a && \
+set -a && source test/dvga/.env && set +a && \
 ./hadrian test graphql \
   --target http://localhost:5013 \
-  --schema testdata/dvga/schema.graphql \
-  --templates testdata/dvga/templates/owasp \
-  --auth testdata/dvga/auth.yaml \
-  --roles testdata/dvga/roles.yaml \
+  --schema test/dvga/schema.graphql \
+  --templates test/dvga/templates/owasp \
+  --auth test/dvga/auth.yaml \
+  --roles test/dvga/roles.yaml \
   --allow-internal \
   --verbose
 ```
@@ -156,7 +156,7 @@ set -a && source testdata/dvga/.env && set +a && \
 ```bash
 ./hadrian test graphql \
   --target http://localhost:5013 \
-  --templates testdata/dvga/templates/owasp \
+  --templates test/dvga/templates/owasp \
   --allow-internal \
   --output json \
   --output-file dvga-results.json
@@ -166,26 +166,26 @@ set -a && source testdata/dvga/.env && set +a && \
 
 DVGA is intentionally vulnerable. Hadrian should detect:
 
-### DVGA-Specific Templates (`testdata/dvga/templates/owasp/`)
+### DVGA-Specific Templates (`test/dvga/templates/owasp/`)
 
 | OWASP Category | Vulnerability | Template | Severity |
 |----------------|---------------|----------|----------|
 | API1:2023 | BOLA - Access other user's pastes | `api1-bola-dvga.yaml` | HIGH |
-| API3:2023 | Sensitive Data Exposure in user queries | `api3-sensitive-data-exposure-dvga.yaml` | MEDIUM |
+| API3:2023 | Sensitive Data Exposure in user queries | `03-api3-sensitive-data-exposure-dvga.yaml` | MEDIUM |
 | API7:2023 | SSRF via `importPaste` mutation | `api7-ssrf-dvga.yaml` | HIGH |
-| API8:2023 | Command Injection via `systemDiagnostics` | `api8-command-injection-dvga.yaml` | CRITICAL |
-| API8:2023 | Path Traversal via `uploadPaste` filename | `api8-path-traversal-dvga.yaml` | HIGH |
-| API8:2023 | GraphQL Error Information Disclosure | `api8-information-disclosure-dvga.yaml` | LOW |
+| API8:2023 | Command Injection via `systemDiagnostics` | `04-api8-command-injection-dvga.yaml` | CRITICAL |
+| API8:2023 | Path Traversal via `uploadPaste` filename | `06-api8-path-traversal-dvga.yaml` | HIGH |
+| API8:2023 | GraphQL Error Information Disclosure | `05-api8-information-disclosure-dvga.yaml` | LOW |
 
 ### Generic GraphQL Templates (`templates/graphql/`)
 
 | OWASP Category | Vulnerability | Template | Severity |
 |----------------|---------------|----------|----------|
-| API8:2023 | Introspection enabled | `introspection-disclosure.yaml` | MEDIUM |
-| API4:2023 | No query depth limit (DoS) | `depth-attack.yaml` | HIGH |
-| API4:2023 | No batch query limit (DoS) | `batching-attack.yaml` | HIGH |
-| API4:2023 | Alias-based DoS | `alias-dos-attack.yaml` | HIGH |
-| API8:2023 | Error information leakage | `error-disclosure.yaml` | MEDIUM |
+| API8:2023 | Introspection enabled | `13-api8-introspection-disclosure.yaml` | MEDIUM |
+| API4:2023 | No query depth limit (DoS) | `08-api4-depth-attack.yaml` | HIGH |
+| API4:2023 | No batch query limit (DoS) | `06-api4-batching-attack.yaml` | HIGH |
+| API4:2023 | Alias-based DoS | `05-api4-alias-dos-attack.yaml` | HIGH |
+| API8:2023 | Error information leakage | `12-api8-error-disclosure.yaml` | MEDIUM |
 
 ## DVGA Vulnerable Endpoints
 
@@ -245,7 +245,7 @@ docker restart dvga
 # Or use local SDL schema file
 ./hadrian test graphql \
   --target http://localhost:5013 \
-  --schema testdata/dvga/schema.graphql \
+  --schema test/dvga/schema.graphql \
   --allow-internal
 ```
 

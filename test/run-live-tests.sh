@@ -9,11 +9,11 @@
 #   4. crapi (REST - OWASP crAPI, requires external setup)
 #
 # Prerequisites:
-#   - Run ./testdata/setup-live-targets.sh first (one-time setup)
+#   - Run ./test/setup-live-targets.sh first (one-time setup)
 #   - Or manually: Go 1.21+, Docker (for dvga/crapi), hadrian binary
 #
 # Usage:
-#   ./testdata/run-live-tests.sh [options]
+#   ./test/run-live-tests.sh [options]
 #
 # Options:
 #   --targets <list>      Comma-separated targets to test (default: all)
@@ -21,14 +21,14 @@
 #   --verbose             Enable verbose Hadrian output
 #   --no-build            Skip building hadrian and target binaries
 #   --no-start            Don't start/stop services (assume already running)
-#   --output-dir <dir>    Directory for JSON results (default: testdata/.results)
+#   --output-dir <dir>    Directory for JSON results (default: test/.results)
 #   --help                Show this help message
 #
 # Examples:
-#   ./testdata/run-live-tests.sh                          # Run all targets
-#   ./testdata/run-live-tests.sh --targets vulnerable-api # Just vulnerable-api
-#   ./testdata/run-live-tests.sh --targets dvga,grpc      # GraphQL + gRPC
-#   ./testdata/run-live-tests.sh --verbose --no-build     # Verbose, skip build
+#   ./test/run-live-tests.sh                          # Run all targets
+#   ./test/run-live-tests.sh --targets vulnerable-api # Just vulnerable-api
+#   ./test/run-live-tests.sh --targets dvga,grpc      # GraphQL + gRPC
+#   ./test/run-live-tests.sh --verbose --no-build     # Verbose, skip build
 # =============================================================================
 
 set -euo pipefail
@@ -266,7 +266,7 @@ if [ "$DO_BUILD" = true ]; then
                         exit 1
                     fi
                 else
-                    log_fail "Skipping grpc-server (protobuf files required). Run 'make proto' in testdata/grpc-server/ first."
+                    log_fail "Skipping grpc-server (protobuf files required). Run 'make proto' in test/grpc-server/ first."
                     exit 1
                 fi
             fi

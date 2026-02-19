@@ -7,7 +7,7 @@
 # and writes a config file for run-live-tests.sh.
 #
 # Usage:
-#   ./testdata/setup-live-targets.sh [options]
+#   ./test/setup-live-targets.sh [options]
 #
 # Options:
 #   --targets <list>   Comma-separated targets (default: all)
@@ -397,8 +397,8 @@ if echo "$TARGETS" | grep -q "crapi"; then
 fi
 echo ""
 echo -e "${BOLD}Next step:${NC}"
-echo -e "  ./testdata/run-live-tests.sh"
+echo -e "  ./test/run-live-tests.sh"
 echo ""
 echo -e "${BOLD}To tear down:${NC}"
-echo -e "  ./testdata/setup-live-targets.sh --teardown"
+echo -e "  ./test/setup-live-targets.sh --teardown"
 echo ""

@@ -6,7 +6,7 @@ A Go web application demonstrating various rate limiting patterns for testing Ha
 
 ```bash
 # Build the server
-cd /workspaces/praetorian-dev/modules/hadrian/testdata/ratelimit-demo
+cd /workspaces/praetorian-dev/modules/hadrian/test/ratelimit-demo
 go build -o ratelimit-demo .
 
 # Start the server
@@ -162,14 +162,14 @@ curl -s "http://localhost:8080/api/v1/status-429/resource?limit=3&window=10"  # 
 
 ```bash
 # Start the demo server
-cd /workspaces/praetorian-dev/modules/hadrian/testdata/ratelimit-demo
+cd /workspaces/praetorian-dev/modules/hadrian/test/ratelimit-demo
 ./ratelimit-demo &
 
 # Run Hadrian with rate limit templates
 cd /workspaces/praetorian-dev/modules/hadrian
-HADRIAN_TEMPLATES=testdata/ratelimit-demo/templates ./hadrian test \
-  --api testdata/ratelimit-demo/openapi.yaml \
-  --roles testdata/ratelimit-demo/roles.yaml \
+HADRIAN_TEMPLATES=test/ratelimit-demo/templates ./hadrian test \
+  --api test/ratelimit-demo/openapi.yaml \
+  --roles test/ratelimit-demo/roles.yaml \
   --allow-internal \
   --verbose
 
@@ -181,10 +181,10 @@ kill %1
 
 | Template | Endpoint Pattern | Expected Result |
 |----------|-----------------|----------------|
-| `detect-429.yaml` | `/status-429/*` | ✅ Detects 429 rate limiting |
-| `detect-503.yaml` | `/status-503/*` | ✅ Detects 503 rate limiting |
-| `detect-no-limit.yaml` | `/basic/*` | ⚠️ **Vulnerability**: No rate limit detected |
-| `detect-retry-after.yaml` | `/retry-*/*` | ℹ️ Info: Retry-After header present |
+| `01-detect-429.yaml` | `/status-429/*` | ✅ Detects 429 rate limiting |
+| `02-detect-503.yaml` | `/status-503/*` | ✅ Detects 503 rate limiting |
+| `03-detect-no-limit.yaml` | `/basic/*` | ⚠️ **Vulnerability**: No rate limit detected |
+| `04-detect-retry-after.yaml` | `/retry-*/*` | ℹ️ Info: Retry-After header present |
 
 ### Hadrian --rate-limit Flag Interaction
 
@@ -246,7 +246,7 @@ key := "per-ip:" + clientIP  // Independent per client
 
 ```bash
 # Run unit tests
-cd /workspaces/praetorian-dev/modules/hadrian/testdata/ratelimit-demo
+cd /workspaces/praetorian-dev/modules/hadrian/test/ratelimit-demo
 GOWORK=off go test -v
 
 # Run specific test
@@ -268,10 +268,10 @@ ratelimit-demo/
 ├── openapi.yaml                     # OpenAPI 3.0 spec
 ├── roles.yaml                       # Minimal roles config
 ├── templates/ratelimit/             # Hadrian test templates
-│   ├── detect-429.yaml              # Detect 429 rate limiting
-│   ├── detect-503.yaml              # Detect 503 rate limiting
-│   ├── detect-no-limit.yaml         # Detect missing rate limits
-│   └── detect-retry-after.yaml      # Detect Retry-After headers
+│   ├── 01-detect-429.yaml              # Detect 429 rate limiting
+│   ├── 02-detect-503.yaml              # Detect 503 rate limiting
+│   ├── 03-detect-no-limit.yaml         # Detect missing rate limits
+│   └── 04-detect-retry-after.yaml      # Detect Retry-After headers
 └── README.md                        # This file
 ```
 

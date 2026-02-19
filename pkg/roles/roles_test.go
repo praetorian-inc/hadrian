@@ -429,7 +429,7 @@ func TestGetRolesByPermissionLevel_BOLAScenario(t *testing.T) {
 
 func TestLoad_VulnerableAPIRoles(t *testing.T) {
 	// Test loading the vulnerable-api roles.yaml with level field
-	config, err := Load("../../testdata/vulnerable-api/roles.yaml")
+	config, err := Load("../../test/vulnerable-api/roles.yaml")
 	require.NoError(t, err)
 	require.NotNil(t, config)
 

@@ -15,8 +15,8 @@ import (
 )
 
 func TestIntegration_ParseSampleProto(t *testing.T) {
-	// Find testdata relative to repo root
-	protoPath := filepath.Join("..", "..", "..", "testdata", "grpc", "sample.proto")
+	// Find test fixtures relative to repo root
+	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "sample.proto")
 
 	content, err := os.ReadFile(protoPath)
 	require.NoError(t, err, "Failed to read sample.proto")
@@ -54,7 +54,7 @@ func TestIntegration_ParseSampleProto(t *testing.T) {
 }
 
 func TestIntegration_ParseComplexProto(t *testing.T) {
-	protoPath := filepath.Join("..", "..", "..", "testdata", "grpc", "complex.proto")
+	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "complex.proto")
 
 	content, err := os.ReadFile(protoPath)
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestIntegration_ParseComplexProto(t *testing.T) {
 }
 
 func TestIntegration_AuthRequirementInference(t *testing.T) {
-	protoPath := filepath.Join("..", "..", "..", "testdata", "grpc", "sample.proto")
+	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "sample.proto")
 
 	content, err := os.ReadFile(protoPath)
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestIntegration_AuthRequirementInference(t *testing.T) {
 }
 
 func TestIntegration_OperationPaths(t *testing.T) {
-	protoPath := filepath.Join("..", "..", "..", "testdata", "grpc", "sample.proto")
+	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "sample.proto")
 
 	content, err := os.ReadFile(protoPath)
 	require.NoError(t, err)
