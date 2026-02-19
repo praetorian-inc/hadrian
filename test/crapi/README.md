@@ -68,7 +68,7 @@ curl -X POST http://localhost:8888/identity/api/auth/login \
 Create a `.env` file in this directory with your tokens:
 
 ```bash
-# testdata/crapi/.env
+# test/crapi/.env
 CRAPI_USER_TOKEN=eyJ...
 CRAPI_USER2_TOKEN=eyJ...
 CRAPI_MECHANIC_TOKEN=eyJ...
@@ -83,7 +83,7 @@ The BFLA and BOPLA mass assignment tests require each user to have an uploaded v
 
 ```bash
 # Run the setup script (requires .env file with tokens)
-./testdata/crapi/setup-videos.sh
+./test/crapi/setup-videos.sh
 ```
 
 This script uploads test videos for user, user2, and mechanic accounts. The videos are required because:
@@ -100,11 +100,11 @@ From the repository root:
 
 ```bash
 # Load environment variables and run tests
-set -a && source testdata/crapi/.env && set +a && \
-HADRIAN_TEMPLATES=testdata/crapi/templates/rest ./hadrian test \
-  --api testdata/crapi/crapi-openapi-spec.json \
-  --roles testdata/crapi/roles.yaml \
-  --auth testdata/crapi/auth.yaml \
+set -a && source test/crapi/.env && set +a && \
+HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
+  --api test/crapi/crapi-openapi-spec.json \
+  --roles test/crapi/roles.yaml \
+  --auth test/crapi/auth.yaml \
   --allow-internal
 
 # Optional: add --verbose for detailed output
@@ -117,18 +117,18 @@ crAPI is intentionally vulnerable. Hadrian should detect:
 
 | OWASP Category | Vulnerability | Endpoint Example | Template |
 |----------------|---------------|------------------| -------- |
-| API1:2023 | ✅ BOLA - Access other user's vehicle | `GET /identity/api/v2/vehicle/{vehicleId}/location` | `api1-bola-read.yaml` |
-| API1:2023 | ✅ BOLA - Access other user's order | `GET /workshop/api/shop/orders/{order_id}` |  `api1-bola-read.yaml` |
-| API2:2023 | ✅ Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` | `api2-otp-bruteforce` |
-| API3:2023 | ✅ BOPLA - Mass assignment via ID injection | `PUT /identity/api/v2/user/videos/{video_id}` | `api3-bopla-mass-assignment.yaml` |
-| API5:2023 | ✅ BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` | `api5-bfla-admin-video-delete.yaml` |
+| API1:2023 | ✅ BOLA - Access other user's vehicle | `GET /identity/api/v2/vehicle/{vehicleId}/location` | `01-api1-bola-read.yaml` |
+| API1:2023 | ✅ BOLA - Access other user's order | `GET /workshop/api/shop/orders/{order_id}` |  `01-api1-bola-read.yaml` |
+| API2:2023 | ✅ Broken Auth - No rate limit on OTP | `POST /identity/api/auth/v2/check-otp` | `03-api2-otp-bruteforce` |
+| API3:2023 | ✅ BOPLA - Mass assignment via ID injection | `PUT /identity/api/v2/user/videos/{video_id}` | `05-api3-bopla-mass-assignment.yaml` |
+| API5:2023 | ✅ BFLA - User deleting admin videos | `DELETE /identity/api/v2/admin/videos/{video_id}` | `06-api5-bfla-admin-video-delete.yaml` |
 
 ## Expected No Vulnerabilities
 crAPI is does not have the following vulnerability. Hadrian should not detect:
 
 | OWASP Category | Vulnerability | Endpoint Example | Template |
 |----------------|---------------|------------------| -------- |
-| API1:2023 | ✅ BOLA - Access other user's video | `GET /identity/api/v2/user/videos/{video_id}` |  `api1-bola-video-mutation.yaml` |
+| API1:2023 | ✅ BOLA - Access other user's video | `GET /identity/api/v2/user/videos/{video_id}` |  `02-api1-bola-video-mutation.yaml` |
 
 ## Roles Overview
 

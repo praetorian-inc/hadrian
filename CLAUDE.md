@@ -115,7 +115,7 @@ Built-in safeguards in `pkg/runner/production.go` and `pkg/runner/ratelimit_clie
 
 ## Testing with crAPI
 
-The `testdata/crapi/` directory contains a complete example for testing [OWASP crAPI](https://github.com/OWASP/crAPI), an intentionally vulnerable API. See `testdata/crapi/README.md` for full setup instructions.
+The `test/crapi/` directory contains a complete example for testing [OWASP crAPI](https://github.com/OWASP/crAPI), an intentionally vulnerable API. See `test/crapi/README.md` for full setup instructions.
 
 Quick start:
 ```bash
@@ -123,10 +123,10 @@ Quick start:
 git clone https://github.com/OWASP/crAPI.git && cd crAPI/deploy/docker && docker-compose up -d
 
 # Run Hadrian (after setting up test users and tokens per the README)
-HADRIAN_TEMPLATES=testdata/crapi/templates/rest ./hadrian test \
-  --api testdata/crapi/crapi-openapi-spec.json \
-  --roles testdata/crapi/roles.yaml \
-  --auth testdata/crapi/auth.yaml \
+HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
+  --api test/crapi/crapi-openapi-spec.json \
+  --roles test/crapi/roles.yaml \
+  --auth test/crapi/auth.yaml \
   --allow-internal \
   --verbose
 ```

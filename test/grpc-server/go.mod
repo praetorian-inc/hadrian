@@ -1,4 +1,4 @@
-module github.com/praetorian-inc/hadrian/testdata/grpc-server
+module github.com/praetorian-inc/hadrian/test/grpc-server
 
 go 1.22.7
 

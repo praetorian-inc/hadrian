@@ -17,10 +17,10 @@ Automated security testing against four intentionally vulnerable applications co
 
 ```bash
 # Set up all four targets (pulls images, clones repos, builds binaries, starts services)
-./testdata/setup-live-targets.sh
+./test/setup-live-targets.sh
 
 # Or set up specific targets only
-./testdata/setup-live-targets.sh --targets vulnerable-api,grpc
+./test/setup-live-targets.sh --targets vulnerable-api,grpc
 ```
 
 The setup script handles:
@@ -36,28 +36,28 @@ The setup script handles:
 
 ```bash
 # Run all targets
-./testdata/run-live-tests.sh
+./test/run-live-tests.sh
 
 # Run specific targets
-./testdata/run-live-tests.sh --targets vulnerable-api,grpc
-./testdata/run-live-tests.sh --targets dvga
-./testdata/run-live-tests.sh --targets crapi
+./test/run-live-tests.sh --targets vulnerable-api,grpc
+./test/run-live-tests.sh --targets dvga
+./test/run-live-tests.sh --targets crapi
 
 # Verbose output
-./testdata/run-live-tests.sh --verbose
+./test/run-live-tests.sh --verbose
 
 # Skip rebuild (faster re-runs)
-./testdata/run-live-tests.sh --no-build
+./test/run-live-tests.sh --no-build
 
 # Skip service start/stop (services already running)
-./testdata/run-live-tests.sh --no-start --no-build
+./test/run-live-tests.sh --no-start --no-build
 ```
 
 ### 3. Teardown
 
 ```bash
 # Stop all services and clean up
-./testdata/setup-live-targets.sh --teardown
+./test/setup-live-targets.sh --teardown
 ```
 
 ## What the Test Runner Does
@@ -68,7 +68,7 @@ For each target, `run-live-tests.sh` automatically:
 2. **Starts** services (unless `--no-start`)
 3. **Sets up auth** - acquires JWT tokens, creates test data
 4. **Runs hadrian** security tests with appropriate flags
-5. **Collects results** as JSON in `testdata/.results/`
+5. **Collects results** as JSON in `test/.results/`
 6. **Prints summary** table with findings count and duration
 7. **Cleans up** - stops processes and containers
 
@@ -100,10 +100,10 @@ The server is restarted with each `AUTH_METHOD` and API data is reset between ru
 All ports can be overridden via environment variables:
 
 ```bash
-VULN_API_PORT=9080 ./testdata/run-live-tests.sh --targets vulnerable-api
-DVGA_PORT=5014 ./testdata/run-live-tests.sh --targets dvga
-GRPC_PORT=50052 ./testdata/run-live-tests.sh --targets grpc
-CRAPI_PORT=8889 ./testdata/run-live-tests.sh --targets crapi
+VULN_API_PORT=9080 ./test/run-live-tests.sh --targets vulnerable-api
+DVGA_PORT=5014 ./test/run-live-tests.sh --targets dvga
+GRPC_PORT=50052 ./test/run-live-tests.sh --targets grpc
+CRAPI_PORT=8889 ./test/run-live-tests.sh --targets crapi
 ```
 
 ### Config File
@@ -121,10 +121,10 @@ CRAPI_PORT=8889 ./testdata/run-live-tests.sh --targets crapi
 
 ## Output
 
-Test results are saved as JSON files in `testdata/.results/`:
+Test results are saved as JSON files in `test/.results/`:
 
 ```
-testdata/.results/
+test/.results/
   vulnerable-api-bearer-results.json
   vulnerable-api-apikey-results.json
   vulnerable-api-basic-results.json
@@ -162,7 +162,7 @@ crAPI runs 8 containers and can take 1-2 minutes on first start. The setup scrip
 
 The gRPC server needs protobuf code generation. The setup script handles this, but you can also run manually:
 ```bash
-cd testdata/grpc-server
+cd test/grpc-server
 make proto
 make build
 ```
@@ -170,15 +170,15 @@ make build
 ### Re-running after teardown
 
 ```bash
-./testdata/setup-live-targets.sh     # Full setup
-./testdata/run-live-tests.sh         # Run tests
-./testdata/setup-live-targets.sh --teardown  # Clean up
+./test/setup-live-targets.sh     # Full setup
+./test/run-live-tests.sh         # Run tests
+./test/setup-live-targets.sh --teardown  # Clean up
 ```
 
 ## Directory Structure
 
 ```
-testdata/
+test/
   setup-live-targets.sh    # One-time setup (this file)
   run-live-tests.sh        # Test runner
   README.md                # This file

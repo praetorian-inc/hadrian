@@ -71,12 +71,13 @@ func LoadTemplatesByCategory(templateDir, category string) ([]*templates.Compile
 // =============================================================================
 
 // categoryToPattern converts OWASP category (e.g., "API1") to glob pattern.
+// Supports both plain names (api1-bola.yaml) and NN-prefixed names (01-api1-bola.yaml).
 func categoryToPattern(category string) string {
 	// Normalize to lowercase for file matching
 	normalized := strings.ToLower(category)
 
-	// Map category to file pattern (api1-*.yaml, api2-*.yaml, etc.)
-	return normalized + "-*.yaml"
+	// Use wildcard prefix to match both "api1-*.yaml" and "01-api1-*.yaml"
+	return "*" + normalized + "-*.yaml"
 }
 
 // matchesCategory checks if template category matches the requested category.

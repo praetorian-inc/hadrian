@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	pb "github.com/praetorian-inc/hadrian/testdata/grpc-server/pb"
+	pb "github.com/praetorian-inc/hadrian/test/grpc-server/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
