@@ -237,19 +237,26 @@ if [ "$DO_BUILD" = true ]; then
     if echo "$TARGETS" | grep -q "grpc"; then
         log_info "Building grpc-server..."
         (cd "${SCRIPT_DIR}/grpc-server" && {
-            # Generate protobuf Go code if pb/ directory doesn't exist
-            if [ ! -d pb ]; then
-                printf "[?] gRPC server requires generated protobuf code (pb/ directory).\n"
+            # Check for actual generated files, not just directory existence
+            # This handles the case where pb/ exists but is empty from a failed run
+            if [ ! -f pb/service.pb.go ] || [ ! -f pb/service_grpc.pb.go ]; then
+                printf "[?] gRPC server requires generated protobuf code.\n"
                 printf "    This will run protoc to generate Go code from service.proto.\n"
                 printf "    Generate protobuf code now? [y/N] "
                 read -r REPLY
                 if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
                     if command -v protoc >/dev/null 2>&1; then
                         log_info "Generating protobuf code..."
+                        # Clean up any empty/corrupted pb directory from previous failed runs
+                        rm -rf pb
                         mkdir -p pb
-                        protoc --go_out=pb --go_opt=paths=source_relative \
+                        if ! protoc --go_out=pb --go_opt=paths=source_relative \
                             --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-                            service.proto
+                            service.proto; then
+                            log_fail "protoc failed to generate Go code"
+                            rm -rf pb  # Clean up on failure
+                            exit 1
+                        fi
                         log_ok "Protobuf code generated"
                     else
                         log_fail "protoc not found. Install with: brew install protobuf"
@@ -259,7 +266,7 @@ if [ "$DO_BUILD" = true ]; then
                         exit 1
                     fi
                 else
-                    log_fail "Skipping grpc-server (pb/ directory required). Run 'make proto' in testdata/grpc-server/ first."
+                    log_fail "Skipping grpc-server (protobuf files required). Run 'make proto' in testdata/grpc-server/ first."
                     exit 1
                 fi
             fi

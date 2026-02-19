@@ -146,7 +146,14 @@ if echo "$TARGETS" | grep -q "grpc"; then
     fi
     log_ok "protoc $(protoc --version 2>&1 | awk '{print $NF}')"
 
-    # Ensure Go protoc plugins
+    # Ensure Go protoc plugins are in PATH
+    GOBIN="$(go env GOPATH)/bin"
+    if [[ ":$PATH:" != *":$GOBIN:"* ]]; then
+        export PATH="$PATH:$GOBIN"
+        log_info "Added $GOBIN to PATH for this session"
+    fi
+
+    # Install protoc plugins if not available
     if ! command -v protoc-gen-go >/dev/null 2>&1; then
         log_info "Installing protoc-gen-go..."
         go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
@@ -154,6 +161,15 @@ if echo "$TARGETS" | grep -q "grpc"; then
     if ! command -v protoc-gen-go-grpc >/dev/null 2>&1; then
         log_info "Installing protoc-gen-go-grpc..."
         go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+    fi
+
+    # Verify plugins are now available (re-check after install)
+    if ! command -v protoc-gen-go >/dev/null 2>&1 || ! command -v protoc-gen-go-grpc >/dev/null 2>&1; then
+        log_fail "protoc plugins not found after installation."
+        log_info "Add the following to your shell profile (~/.zshrc or ~/.bashrc):"
+        log_info "  export PATH=\"\$PATH:\$(go env GOPATH)/bin\""
+        log_info "Then restart your shell or run: source ~/.zshrc"
+        exit 1
     fi
     log_ok "protoc Go plugins installed"
 fi
@@ -213,12 +229,21 @@ fi
 if echo "$TARGETS" | grep -q "grpc"; then
     log_info "Building grpc-server..."
     (cd "${SCRIPT_DIR}/grpc-server" && {
-        if [ ! -d pb ]; then
+        # Check for actual generated files, not just directory existence
+        # This handles the case where pb/ exists but is empty from a failed run
+        if [ ! -f pb/service.pb.go ] || [ ! -f pb/service_grpc.pb.go ]; then
             log_info "Generating protobuf code..."
+            # Clean up any empty/corrupted pb directory from previous failed runs
+            rm -rf pb
             mkdir -p pb
-            protoc --go_out=pb --go_opt=paths=source_relative \
+            if ! protoc --go_out=pb --go_opt=paths=source_relative \
                 --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-                service.proto
+                service.proto; then
+                log_fail "protoc failed to generate Go code"
+                rm -rf pb  # Clean up on failure
+                exit 1
+            fi
+            log_ok "Protobuf code generated"
         fi
         go build -o grpc-server .
     })
