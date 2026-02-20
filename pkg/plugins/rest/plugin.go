@@ -191,7 +191,7 @@ func extractParameters(params openapi3.Parameters, in string) []model.Parameter 
 
 			// Extract type from schema
 			if param.Value.Schema != nil && param.Value.Schema.Value != nil {
-				p.Type = param.Value.Schema.Value.Type
+				p.Type = schemaType(param.Value.Schema.Value.Type)
 				if param.Value.Schema.Value.Example != nil {
 					p.Example = param.Value.Schema.Value.Example
 				}
@@ -281,7 +281,7 @@ func convertSchema(schema *openapi3.Schema) *model.Schema {
 	}
 
 	result := &model.Schema{
-		Type:       schema.Type,
+		Type:       schemaType(schema.Type),
 		Properties: make(map[string]*model.SchemaProperty),
 		Required:   schema.Required,
 	}
@@ -290,7 +290,7 @@ func convertSchema(schema *openapi3.Schema) *model.Schema {
 	for name, propRef := range schema.Properties {
 		if propRef != nil && propRef.Value != nil {
 			prop := &model.SchemaProperty{
-				Type:   propRef.Value.Type,
+				Type:   schemaType(propRef.Value.Type),
 				Format: propRef.Value.Format,
 			}
 			if propRef.Value.Example != nil {
@@ -301,6 +301,13 @@ func convertSchema(schema *openapi3.Schema) *model.Schema {
 	}
 
 	return result
+}
+
+func schemaType(t *openapi3.Types) string {
+	if t != nil && len(*t) > 0 {
+		return (*t)[0]
+	}
+	return ""
 }
 
 func parseStatus(statusStr string) int {
