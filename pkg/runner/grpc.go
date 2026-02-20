@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jhump/protoreflect/desc"
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -18,6 +17,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // GRPCConfig holds gRPC-specific test configuration
@@ -181,7 +181,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 	// 1. Parse proto file (if provided)
 	var operations []*model.Operation
-	var methodDescriptors map[string]*desc.MethodDescriptor
+	var methodDescriptors map[string]protoreflect.MethodDescriptor
 	if config.Proto != "" {
 		data, err := os.ReadFile(config.Proto)
 		if err != nil {
@@ -469,13 +469,13 @@ func buildGRPCFinding(tmpl *templates.CompiledTemplate, op *model.Operation, att
 
 // buildTemplateVariablesWithRoles constructs the variable map for template substitution
 // and returns the attacker and victim role names
-func buildTemplateVariablesWithRoles(op *model.Operation, methodDesc *desc.MethodDescriptor, authCfg *auth.AuthConfig, rolesCfg *roles.RoleConfig) (map[string]string, string, string) {
+func buildTemplateVariablesWithRoles(op *model.Operation, methodDesc protoreflect.MethodDescriptor, authCfg *auth.AuthConfig, rolesCfg *roles.RoleConfig) (map[string]string, string, string) {
 	variables := map[string]string{
 		// Operation context
 		"operation.path":    op.Path,
-		"operation.method":  methodDesc.GetName(),
-		"operation.service": methodDesc.GetService().GetName(),
-		"service.name":      methodDesc.GetService().GetName(),
+		"operation.method":  string(methodDesc.Name()),
+		"operation.service": string(methodDesc.Parent().Name()),
+		"service.name":      string(methodDesc.Parent().Name()),
 	}
 
 	// Determine owner field with fallback
@@ -485,9 +485,9 @@ func buildTemplateVariablesWithRoles(op *model.Operation, methodDesc *desc.Metho
 	}
 	if ownerField == "" {
 		// Use first field from input type as fallback
-		fields := methodDesc.GetInputType().GetFields()
-		if len(fields) > 0 {
-			ownerField = fields[0].GetName()
+		fields := methodDesc.Input().Fields()
+		if fields.Len() > 0 {
+			ownerField = string(fields.Get(0).Name())
 		}
 	}
 	if ownerField == "" {

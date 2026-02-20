@@ -3,9 +3,9 @@ package runner
 import (
 	"context"
 
-	"github.com/jhump/protoreflect/desc"
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // grpcExecutorAdapter adapts templates.GRPCExecutor to orchestrator.GRPCExecutor interface
@@ -18,7 +18,7 @@ type grpcExecutorAdapter struct {
 func (a *grpcExecutorAdapter) ExecuteGRPC(
 	ctx context.Context,
 	tmpl *templates.CompiledTemplate,
-	methodDesc *desc.MethodDescriptor,
+	methodDesc protoreflect.MethodDescriptor,
 	authInfo *auth.AuthInfo,
 	variables map[string]string,
 ) (*templates.ExecutionResult, error) {

@@ -11,9 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/dynamic"
-	"github.com/jhump/protoreflect/dynamic/grpcdynamic"
 	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -22,6 +19,9 @@ import (
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/dynamicpb"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -33,7 +33,6 @@ const MaxGRPCResponseBodySize = 10 * 1024 * 1024
 // GRPCExecutor handles gRPC test execution
 type GRPCExecutor struct {
 	conn        *grpc.ClientConn
-	stub        grpcdynamic.Stub
 	target      string
 	plaintext   bool
 	insecure    bool
@@ -97,7 +96,6 @@ func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 
 	return &GRPCExecutor{
 		conn:        conn,
-		stub:        grpcdynamic.NewStub(conn),
 		target:      config.Target,
 		plaintext:   config.Plaintext,
 		insecure:    config.Insecure,
@@ -140,7 +138,7 @@ func (e *GRPCExecutor) ExecuteGRPC(
 	ctx context.Context,
 	tmpl *CompiledTemplate,
 	op *model.Operation,
-	methodDesc *desc.MethodDescriptor,
+	methodDesc protoreflect.MethodDescriptor,
 	authInfo *AuthInfo,
 	variables map[string]string,
 ) (*ExecutionResult, error) {
@@ -184,7 +182,7 @@ func (e *GRPCExecutor) executeGRPCTest(
 	ctx context.Context,
 	test *GRPCTest,
 	op *model.Operation,
-	methodDesc *desc.MethodDescriptor,
+	methodDesc protoreflect.MethodDescriptor,
 	authInfo *AuthInfo,
 	variables map[string]string,
 ) (*ExecutionResult, error) {
@@ -224,13 +222,13 @@ func (e *GRPCExecutor) executeGRPCTest(
 	// Attach metadata to context
 	ctx = metadata.NewOutgoingContext(ctx, md)
 
-	// Build the request message
-	reqMsg := dynamic.NewMessage(methodDesc.GetInputType())
+	// Build the request message using dynamicpb
+	reqMsg := dynamicpb.NewMessage(methodDesc.Input())
 
 	// Parse message JSON and populate fields
 	if test.Message != "" {
 		msgJSON := substituteVariables(test.Message, variables)
-		if err := reqMsg.UnmarshalJSON([]byte(msgJSON)); err != nil {
+		if err := protojson.Unmarshal([]byte(msgJSON), reqMsg); err != nil {
 			return nil, fmt.Errorf("failed to parse request message: %w", err)
 		}
 	}
@@ -242,9 +240,13 @@ func (e *GRPCExecutor) executeGRPCTest(
 		}
 	}
 
-	// Execute the RPC call
+	// Build the full method path for conn.Invoke
+	fullMethod := fmt.Sprintf("/%s/%s", methodDesc.Parent().FullName(), methodDesc.Name())
+
+	// Execute the RPC call using conn.Invoke
 	var respMD metadata.MD
-	respMsg, err := e.stub.InvokeRpc(ctx, methodDesc, reqMsg, grpc.Header(&respMD))
+	respMsg := dynamicpb.NewMessage(methodDesc.Output())
+	err := e.conn.Invoke(ctx, fullMethod, reqMsg, respMsg, grpc.Header(&respMD))
 
 	// Extract status code
 	var statusCode int
@@ -264,18 +266,16 @@ func (e *GRPCExecutor) executeGRPCTest(
 
 	// Build response body with size checks to prevent excessive memory allocation
 	var responseBody string
-	if respMsg != nil {
-		if dynMsg, ok := respMsg.(*dynamic.Message); ok {
-			bodyBytes, err := dynMsg.MarshalJSON()
-			switch {
-			case err != nil:
-				log.Debug("failed to marshal gRPC response: %v", err)
-			case len(bodyBytes) > MaxGRPCResponseBodySize:
-				// Check size before string conversion to avoid doubling memory allocation
-				return nil, fmt.Errorf("gRPC response exceeds maximum size of %d bytes", MaxGRPCResponseBodySize)
-			default:
-				responseBody = string(bodyBytes)
-			}
+	if err == nil {
+		bodyBytes, marshalErr := protojson.MarshalOptions{UseProtoNames: true}.Marshal(respMsg)
+		switch {
+		case marshalErr != nil:
+			log.Debug("failed to marshal gRPC response: %v", marshalErr)
+		case len(bodyBytes) > MaxGRPCResponseBodySize:
+			// Check size before string conversion to avoid doubling memory allocation
+			return nil, fmt.Errorf("gRPC response exceeds maximum size of %d bytes", MaxGRPCResponseBodySize)
+		default:
+			responseBody = string(bodyBytes)
 		}
 	}
 	if statusMessage != "" && responseBody == "" {

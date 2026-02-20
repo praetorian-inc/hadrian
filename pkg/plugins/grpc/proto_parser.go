@@ -1,10 +1,14 @@
 package grpc
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"strings"
 
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/desc/protoparse"
+	"github.com/bufbuild/protocompile"
+	"github.com/bufbuild/protocompile/reporter"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // ServiceDescriptor wraps protoreflect's service descriptor
@@ -23,7 +27,7 @@ type MethodDescriptor struct {
 	IsServerStream bool
 	IsClientStream bool
 	// RawDescriptor holds the original protoreflect descriptor for dynamic message building
-	RawDescriptor *desc.MethodDescriptor
+	RawDescriptor protoreflect.MethodDescriptor
 }
 
 // MessageDescriptor wraps protoreflect's message descriptor
@@ -45,13 +49,19 @@ type FieldDescriptor struct {
 
 // parseProtoFile parses a proto file and extracts service definitions
 func parseProtoFile(input []byte) ([]*ServiceDescriptor, error) {
-	parser := protoparse.Parser{
-		Accessor: protoparse.FileContentsFromMap(map[string]string{
-			"input.proto": string(input),
-		}),
+	compiler := protocompile.Compiler{
+		Resolver: &protocompile.SourceResolver{
+			Accessor: func(path string) (io.ReadCloser, error) {
+				if path == "input.proto" {
+					return io.NopCloser(strings.NewReader(string(input))), nil
+				}
+				return nil, fmt.Errorf("file not found: %s", path)
+			},
+		},
+		Reporter: reporter.NewReporter(nil, nil),
 	}
 
-	fds, err := parser.ParseFiles("input.proto")
+	fds, err := compiler.Compile(context.Background(), "input.proto")
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse proto file: %w", err)
 	}
@@ -64,26 +74,30 @@ func parseProtoFile(input []byte) ([]*ServiceDescriptor, error) {
 }
 
 // extractServices converts protoreflect descriptors to our wrapper types
-func extractServices(fd *desc.FileDescriptor) []*ServiceDescriptor {
-	services := fd.GetServices()
-	result := make([]*ServiceDescriptor, 0, len(services))
+func extractServices(fd protoreflect.FileDescriptor) []*ServiceDescriptor {
+	services := fd.Services()
+	result := make([]*ServiceDescriptor, 0, services.Len())
 
-	for _, svc := range services {
+	for i := 0; i < services.Len(); i++ {
+		svc := services.Get(i)
 		methods := make([]*MethodDescriptor, 0)
 
-		for _, method := range svc.GetMethods() {
+		svcMethods := svc.Methods()
+		for j := 0; j < svcMethods.Len(); j++ {
+			method := svcMethods.Get(j)
+
 			// Skip streaming methods in v1.0
-			if method.IsServerStreaming() || method.IsClientStreaming() {
+			if method.IsStreamingServer() || method.IsStreamingClient() {
 				continue
 			}
 
 			methodDesc := &MethodDescriptor{
-				Name:           method.GetName(),
-				FullName:       method.GetFullyQualifiedName(),
-				InputType:      convertMessageDesc(method.GetInputType()),
-				OutputType:     convertMessageDesc(method.GetOutputType()),
-				IsServerStream: method.IsServerStreaming(),
-				IsClientStream: method.IsClientStreaming(),
+				Name:           string(method.Name()),
+				FullName:       string(method.FullName()),
+				InputType:      convertMessageDesc(method.Input()),
+				OutputType:     convertMessageDesc(method.Output()),
+				IsServerStream: method.IsStreamingServer(),
+				IsClientStream: method.IsStreamingClient(),
 				RawDescriptor:  method, // Store the original descriptor
 			}
 
@@ -91,8 +105,8 @@ func extractServices(fd *desc.FileDescriptor) []*ServiceDescriptor {
 		}
 
 		serviceDesc := &ServiceDescriptor{
-			Name:     svc.GetName(),
-			FullName: svc.GetFullyQualifiedName(),
+			Name:     string(svc.Name()),
+			FullName: string(svc.FullName()),
 			Methods:  methods,
 		}
 
@@ -104,8 +118,8 @@ func extractServices(fd *desc.FileDescriptor) []*ServiceDescriptor {
 
 // BuildMethodDescriptorMap creates a map from operation path to method descriptor
 // Path format: /package.Service/Method
-func BuildMethodDescriptorMap(services []*ServiceDescriptor) map[string]*desc.MethodDescriptor {
-	result := make(map[string]*desc.MethodDescriptor)
+func BuildMethodDescriptorMap(services []*ServiceDescriptor) map[string]protoreflect.MethodDescriptor {
+	result := make(map[string]protoreflect.MethodDescriptor)
 	for _, svc := range services {
 		for _, method := range svc.Methods {
 			if method.RawDescriptor != nil {
@@ -118,25 +132,27 @@ func BuildMethodDescriptorMap(services []*ServiceDescriptor) map[string]*desc.Me
 }
 
 // convertMessageDesc converts a message descriptor
-func convertMessageDesc(md *desc.MessageDescriptor) *MessageDescriptor {
-	fields := make([]*FieldDescriptor, 0, len(md.GetFields()))
+func convertMessageDesc(md protoreflect.MessageDescriptor) *MessageDescriptor {
+	fields := md.Fields()
+	result := make([]*FieldDescriptor, 0, fields.Len())
 
-	for _, field := range md.GetFields() {
+	for i := 0; i < fields.Len(); i++ {
+		field := fields.Get(i)
 		fieldDesc := &FieldDescriptor{
-			Name:       field.GetName(),
-			Number:     field.GetNumber(),
-			Type:       field.GetType().String(),
-			TypeName:   field.GetFullyQualifiedName(),
-			IsRepeated: field.IsRepeated(),
-			IsRequired: field.IsRequired(),
+			Name:       string(field.Name()),
+			Number:     int32(field.Number()),
+			Type:       field.Kind().String(),
+			TypeName:   string(field.FullName()),
+			IsRepeated: field.IsList(),
+			IsRequired: field.Cardinality() == protoreflect.Required,
 		}
 
-		fields = append(fields, fieldDesc)
+		result = append(result, fieldDesc)
 	}
 
 	return &MessageDescriptor{
-		Name:     md.GetName(),
-		FullName: md.GetFullyQualifiedName(),
-		Fields:   fields,
+		Name:     string(md.Name()),
+		FullName: string(md.FullName()),
+		Fields:   result,
 	}
 }

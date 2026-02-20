@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -101,7 +102,7 @@ func TestParseProtoFile_MethodDetails(t *testing.T) {
 	require.Len(t, getUserMethod.InputType.Fields, 1)
 	assert.Equal(t, "id", getUserMethod.InputType.Fields[0].Name)
 	assert.Equal(t, int32(1), getUserMethod.InputType.Fields[0].Number)
-	assert.Equal(t, "TYPE_STRING", getUserMethod.InputType.Fields[0].Type)
+	assert.Equal(t, "string", getUserMethod.InputType.Fields[0].Type)
 
 	// Verify output type
 	require.NotNil(t, getUserMethod.OutputType)
@@ -113,15 +114,15 @@ func TestParseProtoFile_MethodDetails(t *testing.T) {
 	userFields := getUserMethod.OutputType.Fields
 	assert.Equal(t, "id", userFields[0].Name)
 	assert.Equal(t, int32(1), userFields[0].Number)
-	assert.Equal(t, "TYPE_STRING", userFields[0].Type)
+	assert.Equal(t, "string", userFields[0].Type)
 
 	assert.Equal(t, "name", userFields[1].Name)
 	assert.Equal(t, int32(2), userFields[1].Number)
-	assert.Equal(t, "TYPE_STRING", userFields[1].Type)
+	assert.Equal(t, "string", userFields[1].Type)
 
 	assert.Equal(t, "email", userFields[2].Name)
 	assert.Equal(t, int32(3), userFields[2].Number)
-	assert.Equal(t, "TYPE_STRING", userFields[2].Type)
+	assert.Equal(t, "string", userFields[2].Type)
 }
 
 func TestParseProtoFile_SkipsStreaming(t *testing.T) {
@@ -168,7 +169,7 @@ func TestMethodDescriptor_RawDescriptorField(t *testing.T) {
 	// Verify RawDescriptor is populated for all methods
 	for _, method := range service.Methods {
 		assert.NotNil(t, method.RawDescriptor, "RawDescriptor should not be nil for method %s", method.Name)
-		assert.Equal(t, method.Name, method.RawDescriptor.GetName(), "RawDescriptor name should match method name")
+		assert.Equal(t, method.Name, string(method.RawDescriptor.Name()), "RawDescriptor name should match method name")
 	}
 }
 
@@ -189,17 +190,17 @@ func TestBuildMethodDescriptorMap(t *testing.T) {
 	getUserDesc, ok := descriptorMap["/user.v1.UserService/GetUser"]
 	assert.True(t, ok, "should find GetUser method descriptor")
 	assert.NotNil(t, getUserDesc, "GetUser descriptor should not be nil")
-	assert.Equal(t, "GetUser", getUserDesc.GetName())
+	assert.Equal(t, protoreflect.Name("GetUser"), getUserDesc.Name())
 
 	createUserDesc, ok := descriptorMap["/user.v1.UserService/CreateUser"]
 	assert.True(t, ok, "should find CreateUser method descriptor")
 	assert.NotNil(t, createUserDesc, "CreateUser descriptor should not be nil")
-	assert.Equal(t, "CreateUser", createUserDesc.GetName())
+	assert.Equal(t, protoreflect.Name("CreateUser"), createUserDesc.Name())
 
 	deleteUserDesc, ok := descriptorMap["/user.v1.UserService/DeleteUser"]
 	assert.True(t, ok, "should find DeleteUser method descriptor")
 	assert.NotNil(t, deleteUserDesc, "DeleteUser descriptor should not be nil")
-	assert.Equal(t, "DeleteUser", deleteUserDesc.GetName())
+	assert.Equal(t, protoreflect.Name("DeleteUser"), deleteUserDesc.Name())
 
 	// Verify streaming methods are NOT in the map
 	_, ok = descriptorMap["/user.v1.UserService/StreamUsers"]

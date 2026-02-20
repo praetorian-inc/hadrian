@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jhump/protoreflect/desc"
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // GRPCExecutor interface for making gRPC requests
@@ -17,7 +17,7 @@ type GRPCExecutor interface {
 	ExecuteGRPC(
 		ctx context.Context,
 		tmpl *templates.CompiledTemplate,
-		methodDesc *desc.MethodDescriptor,
+		methodDesc protoreflect.MethodDescriptor,
 		authInfo *auth.AuthInfo,
 		variables map[string]string,
 	) (*templates.ExecutionResult, error)
@@ -52,7 +52,7 @@ func NewGRPCMutationExecutor(executor GRPCExecutor) *GRPCMutationExecutor {
 func (e *GRPCMutationExecutor) ExecuteGRPCMutation(
 	ctx context.Context,
 	tmpl *templates.Template,
-	methodDesc *desc.MethodDescriptor,
+	methodDesc protoreflect.MethodDescriptor,
 	authInfos map[string]*auth.AuthInfo,
 ) (*GRPCMutationResult, error) {
 	result := &GRPCMutationResult{
@@ -137,7 +137,7 @@ func (e *GRPCMutationExecutor) executePhase(
 	ctx context.Context,
 	tmpl *templates.Template,
 	phase *templates.Phase,
-	methodDesc *desc.MethodDescriptor,
+	methodDesc protoreflect.MethodDescriptor,
 	authUser string,
 	authInfos map[string]*auth.AuthInfo,
 ) (*model.HTTPResponse, error) {

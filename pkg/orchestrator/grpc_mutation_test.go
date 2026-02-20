@@ -5,14 +5,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/desc/builder"
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 // mockGRPCExecutor implements a simple mock for testing
@@ -24,7 +25,7 @@ type mockGRPCExecutor struct {
 func (m *mockGRPCExecutor) ExecuteGRPC(
 	ctx context.Context,
 	tmpl *templates.CompiledTemplate,
-	methodDesc *desc.MethodDescriptor,
+	methodDesc protoreflect.MethodDescriptor,
 	authInfo *auth.AuthInfo,
 	variables map[string]string,
 ) (*templates.ExecutionResult, error) {
@@ -335,32 +336,51 @@ func TestExecuteGRPCMutation_DetectionConditions(t *testing.T) {
 }
 
 // Helper function to create a minimal method descriptor for testing
-func createTestMethodDescriptor(t *testing.T, serviceName, methodName string) *desc.MethodDescriptor {
-	// Create a minimal service descriptor
-	serviceBuilder := builder.NewService(serviceName)
+func createTestMethodDescriptor(t *testing.T, serviceName, methodName string) protoreflect.MethodDescriptor {
+	reqName := "Request"
+	respName := "Response"
+	inputTypeName := "." + serviceName + ".Request"
+	outputTypeName := "." + serviceName + ".Response"
+	fieldName := "id"
+	fieldNum := int32(1)
+	typePb := descriptorpb.FieldDescriptorProto_TYPE_STRING
+	syntax := "proto3"
+	fileName := "test.proto"
 
-	// Create minimal message types
-	msgBuilder := builder.NewMessage("Request")
-	msgBuilder.AddField(builder.NewField("id", builder.FieldTypeString()))
+	fdProto := &descriptorpb.FileDescriptorProto{
+		Name:    &fileName,
+		Package: &serviceName,
+		Syntax:  &syntax,
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name: &reqName,
+				Field: []*descriptorpb.FieldDescriptorProto{
+					{Name: &fieldName, Number: &fieldNum, Type: &typePb},
+				},
+			},
+			{
+				Name: &respName,
+				Field: []*descriptorpb.FieldDescriptorProto{
+					{Name: &fieldName, Number: &fieldNum, Type: &typePb},
+				},
+			},
+		},
+		Service: []*descriptorpb.ServiceDescriptorProto{
+			{
+				Name: &serviceName,
+				Method: []*descriptorpb.MethodDescriptorProto{
+					{
+						Name:       &methodName,
+						InputType:  &inputTypeName,
+						OutputType: &outputTypeName,
+					},
+				},
+			},
+		},
+	}
 
-	respBuilder := builder.NewMessage("Response")
-	respBuilder.AddField(builder.NewField("id", builder.FieldTypeString()))
-
-	// Add method to service
-	methodBuilder := builder.NewMethod(methodName,
-		builder.RpcTypeMessage(msgBuilder, false),
-		builder.RpcTypeMessage(respBuilder, false),
-	)
-
-	serviceBuilder.AddMethod(methodBuilder)
-
-	// Build the service descriptor
-	fileBuilder := builder.NewFile("test.proto")
-	fileBuilder.AddService(serviceBuilder)
-
-	fileDesc, err := fileBuilder.Build()
+	fd, err := protodesc.NewFile(fdProto, nil)
 	require.NoError(t, err)
 
-	serviceDesc := fileDesc.GetServices()[0]
-	return serviceDesc.GetMethods()[0]
+	return fd.Services().Get(0).Methods().Get(0)
 }
