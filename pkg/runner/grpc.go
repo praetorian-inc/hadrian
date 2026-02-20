@@ -13,7 +13,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
-	"github.com/praetorian-inc/hadrian/pkg/owasp"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/plugins/grpc"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -251,7 +251,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 	// 4. Create gRPC executor (skip if dry-run)
 	var executor *templates.GRPCExecutor
-	var mutationExecutor *owasp.GRPCMutationExecutor
+	var mutationExecutor *orchestrator.GRPCMutationExecutor
 	if !config.DryRun {
 		var err error
 		executor, err = templates.NewGRPCExecutor(templates.GRPCExecutorConfig{
@@ -275,7 +275,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 		// Create mutation executor for three-phase tests with adapter
 		adapter := &grpcExecutorAdapter{executor: executor}
-		mutationExecutor = owasp.NewGRPCMutationExecutor(adapter)
+		mutationExecutor = orchestrator.NewGRPCMutationExecutor(adapter)
 	}
 
 	// Create reporter based on output format

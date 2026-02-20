@@ -11,7 +11,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/model"
-	"github.com/praetorian-inc/hadrian/pkg/owasp"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/stretchr/testify/assert"
@@ -116,7 +116,7 @@ func TestExecuteTemplate_UnauthenticatedEndpoint(t *testing.T) {
 	}
 	rolesCfg := makeTestRolesConfig()
 	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := owasp.NewMutationExecutor(server.Client())
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -149,7 +149,7 @@ func TestExecuteTemplate_UnauthenticatedEndpoint_WithPathParams(t *testing.T) {
 	}
 	rolesCfg := makeTestRolesConfig()
 	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := owasp.NewMutationExecutor(server.Client())
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -180,7 +180,7 @@ func TestExecuteTemplate_UnauthenticatedEndpoint_PathParamDefaultValue(t *testin
 	}
 	rolesCfg := makeTestRolesConfig()
 	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := owasp.NewMutationExecutor(server.Client())
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -217,7 +217,7 @@ func TestExecuteTemplate_AuthenticatedEndpoint_SkipsSameRole(t *testing.T) {
 	})
 
 	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := owasp.NewMutationExecutor(server.Client())
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -253,7 +253,7 @@ func TestExecuteTemplate_AuthenticatedEndpoint_NoVictimRole(t *testing.T) {
 	})
 
 	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := owasp.NewMutationExecutor(server.Client())
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -289,7 +289,7 @@ func TestExecuteTemplate_AuthenticatedEndpoint_RoleNotConfigured(t *testing.T) {
 	})
 
 	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := owasp.NewMutationExecutor(server.Client())
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
 
 	// Should not error - roles without auth are skipped
 	findings, err := executeTemplate(
@@ -320,7 +320,7 @@ func TestExecuteTemplate_NilAuthConfig(t *testing.T) {
 	rolesCfg := makeTestRolesConfig()
 
 	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := owasp.NewMutationExecutor(server.Client())
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
 
 	// With nil auth config, auth info will be nil for all roles
 	findings, err := executeTemplate(
@@ -596,8 +596,6 @@ detection:
 	_ = os.WriteFile(filepath.Join(tmplDir, "test-bola.yaml"), []byte(tmplContent), 0644)
 
 	// Unset LLM env vars
-	_ = os.Unsetenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("OPENAI_API_KEY")
 	_ = os.Unsetenv("OLLAMA_HOST")
 
 	ctx := context.Background()

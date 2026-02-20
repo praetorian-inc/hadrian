@@ -8,12 +8,12 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
-// grpcExecutorAdapter adapts templates.GRPCExecutor to owasp.GRPCExecutor interface
+// grpcExecutorAdapter adapts templates.GRPCExecutor to orchestrator.GRPCExecutor interface
 type grpcExecutorAdapter struct {
 	executor *templates.GRPCExecutor
 }
 
-// ExecuteGRPC implements owasp.GRPCExecutor interface by calling templates.GRPCExecutor
+// ExecuteGRPC implements orchestrator.GRPCExecutor interface by calling templates.GRPCExecutor
 // with the appropriate parameters
 func (a *grpcExecutorAdapter) ExecuteGRPC(
 	ctx context.Context,

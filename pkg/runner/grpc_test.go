@@ -9,7 +9,7 @@ import (
 	"github.com/jhump/protoreflect/desc/builder"
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/model"
-	"github.com/praetorian-inc/hadrian/pkg/owasp"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/stretchr/testify/assert"
@@ -159,7 +159,7 @@ func TestGRPCMutationIntegration(t *testing.T) {
 	}
 
 	// Create GRPCMutationExecutor with mock
-	mutationExecutor := owasp.NewGRPCMutationExecutor(mockExecutor)
+	mutationExecutor := orchestrator.NewGRPCMutationExecutor(mockExecutor)
 
 	// Execute mutation test
 	result, err := mutationExecutor.ExecuteGRPCMutation(
@@ -188,7 +188,7 @@ func TestGRPCMutationIntegration(t *testing.T) {
 	}
 }
 
-// mockGRPCExecutor implements owasp.GRPCExecutor for testing
+// mockGRPCExecutor implements orchestrator.GRPCExecutor for testing
 type mockGRPCExecutor struct {
 	responses []*templates.ExecutionResult
 	callCount int

@@ -9,7 +9,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
-	"github.com/praetorian-inc/hadrian/pkg/owasp"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
@@ -18,7 +18,7 @@ import (
 func executeTemplate(
 	ctx context.Context,
 	executor *templates.Executor,
-	mutationExecutor *owasp.MutationExecutor,
+	mutationExecutor *orchestrator.MutationExecutor,
 	tmpl *templates.CompiledTemplate,
 	op *model.Operation,
 	rolesCfg *roles.RoleConfig,
@@ -158,7 +158,7 @@ func executeTemplate(
 // executeMutationTemplate runs a three-phase mutation test
 func executeMutationTemplate(
 	ctx context.Context,
-	executor *owasp.MutationExecutor,
+	executor *orchestrator.MutationExecutor,
 	tmpl *templates.CompiledTemplate,
 	op *model.Operation,
 	rolesCfg *roles.RoleConfig,
