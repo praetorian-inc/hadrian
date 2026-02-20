@@ -507,25 +507,9 @@ func TestGetTemplateDir_EnvOverride(t *testing.T) {
 }
 
 func TestHasLLMConfig_NoConfig(t *testing.T) {
-	_ = os.Unsetenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("OPENAI_API_KEY")
 	_ = os.Unsetenv("OLLAMA_HOST")
 
 	assert.False(t, hasLLMConfig())
-}
-
-func TestHasLLMConfig_WithAnthropic(t *testing.T) {
-	_ = os.Setenv("ANTHROPIC_API_KEY", "test-key")
-	defer func() { _ = os.Unsetenv("ANTHROPIC_API_KEY") }()
-
-	assert.True(t, hasLLMConfig())
-}
-
-func TestHasLLMConfig_WithOpenAI(t *testing.T) {
-	_ = os.Setenv("OPENAI_API_KEY", "test-key")
-	defer func() { _ = os.Unsetenv("OPENAI_API_KEY") }()
-
-	assert.True(t, hasLLMConfig())
 }
 
 // =============================================================================
@@ -534,8 +518,6 @@ func TestHasLLMConfig_WithOpenAI(t *testing.T) {
 
 func TestTriageWithLLM_NoProvider(t *testing.T) {
 	// Ensure no LLM providers are configured
-	_ = os.Unsetenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("OPENAI_API_KEY")
 	_ = os.Unsetenv("OLLAMA_HOST")
 
 	ctx := context.Background()
@@ -578,8 +560,6 @@ func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
 	// For now, we test that the signature accepts a Reporter and the function
 	// doesn't panic. Integration tests would verify the full workflow.
 
-	_ = os.Unsetenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("OPENAI_API_KEY")
 	_ = os.Unsetenv("OLLAMA_HOST")
 
 	ctx := context.Background()
@@ -609,8 +589,6 @@ func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
 
 func TestTriageWithLLM_WithContext(t *testing.T) {
 	// Ensure no LLM providers are configured (so we don't make actual API calls)
-	_ = os.Unsetenv("ANTHROPIC_API_KEY")
-	_ = os.Unsetenv("OPENAI_API_KEY")
 	_ = os.Unsetenv("OLLAMA_HOST")
 
 	ctx := context.Background()

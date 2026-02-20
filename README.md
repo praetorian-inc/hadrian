@@ -10,9 +10,8 @@ Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that te
 
 - **OWASP API Top 10 Coverage**: Test for BOLA, broken authentication, and more
 - **Role-Based Testing**: Define roles with permissions and test cross-role access
-- **Mutation Testing Engine**: Three-phase setup/attack/verify tests for BFLA and BOPLA
+- **Mutation Testing**: Three-phase setup/attack/verify testing pattern for proving write/delete vulnerabilities (BFLA and BOPLA)
 - **Template-Driven**: YAML templates for customizable security tests
-- **Mutation Testing**: Setup/Attack/Verify three-phase testing pattern for proving write/delete vulnerabilities
 - **Multiple Output Formats**: Terminal, JSON, and Markdown reports
 - **Production Safety**: Built-in safeguards against testing production systems
 - **Adaptive Rate Limiting**: Proactive request throttling with reactive backoff on 429/503 responses
@@ -367,7 +366,7 @@ hadrian test rest [flags]
 - `--dry-run` - Show what would be tested without making requests
 - `--audit-log <file>` - Audit log file (default: .hadrian/audit.log)
 
-### test graphql command
+### test graphql
 
 Run security tests against a GraphQL API.
 
@@ -381,6 +380,7 @@ hadrian test graphql [flags]
 **Schema Source (choose one):**
 - `--schema <file>` - GraphQL SDL schema file (`.graphql` or `.gql`)
 - *(default)* - Uses introspection query to discover schema
+- `--endpoint <path>` - GraphQL endpoint path (default: `/graphql`)
 
 **Authentication:**
 - `--auth <file>` - Authentication configuration YAML file
@@ -440,12 +440,14 @@ hadrian test grpc [flags]
 **Template Options:**
 - `--template-dir <dir>` - gRPC templates directory (e.g., templates/grpc)
 - `--templates <id>` - Filter templates by ID or name (can specify multiple)
-- `--owasp <list>` - Filter by OWASP API Security category (e.g., API1,API2,API5)
+
+**TLS Options:**
+- `--plaintext` - Use plaintext connection (no TLS)
+- `--tls-ca-cert <file>` - Custom CA certificate for TLS
+- `--insecure` - Skip TLS verification
 
 **Network Options:**
 - `--proxy <url>` - HTTP/HTTPS proxy URL
-- `--ca-cert <file>` - CA certificate for proxy
-- `--insecure` - Skip TLS verification
 - `--rate-limit <n>` - Rate limit in req/s (default: 5.0)
 - `--timeout <n>` - Request timeout in seconds (default: 30)
 - `--allow-internal` - Allow internal/private IP addresses
@@ -456,12 +458,6 @@ hadrian test grpc [flags]
 - `--output-file <file>` - Write findings to file
 - `--verbose` - Enable verbose logging
 - `--dry-run` - Show what would be tested without making requests
-
-**LLM Triage (optional):**
-- `--llm-host <url>` - LLM service host for finding triage
-- `--llm-model <model>` - LLM model name for triage
-- `--llm-timeout <n>` - LLM request timeout in seconds (default: 30)
-- `--llm-context <text>` - Additional context for LLM triage
 
 ### parse command
 
