@@ -215,13 +215,13 @@ message Item {
 	getItemDesc, ok := methodDescriptors["/test.TestService/GetItem"]
 	assert.True(t, ok, "should find GetItem method descriptor")
 	require.NotNil(t, getItemDesc, "GetItem descriptor should not be nil")
-	assert.Equal(t, "GetItem", getItemDesc.GetName())
+	assert.Equal(t, "GetItem", string(getItemDesc.Name()))
 
 	// Verify CreateItem method descriptor
 	createItemDesc, ok := methodDescriptors["/test.TestService/CreateItem"]
 	assert.True(t, ok, "should find CreateItem method descriptor")
 	require.NotNil(t, createItemDesc, "CreateItem descriptor should not be nil")
-	assert.Equal(t, "CreateItem", createItemDesc.GetName())
+	assert.Equal(t, "CreateItem", string(createItemDesc.Name()))
 
 	// Verify operation paths match descriptor map keys
 	for _, op := range spec.Operations {

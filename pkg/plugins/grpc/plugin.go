@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jhump/protoreflect/desc"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // GRPCPlugin parses Protocol Buffer (.proto) files
@@ -78,7 +78,7 @@ func (p *GRPCPlugin) Parse(input []byte) (*model.APISpec, error) {
 }
 
 // ParseWithDescriptors parses proto file and returns both the API spec and method descriptors
-func (p *GRPCPlugin) ParseWithDescriptors(input []byte) (*model.APISpec, map[string]*desc.MethodDescriptor, error) {
+func (p *GRPCPlugin) ParseWithDescriptors(input []byte) (*model.APISpec, map[string]protoreflect.MethodDescriptor, error) {
 	// Parse proto file to service descriptors
 	services, err := parseProtoFile(input)
 	if err != nil {

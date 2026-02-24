@@ -35,7 +35,7 @@ Running deletion tests first would remove test data, causing subsequent tests to
 
 ### How Ordering Works
 
-Hadrian's template loader (`pkg/owasp/loader.go` and `pkg/runner/run.go`) sorts all template files alphabetically by their full file path before execution. This guarantees deterministic, reproducible test ordering across all platforms.
+Hadrian's template loader (`pkg/orchestrator/loader.go` and `pkg/runner/run.go`) sorts all template files alphabetically by their full file path before execution. This guarantees deterministic, reproducible test ordering across all platforms.
 
 To control execution order, prefix template filenames with numbers:
 - `01-first-test.yaml` runs before `02-second-test.yaml`

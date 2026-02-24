@@ -117,7 +117,7 @@ Hadrian is a security testing framework designed to identify OWASP API Top 10 vu
 │  │                        ▼                                                │ │
 │  │  ┌────────────────────────────────────────────────────────────────┐    │ │
 │  │  │                    LLM TRIAGE                                   │    │ │
-│  │  │   Claude / OpenAI / Ollama                                      │    │ │
+│  │  │   Ollama (local LLM)                                             │    │ │
 │  │  │   → is_vulnerability: true/false                               │    │ │
 │  │  │   → confidence: 0.95                                           │    │ │
 │  │  │   → recommendations: [...]                                     │    │ │
@@ -153,11 +153,13 @@ Hadrian is a security testing framework designed to identify OWASP API Top 10 vu
 ### Core Packages
 
 ```
-hadrian-api-tester/
+hadrian/
 ├── cmd/hadrian/main.go      # CLI entry point
 ├── pkg/
 │   ├── runner/              # Orchestration, rate limiting, test execution
 │   │   ├── run.go           # CLI commands and main loop
+│   │   ├── graphql.go       # GraphQL test runner
+│   │   ├── grpc.go          # gRPC test runner
 │   │   ├── ratelimit.go     # Rate limiter configuration
 │   │   ├── ratelimit_client.go  # HTTP client with reactive backoff
 │   │   ├── execution.go     # Template execution logic
@@ -166,20 +168,27 @@ hadrian-api-tester/
 │   ├── templates/           # Template parsing, compilation, execution
 │   ├── auth/                # Authentication handling
 │   ├── roles/               # Role-based authorization logic
-│   ├── owasp/               # OWASP-specific runners and mutation tests
-│   ├── plugins/             # API spec format plugins (REST/OpenAPI)
+│   ├── orchestrator/         # Test orchestration and mutation tests
+│   ├── plugins/             # API spec format plugins (REST, GraphQL, gRPC)
+│   │   ├── rest/            # OpenAPI/Swagger parser
+│   │   ├── graphql/         # GraphQL SDL and introspection parser
+│   │   └── grpc/            # Protocol Buffers parser
+│   ├── graphql/             # GraphQL security scanning engine
 │   ├── reporter/            # Output formatting (terminal, JSON, markdown)
-│   ├── llm/                 # LLM integration (Claude, OpenAI, Ollama)
+│   ├── llm/                 # LLM integration (Ollama)
 │   └── matchers/            # Detection matchers
 ├── internal/http/           # HTTP client with proxy support
-└── templates/rest/          # Built-in REST API security templates
+└── templates/
+    ├── rest/                # Built-in REST API security templates
+    ├── graphql/             # Built-in GraphQL security templates
+    └── grpc/                # Built-in gRPC security templates
 ```
 
 ## How Testing Works
 
 ### Template Execution Order
 
-Templates are loaded and executed in **alphabetical order by filename**. The template loader (`pkg/owasp/loader.go` and `pkg/runner/run.go`) explicitly sorts files to ensure deterministic, reproducible test execution across all platforms.
+Templates are loaded and executed in **alphabetical order by filename**. The template loader (`pkg/orchestrator/loader.go` and `pkg/runner/run.go`) explicitly sorts files to ensure deterministic, reproducible test execution across all platforms.
 
 **Best Practice**: Prefix template filenames with numbers to control execution order:
 - `01-*` to `05-*`: Non-destructive read tests
@@ -273,7 +282,7 @@ Hadrian includes templates for OWASP API Top 10 vulnerabilities:
 ## Example Workflow
 
 ```bash
-hadrian test \
+hadrian test rest \
   --api crapi-openapi.yaml \
   --roles crapi-roles.yaml \
   --auth crapi-auth.yaml \

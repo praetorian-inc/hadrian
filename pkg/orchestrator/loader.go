@@ -1,7 +1,7 @@
 // Package owasp provides OWASP test orchestration for API security testing.
 // It loads templates by category, matches them to API operations, and coordinates
 // test execution across role combinations.
-package owasp
+package orchestrator
 
 import (
 	"fmt"

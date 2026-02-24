@@ -5,14 +5,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jhump/protoreflect/desc"
-	"github.com/jhump/protoreflect/desc/builder"
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/model"
-	"github.com/praetorian-inc/hadrian/pkg/owasp"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 // TestNewTestGRPCCmd tests the gRPC command creation
@@ -159,7 +160,7 @@ func TestGRPCMutationIntegration(t *testing.T) {
 	}
 
 	// Create GRPCMutationExecutor with mock
-	mutationExecutor := owasp.NewGRPCMutationExecutor(mockExecutor)
+	mutationExecutor := orchestrator.NewGRPCMutationExecutor(mockExecutor)
 
 	// Execute mutation test
 	result, err := mutationExecutor.ExecuteGRPCMutation(
@@ -188,7 +189,7 @@ func TestGRPCMutationIntegration(t *testing.T) {
 	}
 }
 
-// mockGRPCExecutor implements owasp.GRPCExecutor for testing
+// mockGRPCExecutor implements orchestrator.GRPCExecutor for testing
 type mockGRPCExecutor struct {
 	responses []*templates.ExecutionResult
 	callCount int
@@ -197,7 +198,7 @@ type mockGRPCExecutor struct {
 func (m *mockGRPCExecutor) ExecuteGRPC(
 	ctx context.Context,
 	tmpl *templates.CompiledTemplate,
-	methodDesc *desc.MethodDescriptor,
+	methodDesc protoreflect.MethodDescriptor,
 	authInfo *auth.AuthInfo,
 	variables map[string]string,
 ) (*templates.ExecutionResult, error) {
@@ -210,45 +211,68 @@ func (m *mockGRPCExecutor) ExecuteGRPC(
 }
 
 // Helper function for tests - creates mock method descriptor
-func createMockMethodDescriptor(t *testing.T, inputFieldNames []string) *desc.MethodDescriptor {
+func createMockMethodDescriptor(t *testing.T, inputFieldNames []string) protoreflect.MethodDescriptor {
 	t.Helper()
 
-	// Create a message builder for the input type
-	msgBuilder := builder.NewMessage("TestRequest")
-	for _, fieldName := range inputFieldNames {
-		field := builder.NewField(fieldName, builder.FieldTypeString())
-		msgBuilder.AddField(field)
+	// Build field descriptors for the input message
+	fields := make([]*descriptorpb.FieldDescriptorProto, len(inputFieldNames))
+	for i, name := range inputFieldNames {
+		num := int32(i + 1)
+		typePb := descriptorpb.FieldDescriptorProto_TYPE_STRING
+		fields[i] = &descriptorpb.FieldDescriptorProto{
+			Name:   &name,
+			Number: &num,
+			Type:   &typePb,
+		}
 	}
 
-	// Create service and method
-	svcBuilder := builder.NewService("TestService")
-	methodBuilder := builder.NewMethod("TestMethod",
-		builder.RpcTypeMessage(msgBuilder, false),
-		builder.RpcTypeMessage(builder.NewMessage("TestResponse"), false),
-	)
-	svcBuilder.AddMethod(methodBuilder)
+	reqName := "TestRequest"
+	respName := "TestResponse"
+	svcName := "TestService"
+	methodName := "TestMethod"
+	inputTypeName := ".test.TestRequest"
+	outputTypeName := ".test.TestResponse"
+	pkg := "test"
+	syntax := "proto3"
+	fileName := "test.proto"
 
-	// Build the file descriptor
-	fileBuilder := builder.NewFile("test.proto").SetPackageName("test")
-	fileBuilder.AddService(svcBuilder)
-	fileBuilder.AddMessage(msgBuilder)
+	fdProto := &descriptorpb.FileDescriptorProto{
+		Name:    &fileName,
+		Package: &pkg,
+		Syntax:  &syntax,
+		MessageType: []*descriptorpb.DescriptorProto{
+			{Name: &reqName, Field: fields},
+			{Name: &respName},
+		},
+		Service: []*descriptorpb.ServiceDescriptorProto{
+			{
+				Name: &svcName,
+				Method: []*descriptorpb.MethodDescriptorProto{
+					{
+						Name:       &methodName,
+						InputType:  &inputTypeName,
+						OutputType: &outputTypeName,
+					},
+				},
+			},
+		},
+	}
 
-	fileDesc, err := fileBuilder.Build()
+	fd, err := protodesc.NewFile(fdProto, nil)
 	if err != nil {
 		t.Fatalf("Failed to build mock descriptor: %v", err)
 	}
 
-	// Get the method descriptor
-	services := fileDesc.GetServices()
-	if len(services) == 0 {
+	services := fd.Services()
+	if services.Len() == 0 {
 		t.Fatal("No services found in mock descriptor")
 	}
-	methods := services[0].GetMethods()
-	if len(methods) == 0 {
+	methods := services.Get(0).Methods()
+	if methods.Len() == 0 {
 		t.Fatal("No methods found in mock service")
 	}
 
-	return methods[0]
+	return methods.Get(0)
 }
 
 // TestMatchesEndpointSelector_GRPCServiceAndMethod tests the Service and Method exact match filters

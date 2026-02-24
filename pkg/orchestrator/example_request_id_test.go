@@ -1,4 +1,4 @@
-package owasp_test
+package orchestrator_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
-	"github.com/praetorian-inc/hadrian/pkg/owasp"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
@@ -75,7 +75,7 @@ func Example_requestIDTracking() {
 	}
 
 	// Execute the test
-	executor := owasp.NewMutationExecutor(http.DefaultClient)
+	executor := orchestrator.NewMutationExecutor(http.DefaultClient)
 	authInfos := map[string]*auth.AuthInfo{
 		"attacker": {Method: "bearer", Value: "Bearer attacker-token"},
 		"victim":   {Method: "bearer", Value: "Bearer victim-token"},

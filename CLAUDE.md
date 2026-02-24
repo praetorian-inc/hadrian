@@ -47,12 +47,12 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 
 - **pkg/runner**: CLI commands, test orchestration, rate limiting (`ratelimit.go`, `ratelimit_client.go`), and execution logic
 - **pkg/templates**: YAML template parsing (`parse.go`), compilation (`compile.go`), and HTTP execution (`execute.go`)
-- **pkg/owasp**: OWASP-specific test runner, endpoint/role selectors, and mutation testing
+- **pkg/orchestrator**: Test orchestration, endpoint/role selectors, and mutation testing
 - **pkg/roles**: Permission model with `<action>:<object>:<scope>` format and role-based filtering
 - **pkg/model**: Data structures for `Finding`, `Operation`, `Evidence`, `Severity`
 - **pkg/matchers**: Response matching (status codes, word/regex patterns)
 - **pkg/reporter**: Output formatters (terminal, JSON, markdown) with finding redaction
-- **pkg/llm**: LLM triage integration (Claude, OpenAI, Ollama) with fallback chain
+- **pkg/llm**: LLM triage integration (Ollama)
 
 ### Template System
 
@@ -134,6 +134,4 @@ HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
 ## Environment Variables
 
 - `HADRIAN_TEMPLATES`: Custom templates directory path
-- `ANTHROPIC_API_KEY`: Claude API key for LLM triage (preferred)
-- `OPENAI_API_KEY`: OpenAI API key for LLM triage (fallback)
-- `OLLAMA_HOST`: Ollama host for local LLM triage (final fallback)
+- `OLLAMA_HOST`: Ollama host for LLM triage
