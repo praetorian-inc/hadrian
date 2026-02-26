@@ -28,7 +28,7 @@ func TestSecurityScanner_CheckIntrospection(t *testing.T) {
 		require.NotNil(t, schema)
 
 		// Create executor and scanner
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		// Check for introspection disclosure
@@ -48,7 +48,7 @@ func TestSecurityScanner_CheckIntrospection(t *testing.T) {
 		}))
 		defer server.Close()
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(nil, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -93,7 +93,7 @@ func TestSecurityScanner_CheckDepthLimit(t *testing.T) {
 			},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		gen := NewAttackGenerator(schema)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{
 			DepthLimit: 10,
@@ -146,7 +146,7 @@ func TestSecurityScanner_CheckDepthLimit(t *testing.T) {
 			},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{
 			DepthLimit: 10,
 		})
@@ -191,7 +191,7 @@ func TestSecurityScanner_CheckBatchingLimit(t *testing.T) {
 			},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		gen := NewAttackGenerator(schema)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{
 			BatchSize: 10,
@@ -243,7 +243,7 @@ func TestSecurityScanner_CheckBatchingLimit(t *testing.T) {
 			},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{
 			BatchSize: 10,
 		})
@@ -291,7 +291,7 @@ func TestSecurityScanner_CheckDepthLimit_UsesSchemaFields(t *testing.T) {
 			},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{
 			DepthLimit: 10,
 		})
@@ -365,7 +365,7 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 			"attacker": {Method: "bearer", Value: "attacker-token"},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -430,7 +430,7 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 			"attacker": {Method: "bearer", Value: "attacker-token"},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -451,7 +451,7 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 			Queries:   []*FieldDef{},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -498,7 +498,7 @@ func TestSecurityScanner_CheckBOLA(t *testing.T) {
 			"attacker": {Method: "bearer", Value: "attacker-token"},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -567,7 +567,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			"user":  {Method: "bearer", Value: "user-token"},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -617,7 +617,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			"user":  {Method: "bearer", Value: "user-token"},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -638,7 +638,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			Mutations:    []*FieldDef{},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -676,7 +676,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 				"user":  {Method: "bearer", Value: "user-token"},
 			}
 
-			executor := NewExecutor(http.DefaultClient, server.URL)
+			executor := NewExecutor(http.DefaultClient, server.URL, nil)
 			scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 			finding := scanner.CheckBFLA(context.Background(), authConfigs)
@@ -720,7 +720,7 @@ func TestSecurityScanner_CheckBFLA(t *testing.T) {
 			"user":  {Method: "bearer", Value: "user-token"},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()
@@ -755,7 +755,7 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 		schema, err := introspectionClient.FetchSchema(context.Background())
 		require.NoError(t, err)
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{
 			DepthLimit: 10,
 			BatchSize:  10,
@@ -793,7 +793,7 @@ func TestSecurityScanner_RunAllChecks(t *testing.T) {
 		defer server.Close()
 
 		// No schema (introspection disabled)
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(nil, executor, ScanConfig{})
 
 		ctx := context.Background()

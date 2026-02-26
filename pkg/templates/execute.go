@@ -57,16 +57,18 @@ type AuthInfo struct {
 
 // Executor runs compiled templates against operations
 type Executor struct {
-	httpClient HTTPClient
-	cache      *Cache
-	requestIDs []string
+	httpClient    HTTPClient
+	cache         *Cache
+	requestIDs    []string
+	customHeaders map[string]string
 }
 
-func NewExecutor(client HTTPClient) *Executor {
+func NewExecutor(client HTTPClient, customHeaders map[string]string) *Executor {
 	return &Executor{
-		httpClient: client,
-		cache:      NewCache(1000), // Cache 1000 compiled templates
-		requestIDs: make([]string, 0),
+		httpClient:    client,
+		cache:         NewCache(1000), // Cache 1000 compiled templates
+		requestIDs:    make([]string, 0),
+		customHeaders: customHeaders,
 	}
 }
 
@@ -155,7 +157,7 @@ func (e *Executor) Execute(
 
 			for retry := 0; retry <= maxRetries; retry++ {
 				// Build request (must rebuild for each attempt)
-				req, err := buildRequest(ctx, test, operation, authInfo, variables)
+				req, err := buildRequest(ctx, test, operation, authInfo, variables, e.customHeaders)
 				if err != nil {
 					return nil, fmt.Errorf("failed to build request: %w", err)
 				}
@@ -434,6 +436,11 @@ func (e *Executor) ExecuteGraphQL(
 
 		req.Header.Set("Content-Type", "application/json")
 
+		// Add custom headers (auth headers take precedence)
+		for key, value := range e.customHeaders {
+			req.Header.Set(key, value)
+		}
+
 		// Add request ID header and track it
 		requestID := generateRequestID()
 		req.Header.Set("X-Hadrian-Request-Id", requestID)
@@ -545,6 +552,7 @@ func buildRequest(
 	operation *model.Operation,
 	authInfo *AuthInfo,
 	variables map[string]string,
+	customHeaders map[string]string,
 ) (*http.Request, error) {
 	// Substitute variables in path
 	path := test.Path
@@ -588,6 +596,11 @@ func buildRequest(
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, err
+	}
+
+	// Add custom headers first (auth/template headers take precedence)
+	for key, value := range customHeaders {
+		req.Header.Set(key, value)
 	}
 
 	// Add headers

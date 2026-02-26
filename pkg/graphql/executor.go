@@ -18,18 +18,20 @@ const MaxResponseBodySize = 10 * 1024 * 1024
 
 // Executor executes GraphQL queries
 type Executor struct {
-	httpClient HTTPClient
-	endpoint   string
-	mu         sync.Mutex
-	requestIDs []string // Track all request IDs for this executor session
+	httpClient    HTTPClient
+	endpoint      string
+	mu            sync.Mutex
+	requestIDs    []string // Track all request IDs for this executor session
+	customHeaders map[string]string
 }
 
 // NewExecutor creates a new GraphQL executor
-func NewExecutor(client HTTPClient, endpoint string) *Executor {
+func NewExecutor(client HTTPClient, endpoint string, customHeaders map[string]string) *Executor {
 	return &Executor{
-		httpClient: client,
-		endpoint:   endpoint,
-		requestIDs: make([]string, 0),
+		httpClient:    client,
+		endpoint:      endpoint,
+		requestIDs:    make([]string, 0),
+		customHeaders: customHeaders,
 	}
 }
 
@@ -105,6 +107,11 @@ func (e *Executor) Execute(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
+
+	// Add custom headers (auth headers take precedence)
+	for key, value := range e.customHeaders {
+		req.Header.Set(key, value)
+	}
 
 	// Add auth
 	if authInfo != nil && authInfo.Value != "" {

@@ -59,7 +59,7 @@ func makeAuthInfos(attackerToken, victimToken string) map[string]*auth.AuthInfo 
 
 func TestNewMutationExecutor(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	assert.NotNil(t, executor)
 	assert.Equal(t, client, executor.httpClient)
@@ -78,7 +78,7 @@ func TestExecuteMutation_Success(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola",
@@ -138,7 +138,7 @@ func TestExecuteMutation_Secure(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola",
@@ -295,7 +295,7 @@ func TestMatchesDetectionConditions(t *testing.T) {
 
 func TestClearTracker(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	// Store a resource
 	executor.tracker.StoreResource("key1", "value1")
@@ -317,7 +317,7 @@ func TestExecuteMutation_StoresResourceID(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola",
@@ -394,7 +394,7 @@ func TestExecutePhase_UsesCustomPath(t *testing.T) {
 		responses: []*http.Response{resp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	phase := &templates.Phase{
 		Path:      "/api/v1/orders",
@@ -424,7 +424,7 @@ func TestExecutePhase_SubstitutesStoredValues(t *testing.T) {
 		responses: []*http.Response{resp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	// Store a resource ID first
 	executor.tracker.StoreResource("id", "resource123")
@@ -469,7 +469,7 @@ func TestExecutePhase_MapsOperationToHTTPMethod(t *testing.T) {
 				responses: []*http.Response{resp},
 			}
 
-			executor := NewMutationExecutor(client)
+			executor := NewMutationExecutor(client, nil)
 
 			phase := &templates.Phase{
 				Path:      "/api/v1/resources",
@@ -498,7 +498,7 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 		responses: []*http.Response{resp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	phase := &templates.Phase{
 		Path:      "/api/v1/resources",
@@ -534,7 +534,7 @@ func TestExecutePhase_UsesCorrectAuthToken(t *testing.T) {
 
 func TestExecutePhase_ReturnsErrorForMissingPath(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	phase := &templates.Phase{
 		Operation: "read",
@@ -559,7 +559,7 @@ func TestExecutePhase_ReturnsErrorForMissingPath(t *testing.T) {
 
 func TestExecutePhase_ReturnsErrorForUnresolvedPlaceholder(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	// Do NOT store the "id" resource - this simulates setup phase failing to return an ID
 
@@ -585,7 +585,7 @@ func TestExecutePhase_ReturnsErrorForUnresolvedPlaceholder(t *testing.T) {
 
 func TestExecutePhase_ReturnsErrorForUnresolvedVideoID(t *testing.T) {
 	client := &MockHTTPClient{}
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	// Simulate the specific bug: video_id placeholder never stored
 
@@ -619,7 +619,7 @@ func TestExecuteMutation_ThreePhaseWithDynamicPaths(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp, verifyResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "api1-bola-orders",
@@ -705,7 +705,7 @@ func TestExecuteMutation_MultipleFieldsStorage(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "api3-bola-multi-field",
@@ -767,7 +767,7 @@ func TestExecuteMutation_BackwardsCompatibility(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "backwards-compat-test",
@@ -819,7 +819,7 @@ func TestExecuteMutation_MixedFieldUsage(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "mixed-field-test",
@@ -884,7 +884,7 @@ func TestExecuteMutation_MultipleSetupPhases(t *testing.T) {
 		responses: []*http.Response{setupResp1, setupResp2, attackResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
 		ID: "api3-mass-assignment",
@@ -967,7 +967,7 @@ func TestExecuteMutation_SingleSetupPhase_BackwardsCompatibility(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp},
 	}
 
-	executor := NewMutationExecutor(client)
+	executor := NewMutationExecutor(client, nil)
 
 	// Use slice syntax for single setup phase (compatible with old syntax via UnmarshalYAML)
 	tmpl := &templates.Template{

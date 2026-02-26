@@ -27,6 +27,7 @@ type MutationExecutor struct {
 	httpClient        HTTPClient
 	trackedHTTPClient *TrackedHTTPClient
 	tracker           *Tracker
+	customHeaders     map[string]string
 }
 
 // PhaseRequestIDs tracks request IDs from each phase
@@ -48,12 +49,13 @@ type MutationResult struct {
 }
 
 // NewMutationExecutor creates a new mutation executor
-func NewMutationExecutor(client HTTPClient) *MutationExecutor {
+func NewMutationExecutor(client HTTPClient, customHeaders map[string]string) *MutationExecutor {
 	trackedClient := NewTrackedHTTPClient(client)
 	return &MutationExecutor{
 		httpClient:        client,
 		trackedHTTPClient: trackedClient,
 		tracker:           NewTracker(),
+		customHeaders:     customHeaders,
 	}
 }
 
@@ -218,6 +220,11 @@ func (e *MutationExecutor) executePhase(
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	// Add custom headers (auth headers take precedence)
+	for key, value := range e.customHeaders {
+		req.Header.Set(key, value)
 	}
 
 	// Add auth based on method

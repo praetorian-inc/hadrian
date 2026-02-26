@@ -44,6 +44,7 @@ type GRPCConfig struct {
 	TLSCACert   string   // Custom CA certificate
 	TemplateDir string   // gRPC templates directory
 	Templates   []string // Filter templates by ID or name
+	Headers     []string // Custom HTTP headers (format: "Key: Value")
 }
 
 // Validate checks the gRPC configuration for common errors before test execution.
@@ -122,6 +123,9 @@ func newTestGRPCCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&config.Verbose, "verbose", false, "Verbose output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Dry run (don't execute tests)")
 
+	// Custom headers
+	cmd.Flags().StringArrayVarP(&config.Headers, "header", "H", []string{}, "Custom HTTP header (format: 'Key: Value', can specify multiple)")
+
 	return cmd
 }
 
@@ -148,6 +152,12 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	// Validate configuration early
 	if err := config.Validate(); err != nil {
 		return err
+	}
+
+	// Parse custom headers
+	customHeaders, err := ParseCustomHeaders(config.Headers)
+	if err != nil {
+		return fmt.Errorf("invalid custom header: %w", err)
 	}
 
 	// Header output (no [DEBUG] prefix)
@@ -266,6 +276,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 			return fmt.Errorf("failed to create gRPC executor: %w", err)
 		}
 		defer func() { _ = executor.Close() }()
+		executor.SetCustomHeaders(customHeaders)
 		grpcVerboseLog(config.Verbose, "Created gRPC executor connection to %s", config.Target)
 
 		// Validate connection before running tests

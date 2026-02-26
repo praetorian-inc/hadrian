@@ -26,7 +26,7 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 
 func TestNewExecutor(t *testing.T) {
 	client := &mockHTTPClient{}
-	executor := NewExecutor(client)
+	executor := NewExecutor(client, nil)
 
 	if executor == nil {
 		t.Fatal("NewExecutor returned nil")
@@ -53,7 +53,7 @@ func TestExecute_MatchedResponse(t *testing.T) {
 	}
 
 	client := &mockHTTPClient{response: mockResp}
-	executor := NewExecutor(client)
+	executor := NewExecutor(client, nil)
 
 	// Create compiled template
 	tmpl := &CompiledTemplate{
@@ -125,7 +125,7 @@ func TestExecute_NoMatch(t *testing.T) {
 	}
 
 	client := &mockHTTPClient{response: mockResp}
-	executor := NewExecutor(client)
+	executor := NewExecutor(client, nil)
 
 	tmpl := &CompiledTemplate{
 		Template: &Template{
@@ -185,7 +185,7 @@ func TestBuildRequest_VariableSubstitution(t *testing.T) {
 		"userId": "999",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, nil, variables)
+	req, err := buildRequest(context.Background(), test, operation, nil, variables, nil)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
@@ -256,7 +256,7 @@ func TestBuildRequest_OpenAPIPathParameters(t *testing.T) {
 				Path:   tc.testPath, // Use the same path for operation
 			}
 
-			req, err := buildRequest(context.Background(), test, operation, nil, tc.variables)
+			req, err := buildRequest(context.Background(), test, operation, nil, tc.variables, nil)
 			if err != nil {
 				t.Fatalf("buildRequest failed: %v", err)
 			}
@@ -280,7 +280,7 @@ func TestBuildRequest_OperationPath(t *testing.T) {
 		Path:   "/api/users",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, nil, nil)
+	req, err := buildRequest(context.Background(), test, operation, nil, nil, nil)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
@@ -306,7 +306,7 @@ func TestBuildRequest_OperationMethod(t *testing.T) {
 		Path:   "/api/users/1",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, nil, nil)
+	req, err := buildRequest(context.Background(), test, operation, nil, nil, nil)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
@@ -338,7 +338,7 @@ func TestBuildRequest_AuthHeader(t *testing.T) {
 		Value:    "Bearer token123",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil, nil)
 
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
@@ -450,7 +450,7 @@ func TestExecute_Integration_WithHTTPTest(t *testing.T) {
 	defer server.Close()
 
 	// Use real HTTP client
-	executor := NewExecutor(&http.Client{})
+	executor := NewExecutor(&http.Client{}, nil)
 
 	// For integration test, template path should use the full server URL
 	tmpl := &CompiledTemplate{
@@ -511,7 +511,7 @@ func TestExecute_RequestIDsTracked(t *testing.T) {
 	}))
 	defer server.Close()
 
-	executor := NewExecutor(&http.Client{})
+	executor := NewExecutor(&http.Client{}, nil)
 
 	tmpl := &CompiledTemplate{
 		Template: &Template{
@@ -591,7 +591,7 @@ func TestBuildRequest_APIKeyAuth_Header(t *testing.T) {
 		Value:    "admin-api-key-12345",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
 	}
@@ -633,7 +633,7 @@ func TestBuildRequest_APIKeyAuth_Query(t *testing.T) {
 		"baseURL": "http://localhost:8080",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, authInfo, variables)
+	req, err := buildRequest(context.Background(), test, operation, authInfo, variables, nil)
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
 	}
@@ -675,7 +675,7 @@ func TestBuildRequest_BearerAuthPreserved(t *testing.T) {
 		Value:    "Bearer test-bearer-token-12345",
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
 	}
@@ -709,7 +709,7 @@ func TestBuildRequest_BasicAuthPreserved(t *testing.T) {
 		Value:    "Basic dGVzdDpwYXNzd29yZA==", // test:password encoded
 	}
 
-	req, err := buildRequest(context.Background(), test, operation, authInfo, nil)
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil, nil)
 	if err != nil {
 		t.Fatalf("buildRequest failed: %v", err)
 	}

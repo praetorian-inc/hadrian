@@ -277,7 +277,7 @@ func TestFetchSchema_Introspection(t *testing.T) {
 	httpClient := &http.Client{}
 	ctx := context.Background()
 
-	schema, err := fetchSchema(ctx, config, httpClient)
+	schema, err := fetchSchema(ctx, config, httpClient, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, schema)
 }
@@ -293,7 +293,7 @@ func TestFetchSchema_SDLFile(t *testing.T) {
 	httpClient := &http.Client{}
 	ctx := context.Background()
 
-	schema, err := fetchSchema(ctx, config, httpClient)
+	schema, err := fetchSchema(ctx, config, httpClient, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load schema from file")
 	assert.Nil(t, schema)
@@ -317,7 +317,7 @@ func TestFetchSchema_IntrospectionFailure(t *testing.T) {
 	httpClient := &http.Client{}
 	ctx := context.Background()
 
-	schema, err := fetchSchema(ctx, config, httpClient)
+	schema, err := fetchSchema(ctx, config, httpClient, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "introspection failed")
 	assert.Nil(t, schema)
@@ -377,6 +377,7 @@ func TestRunTemplateTests_ReturnsTemplateCount(t *testing.T) {
 		server.Client(),
 		nil,
 		nil, // reporter
+		nil, // customHeaders
 	)
 
 	// Verify findings are returned (may be 0 if no templates match)
@@ -421,6 +422,7 @@ func TestRunSecurityChecks_NoTemplates(t *testing.T) {
 		config,
 		nil,
 		nil, // No reporter for this test
+		nil, // customHeaders
 	)
 
 	// Verify findings are returned

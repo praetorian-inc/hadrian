@@ -16,7 +16,7 @@ import (
 func TestRunner(t *testing.T) {
 	t.Run("NewRunner creates runner with dependencies", func(t *testing.T) {
 		// Arrange
-		executor := templates.NewExecutor(http.DefaultClient)
+		executor := templates.NewExecutor(http.DefaultClient, nil)
 
 		// Act
 		runner := NewRunner(executor, "testdata")
@@ -38,7 +38,7 @@ func TestRunCategory(t *testing.T) {
 
 	t.Run("runs templates for API1 category", func(t *testing.T) {
 		// Arrange
-		executor := templates.NewExecutor(server.Client())
+		executor := templates.NewExecutor(server.Client(), nil)
 		runner := NewRunner(executor, "testdata")
 
 		spec := &model.APISpec{
@@ -91,7 +91,7 @@ func TestRunCategory(t *testing.T) {
 		}))
 		defer countServer.Close()
 
-		executor := templates.NewExecutor(countServer.Client())
+		executor := templates.NewExecutor(countServer.Client(), nil)
 		runner := NewRunner(executor, "testdata")
 
 		spec := &model.APISpec{
@@ -146,7 +146,7 @@ func TestRunCategory(t *testing.T) {
 
 	t.Run("skips same attacker and victim role", func(t *testing.T) {
 		// Arrange
-		executor := templates.NewExecutor(server.Client())
+		executor := templates.NewExecutor(server.Client(), nil)
 		runner := NewRunner(executor, "testdata")
 
 		spec := &model.APISpec{
@@ -179,7 +179,7 @@ func TestRunCategory(t *testing.T) {
 
 	t.Run("returns empty findings for non-matching operations", func(t *testing.T) {
 		// Arrange
-		executor := templates.NewExecutor(server.Client())
+		executor := templates.NewExecutor(server.Client(), nil)
 		runner := NewRunner(executor, "testdata")
 
 		spec := &model.APISpec{
@@ -211,7 +211,7 @@ func TestRunCategory(t *testing.T) {
 
 	t.Run("returns empty findings for unknown category", func(t *testing.T) {
 		// Arrange
-		executor := templates.NewExecutor(server.Client())
+		executor := templates.NewExecutor(server.Client(), nil)
 		runner := NewRunner(executor, "testdata")
 
 		spec := &model.APISpec{
@@ -242,7 +242,7 @@ func TestRunCategory(t *testing.T) {
 
 	t.Run("respects context cancellation", func(t *testing.T) {
 		// Arrange
-		executor := templates.NewExecutor(server.Client())
+		executor := templates.NewExecutor(server.Client(), nil)
 		runner := NewRunner(executor, "testdata")
 
 		spec := &model.APISpec{

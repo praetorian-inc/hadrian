@@ -80,7 +80,7 @@ func TestExecuteMutation_TracksRequestIDs(t *testing.T) {
 	}
 
 	// Execute mutation test
-	executor := NewMutationExecutor(http.DefaultClient)
+	executor := NewMutationExecutor(http.DefaultClient, nil)
 	result, err := executor.ExecuteMutation(
 		context.Background(),
 		tmpl,
@@ -152,7 +152,7 @@ func TestExecuteMutation_NoRequestIDsWhenNoPhases(t *testing.T) {
 		TestPhases: nil,
 	}
 
-	executor := NewMutationExecutor(http.DefaultClient)
+	executor := NewMutationExecutor(http.DefaultClient, nil)
 	result, err := executor.ExecuteMutation(
 		context.Background(),
 		tmpl,
