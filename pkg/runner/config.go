@@ -68,7 +68,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("rate limit status codes must not be empty")
 	}
 
-
 	// Validate custom headers format
 	if len(c.Headers) > 0 {
 		if _, err := ParseCustomHeaders(c.Headers); err != nil {

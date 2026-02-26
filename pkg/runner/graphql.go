@@ -69,10 +69,10 @@ type GraphQLConfig struct {
 	SkipBuiltinChecks bool     // Skip built-in security checks (introspection, depth limit, batching)
 
 	// LLM triage (optional)
-	LLMHost    string // LLM service host
-	LLMModel   string // LLM model name
-	LLMTimeout int    // LLM request timeout (seconds)
-	LLMContext string // Additional context for LLM
+	LLMHost    string   // LLM service host
+	LLMModel   string   // LLM model name
+	LLMTimeout int      // LLM request timeout (seconds)
+	LLMContext string   // Additional context for LLM
 	Headers    []string // Custom HTTP headers (format: "Key: Value")
 }
 

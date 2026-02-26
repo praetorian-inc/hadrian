@@ -73,6 +73,14 @@ func (c *GRPCConfig) Validate() error {
 	if c.RateLimit <= 0 {
 		return fmt.Errorf("--rate-limit must be positive (got %f)", c.RateLimit)
 	}
+
+	// Validate custom headers format
+	if len(c.Headers) > 0 {
+		if _, err := ParseCustomHeaders(c.Headers); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

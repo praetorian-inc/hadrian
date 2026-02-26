@@ -106,12 +106,13 @@ func (e *Executor) Execute(
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	// Add custom headers (auth headers take precedence)
+	// Add custom headers first (Content-Type and auth headers take precedence)
 	for key, value := range e.customHeaders {
 		req.Header.Set(key, value)
 	}
+
+	// Set Content-Type after custom headers to ensure GraphQL requests always use JSON
+	req.Header.Set("Content-Type", "application/json")
 
 	// Add auth
 	if authInfo != nil && authInfo.Value != "" {

@@ -45,11 +45,11 @@ type Config struct {
 	OWASPCategories      []string
 	Verbose              bool
 	DryRun               bool
-	RequestIDsLimit      int    // Number of request IDs to display per finding (0 = all)
-	LLMHost              string // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel             string // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout           int    // LLM request timeout in seconds
-	LLMContext           string // Additional context for LLM prompts
+	RequestIDsLimit      int      // Number of request IDs to display per finding (0 = all)
+	LLMHost              string   // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel             string   // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout           int      // LLM request timeout in seconds
+	LLMContext           string   // Additional context for LLM prompts
 	Headers              []string // Custom HTTP headers (format: "Key: Value")
 }
 
