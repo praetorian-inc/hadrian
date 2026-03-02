@@ -208,6 +208,29 @@ func runTest(ctx context.Context, config Config) error {
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
 	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
 
+	// Dry-run: print what would be tested and exit before any HTTP execution
+	if config.DryRun {
+		testCount := 0
+		opCount := 0
+		for _, op := range spec.Operations {
+			opMatched := false
+			for _, tmpl := range tmplFiles {
+				if !templateApplies(tmpl, op) {
+					continue
+				}
+				fmt.Printf("[DRY-RUN] Would test %s %s with %s\n", op.Method, op.Path, tmpl.ID)
+				testCount++
+				opMatched = true
+			}
+			if opMatched {
+				opCount++
+			}
+		}
+		fmt.Printf("[DRY-RUN] Total: %d tests across %d operations and %d templates\n", testCount, opCount, len(tmplFiles))
+		fmt.Println("[DRY-RUN] Dry run complete - no requests were sent")
+		return nil
+	}
+
 	// 9. Create template executor with rate-limiting client
 	executor := templates.NewExecutor(rateLimitingClient)
 
@@ -242,12 +265,12 @@ func runTest(ctx context.Context, config Config) error {
 		}
 	}
 
-	// 11. Optional LLM triage
+	// 12. Optional LLM triage
 	if hasLLMConfig() || config.LLMHost != "" {
 		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
 	}
 
-	// 12. Generate final report
+	// 13. Generate final report
 	log.Debug("Generating final report with %d findings", len(allFindings))
 	stats := calculateStats(allFindings, startTime)
 	stats.OperationCount = len(spec.Operations)

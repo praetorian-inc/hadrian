@@ -3,8 +3,12 @@ package runner
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -975,4 +979,149 @@ func TestTemplateMatchesFilter_ByPathSuffix(t *testing.T) {
 	assert.True(t, templateMatchesFilter(tmpl, "rest/api1/bola.yaml"))
 	assert.True(t, templateMatchesFilter(tmpl, "api1/bola.yaml"))
 	assert.False(t, templateMatchesFilter(tmpl, "api2/bola.yaml"))
+}
+
+// =============================================================================
+// TestDryRun_RestNoRequests
+// =============================================================================
+
+// TestDryRun_RestNoRequests verifies that dry-run mode makes zero HTTP requests
+// to the target server even when templates match operations.
+func TestDryRun_RestNoRequests(t *testing.T) {
+	// Track how many requests reach the mock server
+	var requestCount int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id": "123"}`))
+	}))
+	defer server.Close()
+
+	tmpDir := t.TempDir()
+
+	// Write OpenAPI spec with the mock server URL
+	apiSpec := `
+openapi: "3.0.0"
+info:
+  title: Dry Run Test API
+  version: "1.0.0"
+servers:
+  - url: "` + server.URL + `"
+paths:
+  /api/users:
+    get:
+      summary: List users
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Success
+  /api/users/{id}:
+    get:
+      summary: Get user by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Success
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+`
+	apiSpecPath := filepath.Join(tmpDir, "api.yaml")
+	err := os.WriteFile(apiSpecPath, []byte(apiSpec), 0644)
+	require.NoError(t, err)
+
+	// Write roles config
+	rolesYAML := `
+objects:
+  - users
+roles:
+  - name: admin
+    permissions:
+      - "read:users:all"
+  - name: user
+    permissions:
+      - "read:users:own"
+`
+	rolesPath := filepath.Join(tmpDir, "roles.yaml")
+	err = os.WriteFile(rolesPath, []byte(rolesYAML), 0644)
+	require.NoError(t, err)
+
+	// Write a template that matches GET operations with auth - ensures at least one
+	// combination matches so the dry-run short-circuit is truly exercised.
+	templateYAML := `
+id: dry-run-test-template
+info:
+  name: "Dry Run Test - Auth Check"
+  category: "API2:2023"
+  severity: "HIGH"
+  author: "test"
+  description: "Template used to verify dry-run skips execution."
+  tags: ["test"]
+  test_pattern: "simple"
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200]
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  failure_indicators:
+    - type: status_code
+      status_code: 403
+  vulnerability_pattern: "test_pattern"
+`
+	templatesDir := filepath.Join(tmpDir, "templates", "owasp")
+	err = os.MkdirAll(templatesDir, 0755)
+	require.NoError(t, err)
+	templatePath := filepath.Join(templatesDir, "dry-run-test.yaml")
+	err = os.WriteFile(templatePath, []byte(strings.TrimSpace(templateYAML)), 0644)
+	require.NoError(t, err)
+
+	_ = os.Setenv("HADRIAN_TEMPLATES", filepath.Join(tmpDir, "templates"))
+	defer func() { _ = os.Unsetenv("HADRIAN_TEMPLATES") }()
+
+	config := Config{
+		API:                  apiSpecPath,
+		Roles:                rolesPath,
+		Concurrency:          1,
+		RateLimit:            10.0,
+		RateLimitBackoff:     "exponential",
+		RateLimitMaxWait:     60 * time.Second,
+		RateLimitMaxRetries:  5,
+		RateLimitStatusCodes: []int{429, 503},
+		Timeout:              30,
+		AllowProduction:      true,
+		AllowInternal:        true,
+		Output:               "terminal",
+		Categories:           []string{"owasp"},
+		DryRun:               true,
+	}
+
+	ctx := context.Background()
+	err = runTest(ctx, config)
+	require.NoError(t, err)
+
+	// Dry-run must not send any HTTP requests to the target server
+	assert.Equal(t, int32(0), atomic.LoadInt32(&requestCount),
+		"dry-run mode must not make HTTP requests to the target server")
 }
