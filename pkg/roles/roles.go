@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/praetorian-inc/hadrian/pkg/log"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -169,6 +171,10 @@ func (c *RoleConfig) GetRolesByPermissionLevel(level string) []*Role {
 			}
 		case "all":
 			result = append(result, role)
+		case "none":
+			// "none" means no authenticated role (anonymous attacker) — return empty slice
+		default:
+			log.Warn("unrecognized permission level %q — returning no roles (check template for typos)", level)
 		}
 	}
 

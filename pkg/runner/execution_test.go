@@ -452,6 +452,112 @@ func TestTemplateApplies_AllFiltersMatch(t *testing.T) {
 	assert.True(t, templateApplies(tmpl, op))
 }
 
+func TestExecuteTemplate_NoneAttacker_AuthEndpoint(t *testing.T) {
+	// Server returns 200 — endpoint accepts unauthenticated request (vulnerable)
+	server := newTestServer(200, `{"data": "exposed"}`)
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("none-attacker-test", true, []string{"GET"}, "none", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users",
+		RequiresAuth: true,
+	}
+	rolesCfg := makeTestRolesConfig()
+	authCfg := makeTestAuthConfig(map[string]string{
+		"user":  "user-token",
+		"admin": "admin-token",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(),
+		executor,
+		mutationExecutor,
+		tmpl,
+		op,
+		rolesCfg,
+		authCfg,
+		server.URL,
+	)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "should produce findings when server accepts unauthenticated request")
+	for _, f := range findings {
+		assert.Equal(t, "anonymous", f.AttackerRole)
+	}
+}
+
+func TestExecuteTemplate_NoneAttacker_ServerRejects(t *testing.T) {
+	// Server returns 401 — endpoint properly rejects unauthenticated request
+	server := newTestServer(401, `{"error": "unauthorized"}`)
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("none-attacker-reject", true, []string{"GET"}, "none", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users",
+		RequiresAuth: true,
+	}
+	rolesCfg := makeTestRolesConfig()
+	authCfg := makeTestAuthConfig(map[string]string{
+		"user":  "user-token",
+		"admin": "admin-token",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(),
+		executor,
+		mutationExecutor,
+		tmpl,
+		op,
+		rolesCfg,
+		authCfg,
+		server.URL,
+	)
+
+	require.NoError(t, err)
+	assert.Empty(t, findings, "should produce zero findings when server properly rejects")
+}
+
+func TestExecuteTemplate_NoneAttacker_NoVictim(t *testing.T) {
+	// Server returns 200 — no victim role specified
+	server := newTestServer(200, `{"data": "exposed"}`)
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("none-attacker-no-victim", true, []string{"GET"}, "none", "", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/config",
+		RequiresAuth: true,
+	}
+	rolesCfg := makeTestRolesConfig()
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(),
+		executor,
+		mutationExecutor,
+		tmpl,
+		op,
+		rolesCfg,
+		nil, // no auth config needed
+		server.URL,
+	)
+
+	require.NoError(t, err)
+	require.Len(t, findings, 1, "should produce exactly one finding with no victim role")
+	assert.Equal(t, "anonymous", findings[0].AttackerRole)
+	assert.Empty(t, findings[0].VictimRole)
+}
+
 // =============================================================================
 // runTest integration tests with httptest
 // =============================================================================

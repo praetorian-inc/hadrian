@@ -471,3 +471,28 @@ func findRole(roles []*Role, name string) *Role {
 	}
 	return nil
 }
+
+func TestGetRolesByPermissionLevel_None(t *testing.T) {
+	config := &RoleConfig{
+		Roles: []*Role{
+			{Name: "user", Level: 10},
+			{Name: "admin", Level: 100},
+		},
+	}
+
+	result := config.GetRolesByPermissionLevel("none")
+	assert.Empty(t, result)
+}
+
+func TestGetRolesByPermissionLevel_Unrecognized(t *testing.T) {
+	config := &RoleConfig{
+		Roles: []*Role{
+			{Name: "user", Level: 10},
+			{Name: "admin", Level: 100},
+		},
+	}
+
+	// Unrecognized level should return empty slice (and log a warning)
+	result := config.GetRolesByPermissionLevel("low")
+	assert.Empty(t, result)
+}

@@ -54,7 +54,7 @@ type EndpointSelector struct {
 }
 
 type RoleSelector struct {
-	AttackerPermissionLevel string `yaml:"attacker_permission_level"` // lower, higher, all
+	AttackerPermissionLevel string `yaml:"attacker_permission_level"` // lower, higher, all, none
 	VictimPermissionLevel   string `yaml:"victim_permission_level"`
 }
 
