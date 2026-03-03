@@ -146,8 +146,6 @@ http:
 		Concurrency:     1,
 		RateLimit:       10.0,
 		Timeout:         30,
-		AllowProduction: true,
-		AllowInternal:   true,
 		Output:          "terminal",
 		Categories:      []string{"owasp"},
 		Verbose:         true,

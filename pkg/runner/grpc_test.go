@@ -75,7 +75,8 @@ func TestGRPCConfig_AllFlags(t *testing.T) {
 		"reflection",
 		"roles",
 		"auth",
-		"templates",
+		"template-dir",
+		"template",
 		"plaintext",
 		"tls-ca-cert",
 		"rate-limit",
@@ -85,8 +86,6 @@ func TestGRPCConfig_AllFlags(t *testing.T) {
 		"dry-run",
 		"proxy",
 		"insecure",
-		"allow-internal",
-		"allow-production",
 	}
 
 	for _, flagName := range expectedFlags {

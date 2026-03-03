@@ -104,11 +104,9 @@ Permissions follow `<action>:<object>:<scope>`:
 - Actions: `read`, `write`, `delete`, `execute`, `*`
 - Scopes: `public`, `own`, `org`, `all`, `*`
 
-### Production Safety
+### Rate Limiting
 
-Built-in safeguards in `pkg/runner/production.go` and `pkg/runner/ratelimit_client.go`:
-- Blocks production URLs by default (requires `--allow-production`)
-- Blocks internal/private IPs (requires `--allow-internal`)
+Built-in safeguards in `pkg/runner/ratelimit_client.go`:
 - Proactive rate limiting (default 5 req/s) via `RateLimiter`
 - Reactive backoff on 429/503 responses via `RateLimitingClient`
 - Audit logging to `.hadrian/audit.log`
@@ -127,7 +125,6 @@ HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
   --api test/crapi/crapi-openapi-spec.json \
   --roles test/crapi/roles.yaml \
   --auth test/crapi/auth.yaml \
-  --allow-internal \
   --verbose
 ```
 

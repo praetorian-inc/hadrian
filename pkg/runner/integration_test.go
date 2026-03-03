@@ -139,8 +139,6 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 		Concurrency:     1,
 		RateLimit:       10.0,
 		Timeout:         30,
-		AllowProduction: true, // Allow testing against mock server
-		AllowInternal:   true, // Allow localhost for testing
 		Output:          "terminal",
 		Categories:      []string{"owasp"},
 	}
@@ -198,8 +196,6 @@ func TestIntegration_DryRunMode(t *testing.T) {
 		Concurrency:     1,
 		RateLimit:       10.0,
 		Timeout:         30,
-		AllowProduction: true,
-		AllowInternal:   true,
 		Output:          "terminal",
 		Categories:      []string{"owasp"},
 		DryRun:          true, // Enable dry-run mode
@@ -261,8 +257,6 @@ func TestIntegration_VerboseOutput(t *testing.T) {
 		Concurrency:     1,
 		RateLimit:       10.0,
 		Timeout:         30,
-		AllowProduction: true,
-		AllowInternal:   true,
 		Output:          "terminal",
 		Categories:      []string{"owasp"},
 		Verbose:         true, // Enable verbose mode
@@ -282,121 +276,6 @@ func TestIntegration_VerboseOutput(t *testing.T) {
 	// Verbose mode should produce output with INFO prefix
 	// Note: The actual verbose output depends on implementation
 	assert.NotEmpty(t, output, "verbose mode should produce output")
-}
-
-func TestIntegration_OWASPCategoryFiltering(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Create mock HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer server.Close()
-
-	// Create temp directory for test files
-	tmpDir := t.TempDir()
-
-	// Write API spec
-	apiSpecPath := filepath.Join(tmpDir, "api.yaml")
-	specContent := strings.Replace(testOpenAPISpec, "%s", server.URL, 1)
-	err := os.WriteFile(apiSpecPath, []byte(specContent), 0644)
-	require.NoError(t, err)
-
-	// Write roles config
-	rolesPath := filepath.Join(tmpDir, "roles.yaml")
-	err = os.WriteFile(rolesPath, []byte(testRolesConfig), 0644)
-	require.NoError(t, err)
-
-	// Create templates directory with multiple category templates
-	templatesDir := filepath.Join(tmpDir, "templates", "rest")
-	err = os.MkdirAll(templatesDir, 0755)
-	require.NoError(t, err)
-	os.Setenv("HADRIAN_TEMPLATES", templatesDir)
-	defer os.Unsetenv("HADRIAN_TEMPLATES")
-
-	// Create API1 template
-	api1Template := `
-id: api1-test
-info:
-  name: "API1 Test"
-  category: "API1:2023"
-  severity: "HIGH"
-endpoint_selector:
-  has_path_parameter: true
-  requires_auth: true
-  methods: ["GET"]
-role_selector:
-  attacker_permission_level: "lower"
-  victim_permission_level: "higher"
-http:
-  - method: "GET"
-    path: "/test"
-detection:
-  success_indicators:
-    - type: status_code
-      status_code: 200
-`
-	err = os.WriteFile(filepath.Join(templatesDir, "api1-test.yaml"), []byte(api1Template), 0644)
-	require.NoError(t, err)
-
-	// Create API2 template
-	api2Template := `
-id: api2-test
-info:
-  name: "API2 Test"
-  category: "API2:2023"
-  severity: "HIGH"
-endpoint_selector:
-  requires_auth: false
-  methods: ["GET"]
-role_selector:
-  attacker_permission_level: "none"
-http:
-  - method: "GET"
-    path: "/test"
-detection:
-  success_indicators:
-    - type: status_code
-      status_code: 200
-`
-	err = os.WriteFile(filepath.Join(templatesDir, "api2-test.yaml"), []byte(api2Template), 0644)
-	require.NoError(t, err)
-
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Create config with OWASP filter for API1 only
-	config := Config{
-		API:             apiSpecPath,
-		Roles:           rolesPath,
-		Concurrency:     1,
-		RateLimit:       10.0,
-		Timeout:         30,
-		AllowProduction: true,
-		AllowInternal:   true,
-		Output:          "terminal",
-		Categories:      []string{"owasp"},
-		OWASPCategories: []string{"API1"}, // Filter to API1 only
-	}
-
-	// Run the test
-	ctx := context.Background()
-	_ = runTest(ctx, config)
-
-	// Restore stdout
-	w.Close()
-	os.Stdout = oldStdout
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-
-	// The output should mention filtering to API1 templates
-	assert.Contains(t, output, "API1", "output should mention API1 category filter")
 }
 
 func TestIntegration_JSONOutput(t *testing.T) {
@@ -442,8 +321,6 @@ func TestIntegration_JSONOutput(t *testing.T) {
 		Concurrency:     1,
 		RateLimit:       10.0,
 		Timeout:         30,
-		AllowProduction: true,
-		AllowInternal:   true,
 		Output:          "json",
 		OutputFile:      outputFile,
 		Categories:      []string{"owasp"},
@@ -507,8 +384,6 @@ func TestIntegration_MarkdownOutput(t *testing.T) {
 		Concurrency:     1,
 		RateLimit:       10.0,
 		Timeout:         30,
-		AllowProduction: true,
-		AllowInternal:   true,
 		Output:          "markdown",
 		OutputFile:      outputFile,
 		Categories:      []string{"owasp"},

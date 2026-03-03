@@ -44,8 +44,6 @@ type GraphQLConfig struct {
 	Insecure        bool
 	RateLimit       float64
 	Timeout         int
-	AllowInternal   bool
-	AllowProduction bool // Allow testing production URLs
 	Output          string
 	OutputFile      string
 	RequestIDsLimit int // Limit request IDs in output (default 1)
@@ -63,9 +61,8 @@ type GraphQLConfig struct {
 	DepthLimit        int      // Max query depth for DoS testing
 	ComplexityLimit   int      // Max complexity score for DoS testing
 	BatchSize         int      // Number of queries in batch attack tests
-	Templates         string   // GraphQL templates directory path
-	TemplateFilters   []string // Filter templates by ID
-	OWASPCategories   []string // Filter by OWASP API Security categories
+	TemplateDir       string   // GraphQL templates directory path
+	Templates         []string // Filter templates by ID
 	SkipBuiltinChecks bool     // Skip built-in security checks (introspection, depth limit, batching)
 
 	// LLM triage (optional)
@@ -101,7 +98,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.Auth, "auth", "", "Authentication configuration YAML file")
 
 	// Template configuration
-	cmd.Flags().StringVar(&config.Templates, "templates", "", "GraphQL templates directory (e.g., templates/graphql)")
+	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "GraphQL templates directory (e.g., templates/graphql)")
 	cmd.Flags().BoolVar(&config.SkipBuiltinChecks, "skip-builtin-checks", false, "Skip built-in security checks (introspection, depth limit, batching)")
 
 	// Security limits
@@ -115,8 +112,6 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&config.Insecure, "insecure", false, "Skip TLS verification")
 	cmd.Flags().Float64Var(&config.RateLimit, "rate-limit", 5.0, "Rate limit (req/s)")
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
-	cmd.Flags().BoolVar(&config.AllowInternal, "allow-internal", false, "Allow internal IP addresses")
-	cmd.Flags().BoolVar(&config.AllowProduction, "allow-production", false, "Allow testing production URLs")
 
 	// Output options
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
@@ -126,8 +121,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Dry run (don't execute tests)")
 
 	// Template filtering
-	cmd.Flags().StringSliceVar(&config.TemplateFilters, "template", []string{}, "Filter templates by ID (can specify multiple)")
-	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "Filter by OWASP API Security category (e.g., API1,API2,API5)")
+	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID (can specify multiple)")
 
 	// Rate limiting (advanced)
 	cmd.Flags().StringVar(&config.RateLimitBackoff, "rate-limit-backoff", "exponential", "Rate limit backoff strategy: exponential, fixed")
@@ -194,15 +188,6 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	// Load configs
 	authConfig, rolesConfig, err := loadConfigs(config.Auth, config.Roles)
 	if err != nil {
-		return err
-	}
-
-	// Production safety checks (matching REST pattern at run.go:186-189)
-	targetURL := config.Target + config.Endpoint
-	if err := ConfirmProductionTesting(targetURL, config.AllowProduction); err != nil {
-		return err
-	}
-	if err := BlockInternalIPs(targetURL, config.AllowInternal); err != nil {
 		return err
 	}
 

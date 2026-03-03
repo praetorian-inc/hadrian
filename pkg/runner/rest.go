@@ -34,15 +34,12 @@ type Config struct {
 	RateLimitMaxRetries  int           // Maximum retry attempts on rate limit
 	RateLimitStatusCodes []int         // Status codes that trigger rate limit retry
 	Timeout              int
-	AllowProduction      bool
-	AllowInternal        bool
 	Output               string
 	OutputFile           string
 	Categories           []string
 	TemplateDir          string   // Directory containing templates
 	Templates            []string // Filter templates by ID or name
 	AuditLog             string
-	OWASPCategories      []string
 	Verbose              bool
 	DryRun               bool
 	RequestIDsLimit      int    // Number of request IDs to display per finding (0 = all)
@@ -83,15 +80,12 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.RateLimitMaxRetries, "rate-limit-max-retries", 5, "Maximum retry attempts on rate limit response")
 	cmd.Flags().IntSliceVar(&config.RateLimitStatusCodes, "rate-limit-status-codes", []int{429, 503}, "Status codes that trigger rate limit retry")
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout (seconds)")
-	cmd.Flags().BoolVar(&config.AllowProduction, "allow-production", false, "Allow testing production URLs")
-	cmd.Flags().BoolVar(&config.AllowInternal, "allow-internal", false, "Allow testing internal/private IP addresses")
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
 	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Test categories (owasp, custom)")
 	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)")
 	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 	cmd.Flags().StringVar(&config.AuditLog, "audit-log", ".hadrian/audit.log", "Audit log file")
-	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "Enable verbose logging output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Show what would be tested without making requests")
 	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids", 1, "Number of request IDs to display per finding (0 = all)")
@@ -121,14 +115,6 @@ func runTest(ctx context.Context, config Config) error {
 	spec, err := parseAPISpec(config.API)
 	if err != nil {
 		return fmt.Errorf("failed to parse API spec: %w", err)
-	}
-
-	// 3. Production safety checks (HR-1, CR-4)
-	if err := ConfirmProductionTesting(spec.BaseURL, config.AllowProduction); err != nil {
-		return err
-	}
-	if err := BlockInternalIPs(spec.BaseURL, config.AllowInternal); err != nil {
-		return err
 	}
 
 	// 4. Load role configuration
@@ -197,12 +183,6 @@ func runTest(ctx context.Context, config Config) error {
 		if len(tmplFiles) == 0 {
 			return fmt.Errorf("no templates matched the specified filters: %v", config.Templates)
 		}
-	}
-
-	// Filter by OWASP categories if specified
-	if len(config.OWASPCategories) > 0 {
-		tmplFiles = filterTemplatesByOWASP(tmplFiles, config.OWASPCategories)
-		fmt.Printf("[INFO] Filtered to %d templates matching OWASP categories: %v\n", len(tmplFiles), config.OWASPCategories)
 	}
 
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
@@ -382,25 +362,6 @@ func filterByTemplates(tmpls []*templates.CompiledTemplate, templateFilters []st
 	for _, tmpl := range tmpls {
 		if templateMatchesAnyFilter(tmpl, templateFilters) {
 			result = append(result, tmpl)
-		}
-	}
-	return result
-}
-
-// filterTemplatesByOWASP filters templates by OWASP category prefix.
-// If owaspCategories is empty, returns all templates unchanged.
-func filterTemplatesByOWASP(tmpls []*templates.CompiledTemplate, owaspCategories []string) []*templates.CompiledTemplate {
-	if len(owaspCategories) == 0 {
-		return tmpls
-	}
-
-	var result []*templates.CompiledTemplate
-	for _, tmpl := range tmpls {
-		for _, cat := range owaspCategories {
-			if strings.HasPrefix(strings.ToUpper(tmpl.Info.Category), strings.ToUpper(cat)) {
-				result = append(result, tmpl)
-				break
-			}
 		}
 	}
 	return result

@@ -78,6 +78,5 @@ func (c *Config) ToHTTPClientConfig() *http.Config {
 		CACert:        c.CACert,
 		Insecure:      c.Insecure,
 		Timeout:       time.Duration(c.Timeout) * time.Second,
-		AllowInternal: c.AllowInternal,
 	}
 }

@@ -47,7 +47,6 @@ func TestNewTestGraphQLCmd_FlagDefaults(t *testing.T) {
 	assert.Equal(t, "30", cmd.Flags().Lookup("timeout").DefValue)
 	assert.Equal(t, "false", cmd.Flags().Lookup("insecure").DefValue)
 	assert.Equal(t, "terminal", cmd.Flags().Lookup("output").DefValue)
-	assert.Equal(t, "false", cmd.Flags().Lookup("allow-internal").DefValue)
 }
 
 func TestNewTestGraphQLCmd_RequiredFlags(t *testing.T) {
@@ -94,9 +93,9 @@ func TestNewTestGraphQLCmd_HasAuthFlags(t *testing.T) {
 func TestNewTestGraphQLCmd_HasTemplatesFlag(t *testing.T) {
 	cmd := newTestGraphQLCmd()
 
-	// Verify templates flag exists
-	templatesFlag := cmd.Flags().Lookup("templates")
-	assert.NotNil(t, templatesFlag, "templates flag should exist")
+	// Verify template-dir flag exists
+	templatesFlag := cmd.Flags().Lookup("template-dir")
+	assert.NotNil(t, templatesFlag, "template-dir flag should exist")
 	assert.Contains(t, templatesFlag.Usage, "GraphQL templates directory")
 }
 

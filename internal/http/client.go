@@ -1,7 +1,6 @@
 package http
 
 import (
-	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
@@ -15,28 +14,6 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/log"
 )
 
-// privateRanges contains parsed private/internal IP CIDR ranges for SSRF prevention.
-// Defined here to avoid import cycle with pkg/runner.
-var privateRanges []*net.IPNet
-
-func init() {
-	cidrs := []string{
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"192.168.0.0/16",
-		"127.0.0.0/8",
-		"169.254.0.0/16",
-		"::1/128",
-		"fc00::/7",
-	}
-	for _, cidr := range cidrs {
-		_, network, err := net.ParseCIDR(cidr)
-		if err == nil {
-			privateRanges = append(privateRanges, network)
-		}
-	}
-}
-
 // Client wraps stdlib HTTP client with proxy support
 type Client struct {
 	httpClient *http.Client
@@ -44,11 +21,10 @@ type Client struct {
 }
 
 type Config struct {
-	Proxy         string        // http://localhost:8080
-	CACert        string        // Path to CA certificate (Burp)
-	Insecure      bool          // Skip TLS verification
-	Timeout       time.Duration // Request timeout
-	AllowInternal bool          // Allow connections to internal IPs (RFC 1918)
+	Proxy    string        // http://localhost:8080
+	CACert   string        // Path to CA certificate (Burp)
+	Insecure bool          // Skip TLS verification
+	Timeout  time.Duration // Request timeout
 }
 
 func New(config *Config) (*Client, error) {
@@ -85,39 +61,11 @@ func New(config *Config) (*Client, error) {
 			InsecureSkipVerify: config.Insecure,
 			MinVersion:         tls.VersionTLS13, // TLS 1.3 enforcement (HR-3)
 		},
-		// Custom DialContext prevents SSRF via DNS rebinding (TOCTOU)
-		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-			dialer := &net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}
-
-			// If AllowInternal is false, validate IPs at connect time
-			if !config.AllowInternal {
-				// Extract hostname from addr (format: "host:port")
-				host, _, err := net.SplitHostPort(addr)
-				if err != nil {
-					return nil, fmt.Errorf("invalid address %s: %w", addr, err)
-				}
-
-				// Resolve hostname to IPs
-				ips, err := net.LookupIP(host)
-				if err != nil {
-					return nil, fmt.Errorf("DNS resolution failed for %s: %w", host, err)
-				}
-
-				// Check if any resolved IP is private
-				for _, ip := range ips {
-					for _, cidrNet := range privateRanges {
-						if cidrNet.Contains(ip) {
-							return nil, fmt.Errorf("connection to internal IP %s blocked (DNS rebinding protection)", ip)
-						}
-					}
-				}
-			}
-
-			return dialer.DialContext(ctx, network, addr)
-		},
+		// Custom DialContext with connection timeout settings
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
 	}
 
 	// Override with explicit proxy if provided

@@ -113,7 +113,7 @@ func TestDo(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(&Config{Timeout: 30 * time.Second, AllowInternal: true})
+	client, err := New(&Config{Timeout: 30 * time.Second})
 	require.NoError(t, err)
 
 	req, err := http.NewRequest("GET", server.URL+"/test", nil)
