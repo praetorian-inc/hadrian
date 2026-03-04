@@ -42,7 +42,7 @@ func loadConfigs(authPath, rolesPath string) (*AuthConfig, *RolesConfig, error) 
 }
 
 // fetchSchema retrieves GraphQL schema via introspection or SDL file
-func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient templates.HTTPClient) (*graphql.Schema, error) {
+func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient templates.HTTPClient, customHeaders map[string]string) (*graphql.Schema, error) {
 	if config.Schema != "" {
 		// Load schema from SDL file
 		schema, err := graphql.LoadSchemaFromFile(config.Schema)
@@ -55,6 +55,9 @@ func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient templates
 	// Introspect endpoint
 	endpoint := config.Target + config.Endpoint
 	client := graphql.NewIntrospectionClient(httpClient, endpoint)
+	for k, v := range customHeaders {
+		client.SetHeader(k, v)
+	}
 	schema, err := client.FetchSchema(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("introspection failed: %w", err)
@@ -203,13 +206,13 @@ func reportFindings(findings []*model.Finding) {
 }
 
 // runSecurityChecks executes scanner checks and template tests, returning all findings and template count
-func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo, reporter Reporter) ([]*model.Finding, int) {
+func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo, reporter Reporter, customHeaders map[string]string) ([]*model.Finding, int) {
 	var findings []*model.Finding
 
 	// Run built-in security checks unless skip flag is set
 	if !config.SkipBuiltinChecks {
 		// Create executor and scanner
-		executor := graphql.NewExecutor(httpClient, endpoint)
+		executor := graphql.NewExecutor(httpClient, endpoint, customHeaders)
 		scanner := graphql.NewSecurityScanner(schema, executor, graphql.ScanConfig{
 			DepthLimit:      config.DepthLimit,
 			ComplexityLimit: config.ComplexityLimit,
@@ -240,7 +243,7 @@ func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient t
 	templateCount := 0
 	// Execute GraphQL templates if provided
 	if config.Templates != "" {
-		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs, reporter)
+		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs, reporter, customHeaders)
 		findings = append(findings, templateFindings...)
 		templateCount = count
 	}
@@ -289,7 +292,7 @@ func filterGraphQLTemplatesByOWASP(tmpls []*templates.Template, categories []str
 }
 
 // runTemplateTests executes GraphQL templates and returns findings and template count
-func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo, reporter Reporter) ([]*model.Finding, int) {
+func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo, reporter Reporter, customHeaders map[string]string) ([]*model.Finding, int) {
 	graphqlVerboseLog(config.Verbose, "\n=== Running GraphQL Templates ===")
 
 	// Load templates
@@ -314,7 +317,7 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 	}
 
 	// Create template executor
-	tmplExecutor := templates.NewExecutor(httpClient)
+	tmplExecutor := templates.NewExecutor(httpClient, customHeaders)
 
 	var findings []*model.Finding
 

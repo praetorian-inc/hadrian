@@ -48,7 +48,7 @@ func TestExecutor_ExecuteGraphQL_SimpleQuery(t *testing.T) {
 		responses: []*http.Response{mockResp},
 	}
 
-	executor := NewExecutor(mockClient)
+	executor := NewExecutor(mockClient, nil)
 
 	// Compile template
 	tmpl := &Template{
@@ -120,7 +120,7 @@ func TestExecutor_ExecuteGraphQL_WithAuth(t *testing.T) {
 		responses: []*http.Response{mockResp},
 	}
 
-	executor := NewExecutor(mockClient)
+	executor := NewExecutor(mockClient, nil)
 
 	tmpl := &Template{
 		ID: "test-graphql-auth",
@@ -208,7 +208,7 @@ func TestExecutor_ExecuteGraphQL_StoredFields(t *testing.T) {
 		responses: []*http.Response{setupResp, attackResp},
 	}
 
-	executor := NewExecutor(mockClient)
+	executor := NewExecutor(mockClient, nil)
 
 	tmpl := &Template{
 		ID: "test-graphql-stored",
@@ -298,7 +298,7 @@ func TestExecutor_ExecuteGraphQL_ComplexVariables(t *testing.T) {
 		responses: []*http.Response{mockResp},
 	}
 
-	executor := NewExecutor(mockClient)
+	executor := NewExecutor(mockClient, nil)
 
 	// Template with complex variables (nested objects, arrays, numbers, booleans)
 	tmpl := &Template{

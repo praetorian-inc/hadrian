@@ -24,7 +24,7 @@ func TestExecutor_ReuseDoesNotClearRequestIDs(t *testing.T) {
 			Body:       io.NopCloser(strings.NewReader(`{"status": "ok"}`)),
 		},
 	}
-	executor := NewExecutor(client)
+	executor := NewExecutor(client, nil)
 
 	// Create two templates
 	tmpl1 := &CompiledTemplate{

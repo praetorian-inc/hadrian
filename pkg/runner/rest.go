@@ -45,11 +45,12 @@ type Config struct {
 	OWASPCategories      []string
 	Verbose              bool
 	DryRun               bool
-	RequestIDsLimit      int    // Number of request IDs to display per finding (0 = all)
-	LLMHost              string // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel             string // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout           int    // LLM request timeout in seconds
-	LLMContext           string // Additional context for LLM prompts
+	RequestIDsLimit      int      // Number of request IDs to display per finding (0 = all)
+	LLMHost              string   // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel             string   // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout           int      // LLM request timeout in seconds
+	LLMContext           string   // Additional context for LLM prompts
+	Headers              []string // Custom HTTP headers (format: "Key: Value")
 }
 
 // newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
@@ -102,6 +103,9 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 180, "LLM request timeout in seconds")
 	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM analysis (e.g., 'This API handles financial data')")
 
+	// Custom headers
+	cmd.Flags().StringArrayVarP(&config.Headers, "header", "H", []string{}, "Custom HTTP header (format: 'Key: Value', can specify multiple)")
+
 	return cmd
 }
 
@@ -115,6 +119,12 @@ func runTest(ctx context.Context, config Config) error {
 	// 1. Validate configuration
 	if err := config.Validate(); err != nil {
 		return fmt.Errorf("configuration error: %w", err)
+	}
+
+	// Parse custom headers
+	customHeaders, err := ParseCustomHeaders(config.Headers)
+	if err != nil {
+		return fmt.Errorf("invalid custom header: %w", err)
 	}
 
 	// 2. Parse API specification
@@ -209,10 +219,10 @@ func runTest(ctx context.Context, config Config) error {
 	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
 
 	// 9. Create template executor with rate-limiting client
-	executor := templates.NewExecutor(rateLimitingClient)
+	executor := templates.NewExecutor(rateLimitingClient, customHeaders)
 
 	// 10. Create mutation executor for mutation templates with rate-limiting client
-	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient)
+	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)
 
 	// 11. Run tests for each operation
 	var allFindings []*model.Finding
