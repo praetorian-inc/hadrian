@@ -49,7 +49,7 @@ type HTTPClient interface {
 
 // AuthInfo contains authentication configuration for template execution
 type AuthInfo struct {
-	Method   string // bearer, api_key, basic
+	Method   string // bearer, api_key, basic, cookie
 	Location string // header, query (for api_key)
 	KeyName  string // Header name (e.g., X-API-Key) or query parameter name
 	Value    string // The actual auth value (token, API key, or Basic credentials)
@@ -471,6 +471,8 @@ func (e *Executor) ExecuteGraphQL(
 					q.Set(authInfo.KeyName, authInfo.Value)
 					req.URL.RawQuery = q.Encode()
 				}
+			case "cookie":
+				req.Header.Set("Cookie", authInfo.Value)
 			}
 		}
 
@@ -606,7 +608,7 @@ func buildRequest(
 
 	// Add headers
 	for key, value := range test.Headers {
-		if value == "Bearer {{attacker_token}}" && authInfo != nil && authInfo.Value != "" {
+		if (value == "Bearer {{attacker_token}}" || value == "{{attacker_token}}") && authInfo != nil && authInfo.Value != "" {
 			// Handle authentication based on method
 			switch authInfo.Method {
 			case "bearer", "basic":
@@ -623,6 +625,8 @@ func buildRequest(
 					q.Set(authInfo.KeyName, authInfo.Value)
 					req.URL.RawQuery = q.Encode()
 				}
+			case "cookie":
+				req.Header.Set("Cookie", authInfo.Value)
 			}
 		} else {
 			req.Header.Set(key, value)

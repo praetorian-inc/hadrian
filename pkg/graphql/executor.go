@@ -75,7 +75,7 @@ type ExecuteResult struct {
 
 // AuthInfo contains authentication information
 type AuthInfo struct {
-	Method   string // "bearer", "api_key"
+	Method   string // "bearer", "api_key", "basic", "cookie"
 	Value    string
 	Location string // "header", "query"
 	KeyName  string // Header name for api_key
@@ -123,6 +123,8 @@ func (e *Executor) Execute(
 			if authInfo.Location == "header" {
 				req.Header.Set(authInfo.KeyName, authInfo.Value)
 			}
+		case "cookie":
+			req.Header.Set("Cookie", authInfo.Value)
 		}
 	}
 

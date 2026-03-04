@@ -165,6 +165,16 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 			// Encode username:password for Basic auth
 			authValue = base64.StdEncoding.EncodeToString([]byte(roleAuth.Username + ":" + roleAuth.Password))
 
+		case "cookie":
+			if roleAuth.Cookie == "" {
+				return nil, fmt.Errorf("role %s: cookie auth requires 'cookie' field", role)
+			}
+			cookieName := authConfig.CookieName
+			if cookieName == "" {
+				cookieName = "session"
+			}
+			authValue = cookieName + "=" + roleAuth.Cookie
+
 		default:
 			return nil, fmt.Errorf("role %s: unsupported auth method: %s", role, authConfig.Method)
 		}

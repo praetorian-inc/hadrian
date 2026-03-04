@@ -240,6 +240,8 @@ func (e *MutationExecutor) executePhase(
 				q.Set(authInfo.KeyName, authInfo.Value)
 				req.URL.RawQuery = q.Encode()
 			}
+		case "cookie":
+			req.Header.Set("Cookie", authInfo.Value)
 		}
 	}
 

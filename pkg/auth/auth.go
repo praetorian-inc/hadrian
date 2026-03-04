@@ -14,12 +14,15 @@ import (
 
 // AuthConfig represents auth.yaml configuration
 type AuthConfig struct {
-	Method string               `yaml:"method"` // bearer, api_key, basic
+	Method string               `yaml:"method"` // bearer, api_key, basic, cookie
 	Roles  map[string]*RoleAuth `yaml:"roles"`
 
 	// API Key specific
 	Location string `yaml:"location,omitempty"` // header or query
 	KeyName  string `yaml:"key_name,omitempty"` // X-API-Key
+
+	// Cookie specific
+	CookieName string `yaml:"cookie_name,omitempty"` // e.g., session_id
 }
 
 type RoleAuth struct {
@@ -32,6 +35,9 @@ type RoleAuth struct {
 	// Basic Auth
 	Username string `yaml:"username,omitempty"`
 	Password string `yaml:"password,omitempty"`
+
+	// Cookie
+	Cookie string `yaml:"cookie,omitempty"`
 }
 
 // Load parses auth.yaml file (CR-3: Credential Security)
@@ -63,6 +69,7 @@ func Load(filePath string) (*AuthConfig, error) {
 		roleAuth.APIKey = os.ExpandEnv(roleAuth.APIKey)
 		roleAuth.Username = os.ExpandEnv(roleAuth.Username)
 		roleAuth.Password = os.ExpandEnv(roleAuth.Password)
+		roleAuth.Cookie = os.ExpandEnv(roleAuth.Cookie)
 
 		// Detect hardcoded secrets (CR-3)
 		if detectHardcodedSecret(roleAuth.Token) {
@@ -71,9 +78,12 @@ func Load(filePath string) (*AuthConfig, error) {
 		if detectHardcodedSecret(roleAuth.APIKey) {
 			log.Warn("SECURITY: Role '%s' has hardcoded API key. Use environment variables: ${KEY_VAR}", roleName)
 		}
+		if detectHardcodedSecret(roleAuth.Cookie) {
+			log.Warn("SECURITY: Role '%s' has hardcoded cookie. Use environment variables: ${COOKIE_VAR}", roleName)
+		}
 
 		// Warn about empty credentials (will cause tests to be skipped)
-		if roleAuth.Token == "" && roleAuth.APIKey == "" && roleAuth.Username == "" {
+		if roleAuth.Token == "" && roleAuth.APIKey == "" && roleAuth.Username == "" && roleAuth.Cookie == "" {
 			log.Warn("Role '%s' has no credentials configured - tests for this role will be skipped", roleName)
 		}
 	}
@@ -104,7 +114,7 @@ func detectHardcodedSecret(value string) bool {
 
 // AuthInfo contains full authentication details for a role
 type AuthInfo struct {
-	Method   string // bearer, api_key, basic
+	Method   string // bearer, api_key, basic, cookie
 	Location string // header, query (for api_key)
 	KeyName  string // Header name (e.g., X-API-Key) or query parameter name
 	Value    string // The actual auth value
@@ -138,6 +148,13 @@ func (c *AuthConfig) GetAuth(roleName string) (string, error) {
 		credentials := roleAuth.Username + ":" + roleAuth.Password
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		return "Basic " + encoded, nil
+
+	case "cookie":
+		cookieName := c.CookieName
+		if cookieName == "" {
+			cookieName = "session"
+		}
+		return cookieName + "=" + roleAuth.Cookie, nil
 
 	default:
 		return "", fmt.Errorf("unsupported auth method: %s", c.Method)
@@ -174,6 +191,13 @@ func (c *AuthConfig) GetAuthInfo(roleName string) (*AuthInfo, error) {
 		}
 		creds := base64.StdEncoding.EncodeToString([]byte(role.Username + ":" + role.Password))
 		info.Value = "Basic " + creds
+	case "cookie":
+		cookieName := c.CookieName
+		if cookieName == "" {
+			cookieName = "session"
+		}
+		info.KeyName = cookieName
+		info.Value = cookieName + "=" + role.Cookie
 	default:
 		return nil, fmt.Errorf("unsupported auth method: %s", c.Method)
 	}

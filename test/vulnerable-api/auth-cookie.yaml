@@ -1,0 +1,12 @@
+method: cookie
+cookie_name: session_id
+
+roles:
+  admin:
+    cookie: "admin-session-xyz789"
+  user1:
+    cookie: "user1-session-abc123"
+  user2:
+    cookie: "user2-session-def456"
+  anonymous:
+    cookie: ""  # No authentication for anonymous role

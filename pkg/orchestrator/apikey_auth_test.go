@@ -178,6 +178,61 @@ func TestBearerAuth_StillUsesAuthorizationHeader(t *testing.T) {
 		"Should use Authorization header for Bearer token")
 }
 
+// TestCookieAuth_SetsCookieHeader verifies that cookie authentication
+// sets the Cookie header with the configured cookie name and value.
+func TestCookieAuth_SetsCookieHeader(t *testing.T) {
+	// Create mock HTTP client that captures requests
+	mockClient := &MockHTTPClient{
+		responses: []*http.Response{
+			newMockResponse(200, `{"data": "success"}`),
+		},
+	}
+
+	executor := NewMutationExecutor(mockClient, nil)
+
+	// Create auth infos with cookie auth
+	authInfos := map[string]*auth.AuthInfo{
+		"user": {
+			Method:  "cookie",
+			KeyName: "session_id",
+			Value:   "session_id=admin-session-xyz789",
+		},
+	}
+
+	tmpl := &templates.Template{
+		ID: "test-cookie",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:      "/api/v1/data",
+					Operation: "read",
+					Auth:      "user",
+				},
+			},
+		},
+	}
+
+	_, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"read",
+		"user@example.com",
+		"user@example.com",
+		authInfos,
+		"http://localhost:8080",
+	)
+
+	require.NoError(t, err)
+	require.Len(t, mockClient.requests, 1, "Should have made 1 HTTP request")
+
+	// Verify the Cookie header was set
+	req := mockClient.requests[0]
+	assert.Equal(t, "session_id=admin-session-xyz789", req.Header.Get("Cookie"),
+		"Should use Cookie header from auth config")
+	assert.Empty(t, req.Header.Get("Authorization"),
+		"Should NOT use Authorization header for cookie auth")
+}
+
 // TestBasicAuth_StillUsesAuthorizationHeader verifies that Basic authentication
 // continues to use the Authorization header as expected.
 func TestBasicAuth_StillUsesAuthorizationHeader(t *testing.T) {

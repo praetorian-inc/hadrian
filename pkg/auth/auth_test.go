@@ -407,6 +407,109 @@ func TestGetAuthInfo_RoleNotFound(t *testing.T) {
 	}
 }
 
+func TestGetAuth_Cookie(t *testing.T) {
+	config := &AuthConfig{
+		Method:     "cookie",
+		CookieName: "session_id",
+		Roles: map[string]*RoleAuth{
+			"admin": {Cookie: "abc123"},
+		},
+	}
+
+	auth, err := config.GetAuth("admin")
+	if err != nil {
+		t.Fatalf("GetAuth failed: %v", err)
+	}
+
+	expected := "session_id=abc123"
+	if auth != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, auth)
+	}
+}
+
+func TestGetAuth_Cookie_DefaultName(t *testing.T) {
+	config := &AuthConfig{
+		Method: "cookie",
+		Roles: map[string]*RoleAuth{
+			"user": {Cookie: "xyz789"},
+		},
+	}
+
+	auth, err := config.GetAuth("user")
+	if err != nil {
+		t.Fatalf("GetAuth failed: %v", err)
+	}
+
+	expected := "session=xyz789"
+	if auth != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, auth)
+	}
+}
+
+func TestGetAuthInfo_Cookie(t *testing.T) {
+	config := &AuthConfig{
+		Method:     "cookie",
+		CookieName: "session_id",
+		Roles: map[string]*RoleAuth{
+			"admin": {Cookie: "abc123"},
+		},
+	}
+
+	info, err := config.GetAuthInfo("admin")
+	if err != nil {
+		t.Fatalf("GetAuthInfo failed: %v", err)
+	}
+
+	if info.Method != "cookie" {
+		t.Errorf("Expected method 'cookie', got '%s'", info.Method)
+	}
+	if info.KeyName != "session_id" {
+		t.Errorf("Expected key name 'session_id', got '%s'", info.KeyName)
+	}
+	if info.Value != "session_id=abc123" {
+		t.Errorf("Expected 'session_id=abc123', got '%s'", info.Value)
+	}
+}
+
+func TestLoad_Cookie(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "cookie-auth.yaml")
+	content := `method: cookie
+cookie_name: session_id
+roles:
+  admin:
+    cookie: "admin-session-xyz789"
+  user1:
+    cookie: "user1-session-abc123"
+  anonymous:
+    cookie: ""
+`
+	err := os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	config, err := Load(testFile)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if config.Method != "cookie" {
+		t.Errorf("Expected method 'cookie', got '%s'", config.Method)
+	}
+	if config.CookieName != "session_id" {
+		t.Errorf("Expected cookie_name 'session_id', got '%s'", config.CookieName)
+	}
+	if len(config.Roles) != 3 {
+		t.Errorf("Expected 3 roles, got %d", len(config.Roles))
+	}
+
+	admin := config.Roles["admin"]
+	if admin.Cookie != "admin-session-xyz789" {
+		t.Errorf("Expected admin cookie 'admin-session-xyz789', got '%s'", admin.Cookie)
+	}
+}
+
 // Helper function to validate Basic auth header
 func isValidBasicAuth(header, username, password string) bool {
 	expectedCreds := username + ":" + password
