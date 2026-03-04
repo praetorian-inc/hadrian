@@ -510,6 +510,26 @@ roles:
 	}
 }
 
+func TestGetAuth_Cookie_MissingValue(t *testing.T) {
+	config := &AuthConfig{
+		Method:     "cookie",
+		CookieName: "session_id",
+		Roles: map[string]*RoleAuth{
+			"empty": {Cookie: ""},
+		},
+	}
+
+	_, err := config.GetAuth("empty")
+	if err == nil {
+		t.Fatal("Expected error for missing cookie value")
+	}
+
+	expectedMsg := "role empty: missing cookie"
+	if err.Error() != expectedMsg {
+		t.Errorf("Expected error '%s', got '%s'", expectedMsg, err.Error())
+	}
+}
+
 // Helper function to validate Basic auth header
 func isValidBasicAuth(header, username, password string) bool {
 	expectedCreds := username + ":" + password

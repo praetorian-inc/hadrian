@@ -150,6 +150,9 @@ func (c *AuthConfig) GetAuth(roleName string) (string, error) {
 		return "Basic " + encoded, nil
 
 	case "cookie":
+		if roleAuth.Cookie == "" {
+			return "", fmt.Errorf("role %s: missing cookie", roleName)
+		}
 		cookieName := c.CookieName
 		if cookieName == "" {
 			cookieName = "session"
@@ -192,6 +195,9 @@ func (c *AuthConfig) GetAuthInfo(roleName string) (*AuthInfo, error) {
 		creds := base64.StdEncoding.EncodeToString([]byte(role.Username + ":" + role.Password))
 		info.Value = "Basic " + creds
 	case "cookie":
+		if role.Cookie == "" {
+			return nil, fmt.Errorf("role '%s' has no cookie value", roleName)
+		}
 		cookieName := c.CookieName
 		if cookieName == "" {
 			cookieName = "session"
