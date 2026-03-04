@@ -133,14 +133,14 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 
 	// Create config
 	config := Config{
-		API:             apiSpecPath,
-		Roles:           rolesPath,
-		Auth:            authPath,
-		Concurrency:     1,
-		RateLimit:       10.0,
-		Timeout:         30,
-		Output:          "terminal",
-		Categories:      []string{"owasp"},
+		API:         apiSpecPath,
+		Roles:       rolesPath,
+		Auth:        authPath,
+		Concurrency: 1,
+		RateLimit:   10.0,
+		Timeout:     30,
+		Output:      "terminal",
+		Categories:  []string{"owasp"},
 	}
 
 	// Run the test
@@ -191,14 +191,14 @@ func TestIntegration_DryRunMode(t *testing.T) {
 
 	// Create config with DryRun enabled
 	config := Config{
-		API:             apiSpecPath,
-		Roles:           rolesPath,
-		Concurrency:     1,
-		RateLimit:       10.0,
-		Timeout:         30,
-		Output:          "terminal",
-		Categories:      []string{"owasp"},
-		DryRun:          true, // Enable dry-run mode
+		API:         apiSpecPath,
+		Roles:       rolesPath,
+		Concurrency: 1,
+		RateLimit:   10.0,
+		Timeout:     30,
+		Output:      "terminal",
+		Categories:  []string{"owasp"},
+		DryRun:      true, // Enable dry-run mode
 	}
 
 	// Run the test
@@ -252,14 +252,14 @@ func TestIntegration_VerboseOutput(t *testing.T) {
 
 	// Create config with Verbose enabled
 	config := Config{
-		API:             apiSpecPath,
-		Roles:           rolesPath,
-		Concurrency:     1,
-		RateLimit:       10.0,
-		Timeout:         30,
-		Output:          "terminal",
-		Categories:      []string{"owasp"},
-		Verbose:         true, // Enable verbose mode
+		API:         apiSpecPath,
+		Roles:       rolesPath,
+		Concurrency: 1,
+		RateLimit:   10.0,
+		Timeout:     30,
+		Output:      "terminal",
+		Categories:  []string{"owasp"},
+		Verbose:     true, // Enable verbose mode
 	}
 
 	// Run the test
@@ -316,14 +316,14 @@ func TestIntegration_JSONOutput(t *testing.T) {
 
 	// Create config with JSON output
 	config := Config{
-		API:             apiSpecPath,
-		Roles:           rolesPath,
-		Concurrency:     1,
-		RateLimit:       10.0,
-		Timeout:         30,
-		Output:          "json",
-		OutputFile:      outputFile,
-		Categories:      []string{"owasp"},
+		API:         apiSpecPath,
+		Roles:       rolesPath,
+		Concurrency: 1,
+		RateLimit:   10.0,
+		Timeout:     30,
+		Output:      "json",
+		OutputFile:  outputFile,
+		Categories:  []string{"owasp"},
 	}
 
 	// Run the test
@@ -379,14 +379,14 @@ func TestIntegration_MarkdownOutput(t *testing.T) {
 
 	// Create config with Markdown output
 	config := Config{
-		API:             apiSpecPath,
-		Roles:           rolesPath,
-		Concurrency:     1,
-		RateLimit:       10.0,
-		Timeout:         30,
-		Output:          "markdown",
-		OutputFile:      outputFile,
-		Categories:      []string{"owasp"},
+		API:         apiSpecPath,
+		Roles:       rolesPath,
+		Concurrency: 1,
+		RateLimit:   10.0,
+		Timeout:     30,
+		Output:      "markdown",
+		OutputFile:  outputFile,
+		Categories:  []string{"owasp"},
 	}
 
 	// Run the test

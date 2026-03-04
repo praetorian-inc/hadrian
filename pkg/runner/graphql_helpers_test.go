@@ -365,8 +365,8 @@ func TestRunTemplateTests_ReturnsTemplateCount(t *testing.T) {
 
 	config := GraphQLConfig{
 		TemplateDir: "../../templates/graphql",
-		Timeout:   30,
-		Verbose:   false,
+		Timeout:     30,
+		Verbose:     false,
 	}
 
 	// Run template tests
@@ -404,7 +404,7 @@ func TestRunSecurityChecks_NoTemplates(t *testing.T) {
 	defer server.Close()
 
 	config := GraphQLConfig{
-		TemplateDir:       "", // No templates directory specified
+		TemplateDir:     "", // No templates directory specified
 		DepthLimit:      10,
 		ComplexityLimit: 1000,
 		BatchSize:       100,

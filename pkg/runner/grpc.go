@@ -23,17 +23,17 @@ import (
 // GRPCConfig holds gRPC-specific test configuration
 type GRPCConfig struct {
 	// Common config (shared with REST/GraphQL)
-	Target          string
-	Roles           string
-	Auth            string
-	Proxy           string
-	Insecure        bool
-	RateLimit       float64
-	Timeout         int
-	Output          string
-	OutputFile      string
-	Verbose         bool
-	DryRun          bool
+	Target     string
+	Roles      string
+	Auth       string
+	Proxy      string
+	Insecure   bool
+	RateLimit  float64
+	Timeout    int
+	Output     string
+	OutputFile string
+	Verbose    bool
+	DryRun     bool
 
 	// gRPC-specific flags
 	Proto       string   // Proto file path
