@@ -345,12 +345,15 @@ fi
 # Check Hadrian is available
 if ! command -v "${HADRIAN_BIN}" &> /dev/null; then
     log_error "Hadrian binary not found: ${HADRIAN_BIN}"
-    log_info "Build Hadrian with: cd /workspaces/praetorian-dev/modules/hadrian && go build -o hadrian ./cmd/hadrian"
+    log_info "Build Hadrian with: go build -o hadrian ./cmd/hadrian (from the hadrian repo root)"
     exit 1
 fi
 
-# Track results
-declare -A RESULTS
+# Track results (using simple variables for macOS bash 3.x compatibility)
+RESULT_bearer=""
+RESULT_apikey=""
+RESULT_basic=""
+RESULT_cookie=""
 
 # -----------------------------------------------------------------------------
 # Test 1: Bearer JWT Authentication
@@ -382,15 +385,15 @@ EOF
         fi
 
         if run_hadrian "auth-bearer-active.yaml" "bearer"; then
-            RESULTS["bearer"]="PASS"
+            RESULT_bearer="PASS"
         else
-            RESULTS["bearer"]="FAIL"
+            RESULT_bearer="FAIL"
         fi
 
         # Cleanup temp file
         rm -f "${SCRIPT_DIR}/auth-bearer-active.yaml"
     else
-        RESULTS["bearer"]="ERROR (token generation failed)"
+        RESULT_bearer="ERROR (token generation failed)"
     fi
 fi
 
@@ -409,9 +412,9 @@ if [[ "$RUN_APIKEY" == "true" ]]; then
     fi
 
     if run_hadrian "auth-apikey.yaml" "apikey"; then
-        RESULTS["apikey"]="PASS"
+        RESULT_apikey="PASS"
     else
-        RESULTS["apikey"]="FAIL"
+        RESULT_apikey="FAIL"
     fi
 fi
 
@@ -430,9 +433,9 @@ if [[ "$RUN_BASIC" == "true" ]]; then
     fi
 
     if run_hadrian "auth-basic.yaml" "basic"; then
-        RESULTS["basic"]="PASS"
+        RESULT_basic="PASS"
     else
-        RESULTS["basic"]="FAIL"
+        RESULT_basic="FAIL"
     fi
 fi
 
@@ -451,9 +454,9 @@ if [[ "$RUN_COOKIE" == "true" ]]; then
     fi
 
     if run_hadrian "auth-cookie.yaml" "cookie"; then
-        RESULTS["cookie"]="PASS"
+        RESULT_cookie="PASS"
     else
-        RESULTS["cookie"]="FAIL"
+        RESULT_cookie="FAIL"
     fi
 fi
 
@@ -467,8 +470,8 @@ echo "Authentication Method Results:"
 echo ""
 
 for method in bearer apikey basic cookie; do
-    if [[ -n "${RESULTS[$method]}" ]]; then
-        result="${RESULTS[$method]}"
+    eval "result=\$RESULT_${method}"
+    if [[ -n "$result" ]]; then
         if [[ "$result" == "PASS" ]]; then
             echo -e "  ${method}:  ${GREEN}${result}${NC}"
         else
