@@ -15,6 +15,7 @@
 #   --no-build              Skip building the API
 #   --verbose               Enable verbose Hadrian output
 #   --cli-only              Print CLI output only (no JSON files)
+#   --proxy <url>           Route traffic through a proxy (e.g., http://127.0.0.1:8080 for Burp)
 #   --reset-between-tests   Reset API data before each auth method test (ensures consistent results)
 #   --help                  Show this help message
 # =============================================================================
@@ -43,6 +44,7 @@ RUN_COOKIE=true
 DO_BUILD=true
 VERBOSE=""
 CLI_ONLY=false
+PROXY=""
 RESET_BETWEEN_TESTS=false
 
 while [[ $# -gt 0 ]]; do
@@ -86,6 +88,10 @@ while [[ $# -gt 0 ]]; do
         --cli-only)
             CLI_ONLY=true
             shift
+            ;;
+        --proxy)
+            PROXY="$2"
+            shift 2
             ;;
         --reset-between-tests)
             RESET_BETWEEN_TESTS=true
@@ -248,6 +254,12 @@ run_hadrian() {
     # Use --concurrency 1 to ensure tests run in alphabetical order.
     # This prevents DELETE tests from running before GET tests, which would
     # delete resources before BOLA read tests can detect vulnerabilities.
+    # Build proxy flags if set (--insecure needed for Burp Suite TLS interception)
+    local proxy_flags=""
+    if [[ -n "$PROXY" ]]; then
+        proxy_flags="--proxy ${PROXY} --insecure"
+    fi
+
     if [[ "$CLI_ONLY" == "true" ]]; then
         # CLI-only mode: print directly to terminal, no JSON files
         HADRIAN_TEMPLATES="${TEMPLATES_DIR}" "${HADRIAN_BIN}" test rest \
@@ -256,6 +268,7 @@ run_hadrian() {
             --auth "${SCRIPT_DIR}/${auth_config}" \
             --allow-internal \
             --concurrency 1 \
+            ${proxy_flags} \
             ${VERBOSE}
     else
         # Default mode: output to JSON files with log
@@ -267,6 +280,7 @@ run_hadrian() {
             --concurrency 1 \
             --output json \
             --output-file "${output_file}" \
+            ${proxy_flags} \
             ${VERBOSE} \
             2>&1 | tee "${SCRIPT_DIR}/hadrian-${auth_method}.log"
     fi
@@ -332,6 +346,9 @@ echo "  Run API Key:  ${RUN_APIKEY}"
 echo "  Run Basic:    ${RUN_BASIC}"
 echo "  Run Cookie:   ${RUN_COOKIE}"
 echo "  CLI Only:     ${CLI_ONLY}"
+if [[ -n "$PROXY" ]]; then
+echo "  Proxy:        ${PROXY}"
+fi
 echo "  Reset Between Tests: ${RESET_BETWEEN_TESTS}"
 echo ""
 
