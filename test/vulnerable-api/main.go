@@ -20,6 +20,7 @@ const (
 	AuthMethodBearer = "bearer"
 	AuthMethodAPIKey = "api_key"
 	AuthMethodBasic  = "basic"
+	AuthMethodCookie = "cookie"
 )
 
 // Data models
@@ -28,8 +29,9 @@ type User struct {
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Role     string `json:"role"`
-	Password string `json:"-"`
-	APIKey   string `json:"-"`
+	Password  string `json:"-"`
+	APIKey    string `json:"-"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 type Profile struct {
@@ -77,9 +79,9 @@ var (
 func initData() {
 	// Seed users
 	users = []User{
-		{ID: 1, Username: "admin", Email: "admin@example.com", Role: "admin", Password: "admin123", APIKey: "admin-api-key-12345"},
-		{ID: 2, Username: "user1", Email: "user1@example.com", Role: "user", Password: "user1pass", APIKey: "user1-api-key-67890"},
-		{ID: 3, Username: "user2", Email: "user2@example.com", Role: "user", Password: "user2pass", APIKey: "user2-api-key-abcde"},
+		{ID: 1, Username: "admin", Email: "admin@example.com", Role: "admin", Password: "admin123", APIKey: "admin-api-key-12345", SessionID: "admin-session-xyz789"},
+		{ID: 2, Username: "user1", Email: "user1@example.com", Role: "user", Password: "user1pass", APIKey: "user1-api-key-67890", SessionID: "user1-session-abc123"},
+		{ID: 3, Username: "user2", Email: "user2@example.com", Role: "user", Password: "user2pass", APIKey: "user2-api-key-abcde", SessionID: "user2-session-def456"},
 	}
 
 	// Seed profiles
@@ -174,6 +176,16 @@ func findUserByAPIKey(apiKey string) *User {
 	return nil
 }
 
+// Helper: Find user by session ID
+func findUserBySessionID(sessionID string) *User {
+	for i := range users {
+		if users[i].SessionID == sessionID {
+			return &users[i]
+		}
+	}
+	return nil
+}
+
 // Middleware: CORS
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -243,6 +255,31 @@ func authMiddleware(next http.Handler) http.Handler {
 			user = findUserByCredentials(credentials[0], credentials[1])
 			if user == nil {
 				err = fmt.Errorf("invalid credentials")
+			}
+
+		case AuthMethodCookie:
+			// Cookie-based session auth
+			cookieHeader := r.Header.Get("Cookie")
+			if cookieHeader == "" {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			// Parse session_id from cookie header
+			var sessionID string
+			for _, part := range strings.Split(cookieHeader, ";") {
+				part = strings.TrimSpace(part)
+				if strings.HasPrefix(part, "session_id=") {
+					sessionID = strings.TrimPrefix(part, "session_id=")
+					break
+				}
+			}
+			if sessionID == "" {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			user = findUserBySessionID(sessionID)
+			if user == nil {
+				err = fmt.Errorf("invalid session")
 			}
 		}
 
@@ -357,6 +394,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		response["api_key"] = user.APIKey
 	case AuthMethodBasic:
 		// Basic auth doesn't return credentials, just user info
+	case AuthMethodCookie:
+		response["session_id"] = user.SessionID
 	}
 
 	jsonResponse(w, response, http.StatusOK)
@@ -630,6 +669,7 @@ func main() {
 		fmt.Printf("  %s (ID: %d, Role: %s)\n", u.Username, u.ID, u.Role)
 		fmt.Printf("    Password: %s\n", u.Password)
 		fmt.Printf("    API Key: %s\n", u.APIKey)
+		fmt.Printf("    Session ID: %s\n", u.SessionID)
 	}
 	fmt.Println("\n--- Vulnerable Endpoints (BOLA) ---")
 	fmt.Println("  GET/PUT/DELETE /api/users/{id}")

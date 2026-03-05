@@ -2,8 +2,8 @@
 # =============================================================================
 # run-all-auth-tests.sh
 #
-# Runs Hadrian security tests against the vulnerable API using all three
-# authentication methods: Bearer JWT, API Key, and Basic Auth.
+# Runs Hadrian security tests against the vulnerable API using all four
+# authentication methods: Bearer JWT, API Key, Basic Auth, and Cookie.
 #
 # Usage:
 #   ./run-all-auth-tests.sh [options]
@@ -39,6 +39,7 @@ NC='\033[0m' # No Color
 RUN_BEARER=true
 RUN_APIKEY=true
 RUN_BASIC=true
+RUN_COOKIE=true
 DO_BUILD=true
 VERBOSE=""
 CLI_ONLY=false
@@ -50,18 +51,28 @@ while [[ $# -gt 0 ]]; do
             RUN_BEARER=true
             RUN_APIKEY=false
             RUN_BASIC=false
+            RUN_COOKIE=false
             shift
             ;;
         --apikey-only)
             RUN_BEARER=false
             RUN_APIKEY=true
             RUN_BASIC=false
+            RUN_COOKIE=false
             shift
             ;;
         --basic-only)
             RUN_BEARER=false
             RUN_APIKEY=false
             RUN_BASIC=true
+            RUN_COOKIE=false
+            shift
+            ;;
+        --cookie-only)
+            RUN_BEARER=false
+            RUN_APIKEY=false
+            RUN_BASIC=false
+            RUN_COOKIE=true
             shift
             ;;
         --no-build)
@@ -319,6 +330,7 @@ echo "  Hadrian:      ${HADRIAN_BIN}"
 echo "  Run Bearer:   ${RUN_BEARER}"
 echo "  Run API Key:  ${RUN_APIKEY}"
 echo "  Run Basic:    ${RUN_BASIC}"
+echo "  Run Cookie:   ${RUN_COOKIE}"
 echo "  CLI Only:     ${CLI_ONLY}"
 echo "  Reset Between Tests: ${RESET_BETWEEN_TESTS}"
 echo ""
@@ -425,6 +437,27 @@ if [[ "$RUN_BASIC" == "true" ]]; then
 fi
 
 # -----------------------------------------------------------------------------
+# Test 4: Cookie Authentication
+# -----------------------------------------------------------------------------
+
+if [[ "$RUN_COOKIE" == "true" ]]; then
+    log_header "Test 4: Cookie Authentication"
+
+    start_api "cookie"
+
+    # Reset data before test if enabled
+    if [[ "$RESET_BETWEEN_TESTS" == "true" ]]; then
+        reset_api_data
+    fi
+
+    if run_hadrian "auth-cookie.yaml" "cookie"; then
+        RESULTS["cookie"]="PASS"
+    else
+        RESULTS["cookie"]="FAIL"
+    fi
+fi
+
+# -----------------------------------------------------------------------------
 # Summary
 # -----------------------------------------------------------------------------
 
@@ -433,7 +466,7 @@ log_header "Test Summary"
 echo "Authentication Method Results:"
 echo ""
 
-for method in bearer apikey basic; do
+for method in bearer apikey basic cookie; do
     if [[ -n "${RESULTS[$method]}" ]]; then
         result="${RESULTS[$method]}"
         if [[ "$result" == "PASS" ]]; then
@@ -447,7 +480,7 @@ done
 if [[ "$CLI_ONLY" != "true" ]]; then
     echo ""
     echo "Output files:"
-    for method in bearer apikey basic; do
+    for method in bearer apikey basic cookie; do
         if [[ -f "${SCRIPT_DIR}/results-${method}.json" ]]; then
             echo "  - results-${method}.json"
         fi
