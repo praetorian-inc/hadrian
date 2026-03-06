@@ -148,18 +148,19 @@ func executeTemplate(
 			// Build auth info for attacker
 			var authInfo *templates.AuthInfo
 			if authCfg != nil {
-				authValue, err := authCfg.GetAuth(attackerRole.Name)
+				info, err := authCfg.GetAuthInfo(attackerRole.Name)
 				if err != nil {
-					// Role may not have auth configured
+					log.Warn("skipping attacker role '%s': %v", attackerRole.Name, err)
 					continue
 				}
-
-				// Create AuthInfo from auth config
-				authInfo = &templates.AuthInfo{
-					Method:   authCfg.Method,
-					Location: authCfg.Location,
-					KeyName:  authCfg.KeyName,
-					Value:    authValue,
+				// info is nil when the role has no_auth: true — send request without auth header
+				if info != nil {
+					authInfo = &templates.AuthInfo{
+						Method:   info.Method,
+						Location: info.Location,
+						KeyName:  info.KeyName,
+						Value:    info.Value,
+					}
 				}
 			}
 

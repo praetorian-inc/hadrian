@@ -15,4 +15,6 @@ roles:
   user2:
     api_key: "user2-api-key-abcde"
   anonymous:
-    api_key: ""  # No authentication for anonymous role
+    api_key: ""  # Sends "X-API-Key: " (empty value)
+  no_header:
+    no_auth: true  # Sends request without any X-API-Key header

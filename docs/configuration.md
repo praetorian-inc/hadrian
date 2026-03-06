@@ -17,9 +17,10 @@ This document covers cross-cutting configuration that applies to all Hadrian tes
 
 Configure how to authenticate as each role. The same format is used across REST, GraphQL, and gRPC.
 
+### Bearer Token
+
 ```yaml
 method: bearer
-location: header
 
 roles:
   admin:
@@ -30,14 +31,100 @@ roles:
     token: ""
 ```
 
+### Basic Auth
+
+```yaml
+method: basic
+
+roles:
+  admin:
+    username: "${ADMIN_USER}"
+    password: "${ADMIN_PASS}"
+  readonly:
+    username: "reader"
+    password: ""
+```
+
+### API Key
+
+```yaml
+method: api_key
+location: header       # or "query"
+key_name: X-API-Key    # header name or query parameter name
+
+roles:
+  admin:
+    api_key: "${ADMIN_API_KEY}"
+  service:
+    api_key: "service-key-123"
+```
+
+### Cookie
+
+```yaml
+method: cookie
+cookie_name: JSESSIONID    # defaults to "session" if omitted
+
+roles:
+  administrator:
+    cookie: "6916A1CBD61194CA9A2C64B6ECAB729C"
+  monitoring:
+    cookie: "${MONITORING_COOKIE}"
+  anonymous:
+    cookie: ""
+```
+
 **Supported authentication methods:**
 
-| Method | Description | Example |
-|--------|-------------|---------|
-| `bearer` | `Authorization: Bearer <token>` | JWT tokens, OAuth2 access tokens |
-| `basic` | `Authorization: Basic <base64>` | Username/password encoded |
-| `api_key` | Custom header with key | `X-API-Key: <key>` |
-| `cookie` | Cookie-based auth | `Cookie: session=<value>` |
+| Method | Description | Config Fields | Example Header |
+|--------|-------------|---------------|----------------|
+| `bearer` | Bearer token | `token` | `Authorization: Bearer <token>` |
+| `basic` | Username/password | `username`, `password` | `Authorization: Basic <base64>` |
+| `api_key` | Custom header or query param | `api_key`, `location`, `key_name` | `X-API-Key: <key>` |
+| `cookie` | Cookie-based auth | `cookie`, `cookie_name` | `Cookie: session=<value>` |
+
+### No Authentication Header
+
+Use `no_auth: true` on a role to send requests without any authentication header. This works with any auth method:
+
+```yaml
+method: bearer
+roles:
+  admin:
+    token: "${ADMIN_TOKEN}"
+  anonymous:
+    no_auth: true    # requests sent with no Authorization header
+```
+
+### Raw Credentials (Basic Auth)
+
+Use `credentials` instead of `username`/`password` to control the exact base64-encoded value. The string is base64-encoded directly, bypassing the `username:password` format:
+
+```yaml
+method: basic
+roles:
+  admin:
+    username: "admin"
+    password: "secret"
+  empty_basic:
+    credentials: ""    # sends "Authorization: Basic " (empty base64)
+```
+
+When `credentials` is set, `username` and `password` are ignored.
+
+### Empty Credentials
+
+Roles with empty credentials still send authentication headers with the corresponding empty values. This is useful for testing how APIs handle malformed or empty auth:
+
+| Method | Config | Header Sent |
+|--------|--------|-------------|
+| any | `no_auth: true` | *(no header sent)* |
+| `bearer` | `token: ""` | `Authorization: Bearer ` |
+| `basic` | `username: ""`, `password: ""` | `Authorization: Basic Og==` (base64 of `:`) |
+| `basic` | `credentials: ""` | `Authorization: Basic ` (empty base64) |
+| `basic` | `username: "admin"`, `password: ""` | `Authorization: Basic YWRtaW46` |
+| `api_key` | `api_key: ""` | `X-API-Key: ` (empty value) |
+| `cookie` | `cookie: ""` | `Cookie: session=` |
 
 **Using environment variables:**
 
@@ -109,6 +196,18 @@ The `level` field defines explicit privilege ordering for BOLA testing:
 - Higher values = more privileged (e.g., admin: 100, user: 10, guest: 0)
 - Used by `role_selector` to determine "lower" vs "higher" permission levels
 - Prevents incorrect classification when admins have fewer but more powerful permissions (e.g., `*:*:all`)
+
+## Custom Headers
+
+Add custom HTTP headers to every request using the `--header` / `-H` flag. Headers are repeatable:
+
+```bash
+hadrian test rest --api api.yaml --roles roles.yaml \
+  -H "X-Custom-Tenant: acme" \
+  -H "X-Request-Source: hadrian"
+```
+
+Custom headers are applied to all requests across all test modes (REST, GraphQL, gRPC).
 
 ## Rate Limiting
 

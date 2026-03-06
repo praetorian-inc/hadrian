@@ -8,4 +8,6 @@ roles:
   user2:
     token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3Njk3ODg3NzQsInJvbGUiOiJ1c2VyIiwidXNlcl9pZCI6MywidXNlcm5hbWUiOiJ1c2VyMiJ9.14KWFp02Md04Ama9Mr95p4HURT3CgrWqTcz74XQTj_c"
   anonymous:
-    token: ""  # No authentication for anonymous role
+    token: ""  # Sends "Authorization: Bearer " (empty token)
+  no_header:
+    no_auth: true  # Sends request without any Authorization header

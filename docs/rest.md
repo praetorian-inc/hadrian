@@ -36,6 +36,7 @@ Optional Flags:
       --template <list>         Specific template files to run
       --category <list>         Test categories: owasp, custom (default: owasp)
       --owasp <list>            OWASP API categories to test (e.g., API1,API2,API5,API9)
+      --header, -H <header>     Custom HTTP header (repeatable, format: "Key: Value")
       --concurrency <n>         Concurrent requests (default: 1, max: 10)
       --timeout <n>             Request timeout in seconds (default: 30)
       --verbose, -v             Enable verbose logging output
@@ -226,6 +227,7 @@ test_phases:
 
 - **role_selector**: Define attacker/victim role combinations
   - `attacker_permission_level`: "lower", "higher", "all", "none"
+    - `"none"`: Tests unauthenticated access (no auth header sent) against authenticated endpoints
   - `victim_permission_level`: "lower", "higher", "all"
 
 - **detection**: How to identify vulnerabilities
@@ -272,7 +274,7 @@ hadrian test rest --api api.yaml --roles roles.yaml --category all
 
 ### "Role has no credentials configured"
 
-Ensure the environment variables or tokens in your `auth.yaml` are set. See [Authentication Configuration](configuration.md#authentication-authyaml).
+This is an informational warning. Roles with empty credentials still send requests with the auth header set to the corresponding empty value (e.g., `Authorization: Bearer ` for an empty bearer token). See [Empty Credentials](configuration.md#empty-credentials) for details.
 
 ### "Connection refused"
 

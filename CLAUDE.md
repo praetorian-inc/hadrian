@@ -58,7 +58,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 
 Templates in `templates/rest/` define security tests with:
 - `endpoint_selector`: Filters which operations to test (methods, path params, auth requirements)
-- `role_selector`: Defines attacker/victim role combinations by permission level (lower/higher/all)
+- `role_selector`: Defines attacker/victim role combinations by permission level (lower/higher/all/none)
 - `http`: HTTP request definition with template variables (`{{operation.method}}`, `{{attacker_token}}`)
 - `detection`: Success/failure indicators to determine if vulnerability exists
 

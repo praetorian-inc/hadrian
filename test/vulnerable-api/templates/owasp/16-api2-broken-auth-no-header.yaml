@@ -1,0 +1,39 @@
+# API2:2023 - Broken Authentication: No Auth Header
+#
+# Tests if endpoints that require authentication are accessible
+# without sending any authentication header at all.
+# Uses no_auth: true role to suppress the auth header entirely.
+
+id: api2-broken-auth-no-header
+
+info:
+  name: "Broken Authentication - No Auth Header"
+  category: "API2:2023"
+  severity: "HIGH"
+  description: |
+    Tests if authenticated endpoints are accessible without
+    any authentication header. This detects misconfigured
+    middleware where auth is optional instead of required.
+  tags: ["broken-auth", "owasp-api-top10", "api2", "no-auth"]
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET"]
+
+role_selector:
+  attacker_permission_level: "none"
+
+http:
+  - method: "{{method}}"
+    path: "{{path}}"
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  failure_indicators:
+    - type: status_code
+      status_code: 401
+    - type: status_code
+      status_code: 403

@@ -356,6 +356,8 @@ roles:
     token: "${USER2_TOKEN}"
   anonymous:
     token: ""
+  no_header:
+    no_auth: true
 EOF
             )
         elif [ "$auth_method" = "api_key" ]; then
@@ -373,6 +375,8 @@ roles:
     api_key: "user2-api-key-abcde"
   anonymous:
     api_key: ""
+  no_header:
+    no_auth: true
 EOF
             )
         elif [ "$auth_method" = "basic" ]; then
@@ -392,6 +396,10 @@ roles:
   anonymous:
     username: ""
     password: ""
+  empty_basic:
+    credentials: ""
+  no_header:
+    no_auth: true
 EOF
             )
         elif [ "$auth_method" = "cookie" ]; then
@@ -408,6 +416,8 @@ roles:
     cookie: "user2-session-def456"
   anonymous:
     cookie: ""
+  no_header:
+    no_auth: true
 EOF
             )
         fi

@@ -246,22 +246,20 @@ func TestGetAuth_RoleNotFound(t *testing.T) {
 	}
 }
 
-func TestGetAuth_MissingToken(t *testing.T) {
+func TestGetAuth_EmptyToken(t *testing.T) {
 	config := &AuthConfig{
 		Method: "bearer",
 		Roles: map[string]*RoleAuth{
-			"admin": {Token: ""}, // Empty token
+			"admin": {Token: ""},
 		},
 	}
 
-	_, err := config.GetAuth("admin")
-	if err == nil {
-		t.Fatal("Expected error for missing token")
+	value, err := config.GetAuth("admin")
+	if err != nil {
+		t.Fatalf("Empty token should not return error, got: %v", err)
 	}
-
-	expectedMsg := "role admin: missing token"
-	if err.Error() != expectedMsg {
-		t.Errorf("Expected error '%s', got '%s'", expectedMsg, err.Error())
+	if value != "Bearer " {
+		t.Errorf("Expected 'Bearer ' for empty token, got '%s'", value)
 	}
 }
 
@@ -510,7 +508,7 @@ roles:
 	}
 }
 
-func TestGetAuth_Cookie_MissingValue(t *testing.T) {
+func TestGetAuth_Cookie_EmptyValue(t *testing.T) {
 	config := &AuthConfig{
 		Method:     "cookie",
 		CookieName: "session_id",
@@ -519,14 +517,435 @@ func TestGetAuth_Cookie_MissingValue(t *testing.T) {
 		},
 	}
 
-	_, err := config.GetAuth("empty")
-	if err == nil {
-		t.Fatal("Expected error for missing cookie value")
+	value, err := config.GetAuth("empty")
+	if err != nil {
+		t.Fatalf("Empty cookie should not return error, got: %v", err)
+	}
+	if value != "session_id=" {
+		t.Errorf("Expected 'session_id=' for empty cookie, got '%s'", value)
+	}
+}
+
+// --- Empty credential tests for all auth methods ---
+
+func TestGetAuth_Basic_EmptyBoth(t *testing.T) {
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"empty": {Username: "", Password: ""},
+		},
 	}
 
-	expectedMsg := "role empty: missing cookie"
-	if err.Error() != expectedMsg {
-		t.Errorf("Expected error '%s', got '%s'", expectedMsg, err.Error())
+	value, err := config.GetAuth("empty")
+	if err != nil {
+		t.Fatalf("Empty basic auth should not return error, got: %v", err)
+	}
+	// base64(":") = "Og=="
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte(":"))
+	if value != expected {
+		t.Errorf("Expected '%s' for empty basic auth, got '%s'", expected, value)
+	}
+}
+
+func TestGetAuth_Basic_EmptyPassword(t *testing.T) {
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"nopass": {Username: "admin", Password: ""},
+		},
+	}
+
+	value, err := config.GetAuth("nopass")
+	if err != nil {
+		t.Fatalf("Basic auth with empty password should not return error, got: %v", err)
+	}
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:"))
+	if value != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, value)
+	}
+}
+
+func TestGetAuth_Basic_EmptyUsername(t *testing.T) {
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"nouser": {Username: "", Password: "secret"},
+		},
+	}
+
+	value, err := config.GetAuth("nouser")
+	if err != nil {
+		t.Fatalf("Basic auth with empty username should not return error, got: %v", err)
+	}
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte(":secret"))
+	if value != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, value)
+	}
+}
+
+func TestGetAuth_APIKey_Empty(t *testing.T) {
+	config := &AuthConfig{
+		Method:   "api_key",
+		Location: "header",
+		KeyName:  "X-API-Key",
+		Roles: map[string]*RoleAuth{
+			"empty": {APIKey: ""},
+		},
+	}
+
+	value, err := config.GetAuth("empty")
+	if err != nil {
+		t.Fatalf("Empty API key should not return error, got: %v", err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string for empty API key, got '%s'", value)
+	}
+}
+
+func TestGetAuthInfo_Bearer_EmptyToken(t *testing.T) {
+	config := &AuthConfig{
+		Method: "bearer",
+		Roles: map[string]*RoleAuth{
+			"empty": {Token: ""},
+		},
+	}
+
+	info, err := config.GetAuthInfo("empty")
+	if err != nil {
+		t.Fatalf("Empty bearer token should not return error, got: %v", err)
+	}
+	if info.Method != "bearer" {
+		t.Errorf("Expected method 'bearer', got '%s'", info.Method)
+	}
+	if info.Value != "Bearer " {
+		t.Errorf("Expected 'Bearer ' for empty token, got '%s'", info.Value)
+	}
+}
+
+func TestGetAuthInfo_Basic_EmptyBoth(t *testing.T) {
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"empty": {Username: "", Password: ""},
+		},
+	}
+
+	info, err := config.GetAuthInfo("empty")
+	if err != nil {
+		t.Fatalf("Empty basic auth should not return error, got: %v", err)
+	}
+	if info.Method != "basic" {
+		t.Errorf("Expected method 'basic', got '%s'", info.Method)
+	}
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte(":"))
+	if info.Value != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, info.Value)
+	}
+}
+
+func TestGetAuthInfo_APIKey_Empty(t *testing.T) {
+	config := &AuthConfig{
+		Method:   "api_key",
+		Location: "header",
+		KeyName:  "X-API-Key",
+		Roles: map[string]*RoleAuth{
+			"empty": {APIKey: ""},
+		},
+	}
+
+	info, err := config.GetAuthInfo("empty")
+	if err != nil {
+		t.Fatalf("Empty API key should not return error, got: %v", err)
+	}
+	if info.Method != "api_key" {
+		t.Errorf("Expected method 'api_key', got '%s'", info.Method)
+	}
+	if info.Value != "" {
+		t.Errorf("Expected empty string for empty API key, got '%s'", info.Value)
+	}
+	if info.KeyName != "X-API-Key" {
+		t.Errorf("Expected key name 'X-API-Key', got '%s'", info.KeyName)
+	}
+}
+
+func TestGetAuthInfo_Cookie_EmptyValue(t *testing.T) {
+	config := &AuthConfig{
+		Method:     "cookie",
+		CookieName: "JSESSIONID",
+		Roles: map[string]*RoleAuth{
+			"empty": {Cookie: ""},
+		},
+	}
+
+	info, err := config.GetAuthInfo("empty")
+	if err != nil {
+		t.Fatalf("Empty cookie should not return error, got: %v", err)
+	}
+	if info.Method != "cookie" {
+		t.Errorf("Expected method 'cookie', got '%s'", info.Method)
+	}
+	if info.KeyName != "JSESSIONID" {
+		t.Errorf("Expected key name 'JSESSIONID', got '%s'", info.KeyName)
+	}
+	if info.Value != "JSESSIONID=" {
+		t.Errorf("Expected 'JSESSIONID=' for empty cookie, got '%s'", info.Value)
+	}
+}
+
+// --- no_auth tests ---
+
+func TestGetAuth_NoAuth(t *testing.T) {
+	config := &AuthConfig{
+		Method: "bearer",
+		Roles: map[string]*RoleAuth{
+			"anonymous": {NoAuth: true},
+		},
+	}
+
+	value, err := config.GetAuth("anonymous")
+	if err != nil {
+		t.Fatalf("no_auth role should not return error, got: %v", err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string for no_auth role, got '%s'", value)
+	}
+}
+
+func TestGetAuthInfo_NoAuth(t *testing.T) {
+	config := &AuthConfig{
+		Method: "bearer",
+		Roles: map[string]*RoleAuth{
+			"anonymous": {NoAuth: true},
+		},
+	}
+
+	info, err := config.GetAuthInfo("anonymous")
+	if err != nil {
+		t.Fatalf("no_auth role should not return error, got: %v", err)
+	}
+	if info != nil {
+		t.Errorf("Expected nil AuthInfo for no_auth role, got: %+v", info)
+	}
+}
+
+func TestGetAuth_NoAuth_BasicMethod(t *testing.T) {
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"no_header": {NoAuth: true},
+		},
+	}
+
+	value, err := config.GetAuth("no_header")
+	if err != nil {
+		t.Fatalf("no_auth role should not return error, got: %v", err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string for no_auth role, got '%s'", value)
+	}
+}
+
+func TestGetAuth_NoAuth_CookieMethod(t *testing.T) {
+	config := &AuthConfig{
+		Method:     "cookie",
+		CookieName: "session_id",
+		Roles: map[string]*RoleAuth{
+			"no_header": {NoAuth: true},
+		},
+	}
+
+	value, err := config.GetAuth("no_header")
+	if err != nil {
+		t.Fatalf("no_auth role should not return error, got: %v", err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string for no_auth role, got '%s'", value)
+	}
+}
+
+func TestGetAuth_NoAuth_APIKeyMethod(t *testing.T) {
+	config := &AuthConfig{
+		Method:   "api_key",
+		Location: "header",
+		KeyName:  "X-API-Key",
+		Roles: map[string]*RoleAuth{
+			"no_header": {NoAuth: true},
+		},
+	}
+
+	value, err := config.GetAuth("no_header")
+	if err != nil {
+		t.Fatalf("no_auth role should not return error, got: %v", err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string for no_auth role, got '%s'", value)
+	}
+}
+
+// --- credentials (raw base64) tests for basic auth ---
+
+func TestGetAuth_Basic_RawCredentials_Empty(t *testing.T) {
+	empty := ""
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"empty_creds": {Credentials: &empty},
+		},
+	}
+
+	value, err := config.GetAuth("empty_creds")
+	if err != nil {
+		t.Fatalf("raw credentials should not return error, got: %v", err)
+	}
+	// base64("") = ""
+	expected := "Basic "
+	if value != expected {
+		t.Errorf("Expected '%s' for empty raw credentials, got '%s'", expected, value)
+	}
+}
+
+func TestGetAuth_Basic_RawCredentials_Value(t *testing.T) {
+	creds := "admin:secret"
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"raw": {Credentials: &creds},
+		},
+	}
+
+	value, err := config.GetAuth("raw")
+	if err != nil {
+		t.Fatalf("raw credentials should not return error, got: %v", err)
+	}
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:secret"))
+	if value != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, value)
+	}
+}
+
+func TestGetAuth_Basic_RawCredentials_OverridesUsernamePassword(t *testing.T) {
+	creds := "custom"
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"override": {
+				Username:    "ignored",
+				Password:    "ignored",
+				Credentials: &creds,
+			},
+		},
+	}
+
+	value, err := config.GetAuth("override")
+	if err != nil {
+		t.Fatalf("raw credentials should not return error, got: %v", err)
+	}
+	expected := "Basic " + base64.StdEncoding.EncodeToString([]byte("custom"))
+	if value != expected {
+		t.Errorf("Expected '%s', got '%s'", expected, value)
+	}
+}
+
+func TestGetAuthInfo_Basic_RawCredentials_Empty(t *testing.T) {
+	empty := ""
+	config := &AuthConfig{
+		Method: "basic",
+		Roles: map[string]*RoleAuth{
+			"empty_creds": {Credentials: &empty},
+		},
+	}
+
+	info, err := config.GetAuthInfo("empty_creds")
+	if err != nil {
+		t.Fatalf("raw credentials should not return error, got: %v", err)
+	}
+	if info.Method != "basic" {
+		t.Errorf("Expected method 'basic', got '%s'", info.Method)
+	}
+	expected := "Basic "
+	if info.Value != expected {
+		t.Errorf("Expected '%s' for empty raw credentials, got '%s'", expected, info.Value)
+	}
+}
+
+func TestLoad_NoAuth_Role(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "noauth.yaml")
+	content := `method: bearer
+roles:
+  admin:
+    token: "admin-token"
+  anonymous:
+    no_auth: true
+`
+	err := os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	config, err := Load(testFile)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	if !config.Roles["anonymous"].NoAuth {
+		t.Error("Expected anonymous role to have no_auth: true")
+	}
+
+	value, err := config.GetAuth("anonymous")
+	if err != nil {
+		t.Fatalf("GetAuth should not return error for no_auth role: %v", err)
+	}
+	if value != "" {
+		t.Errorf("Expected empty string for no_auth role, got '%s'", value)
+	}
+
+	info, err := config.GetAuthInfo("anonymous")
+	if err != nil {
+		t.Fatalf("GetAuthInfo should not return error for no_auth role: %v", err)
+	}
+	if info != nil {
+		t.Errorf("Expected nil AuthInfo for no_auth role, got: %+v", info)
+	}
+}
+
+func TestLoad_Basic_RawCredentials(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "rawcreds.yaml")
+	content := `method: basic
+roles:
+  admin:
+    username: "admin"
+    password: "secret"
+  empty_basic:
+    credentials: ""
+`
+	err := os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	config, err := Load(testFile)
+	if err != nil {
+		t.Fatalf("Load failed: %v", err)
+	}
+
+	// admin uses username/password
+	adminValue, err := config.GetAuth("admin")
+	if err != nil {
+		t.Fatalf("GetAuth failed for admin: %v", err)
+	}
+	if !isValidBasicAuth(adminValue, "admin", "secret") {
+		t.Errorf("Invalid admin basic auth: %s", adminValue)
+	}
+
+	// empty_basic uses raw credentials
+	emptyValue, err := config.GetAuth("empty_basic")
+	if err != nil {
+		t.Fatalf("GetAuth failed for empty_basic: %v", err)
+	}
+	if emptyValue != "Basic " {
+		t.Errorf("Expected 'Basic ' for empty raw credentials, got '%s'", emptyValue)
 	}
 }
 

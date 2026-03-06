@@ -460,10 +460,10 @@ func TestLoad_VulnerableAPIRoles(t *testing.T) {
 	// Verify GetRolesByPermissionLevel behavior
 	// Both "higher" and "lower" return all roles — execution loop filters by relative level
 	higher := config.GetRolesByPermissionLevel("higher")
-	assert.Len(t, higher, 4) // all roles returned
+	assert.Len(t, higher, 6) // all roles returned
 
 	lower := config.GetRolesByPermissionLevel("lower")
-	assert.Len(t, lower, 4) // all roles returned
+	assert.Len(t, lower, 6) // all roles returned
 }
 
 // Helper function

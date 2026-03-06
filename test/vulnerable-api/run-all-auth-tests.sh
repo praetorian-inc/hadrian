@@ -394,6 +394,10 @@ roles:
     token: "${USER1_TOKEN}"
   user2:
     token: "${USER2_TOKEN}"
+  anonymous:
+    token: ""
+  no_header:
+    no_auth: true
 EOF
 
         # Reset data before test if enabled

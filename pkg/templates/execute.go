@@ -459,7 +459,7 @@ func (e *Executor) ExecuteGraphQL(
 		}
 
 		// Apply authentication
-		if authInfo != nil && authInfo.Value != "" {
+		if authInfo != nil {
 			switch authInfo.Method {
 			case "bearer", "basic":
 				req.Header.Set("Authorization", authInfo.Value)
@@ -621,7 +621,7 @@ func buildRequest(
 	}
 
 	// Apply authentication from auth config (independent of template headers)
-	if authInfo != nil && authInfo.Value != "" {
+	if authInfo != nil {
 		switch authInfo.Method {
 		case "bearer", "basic":
 			req.Header.Set("Authorization", authInfo.Value)

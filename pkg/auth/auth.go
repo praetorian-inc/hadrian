@@ -26,6 +26,10 @@ type AuthConfig struct {
 }
 
 type RoleAuth struct {
+	// NoAuth suppresses the authentication header entirely.
+	// Requests for this role are sent without any auth header.
+	NoAuth bool `yaml:"no_auth,omitempty"`
+
 	// Bearer token
 	Token string `yaml:"token,omitempty"`
 
@@ -35,6 +39,11 @@ type RoleAuth struct {
 	// Basic Auth
 	Username string `yaml:"username,omitempty"`
 	Password string `yaml:"password,omitempty"`
+
+	// Credentials is a raw string that gets base64-encoded for Basic auth,
+	// bypassing the username:password format. Use credentials: "" to send
+	// "Basic " with empty base64.
+	Credentials *string `yaml:"credentials,omitempty"`
 
 	// Cookie
 	Cookie string `yaml:"cookie,omitempty"`
@@ -70,6 +79,10 @@ func Load(filePath string) (*AuthConfig, error) {
 		roleAuth.Username = os.ExpandEnv(roleAuth.Username)
 		roleAuth.Password = os.ExpandEnv(roleAuth.Password)
 		roleAuth.Cookie = os.ExpandEnv(roleAuth.Cookie)
+		if roleAuth.Credentials != nil {
+			expanded := os.ExpandEnv(*roleAuth.Credentials)
+			roleAuth.Credentials = &expanded
+		}
 
 		// Detect hardcoded secrets (CR-3)
 		if detectHardcodedSecret(roleAuth.Token) {
@@ -82,9 +95,11 @@ func Load(filePath string) (*AuthConfig, error) {
 			log.Warn("SECURITY: Role '%s' has hardcoded cookie. Use environment variables: ${COOKIE_VAR}", roleName)
 		}
 
-		// Warn about empty credentials (will cause tests to be skipped)
-		if roleAuth.Token == "" && roleAuth.APIKey == "" && roleAuth.Username == "" && roleAuth.Cookie == "" {
-			log.Warn("Role '%s' has no credentials configured - tests for this role will be skipped", roleName)
+		// Info about empty credentials — requests will be sent without authentication
+		if roleAuth.NoAuth {
+			log.Debug("Role '%s' has no_auth: true - requests will be sent without any authentication header", roleName)
+		} else if roleAuth.Token == "" && roleAuth.APIKey == "" && roleAuth.Username == "" && roleAuth.Cookie == "" && roleAuth.Credentials == nil {
+			log.Warn("Role '%s' has no credentials configured - requests will be sent without authentication", roleName)
 		}
 	}
 
@@ -120,39 +135,35 @@ type AuthInfo struct {
 	Value    string // The actual auth value
 }
 
-// GetAuth builds HTTP authorization header for role
+// GetAuth builds HTTP authorization header for role.
+// Returns ("", nil) when the role has no_auth: true — the caller should not set any auth header.
 func (c *AuthConfig) GetAuth(roleName string) (string, error) {
 	roleAuth, ok := c.Roles[roleName]
 	if !ok {
 		return "", fmt.Errorf("role not found: %s", roleName)
 	}
 
+	if roleAuth.NoAuth {
+		return "", nil
+	}
+
 	switch c.Method {
 	case "bearer":
-		if roleAuth.Token == "" {
-			return "", fmt.Errorf("role %s: missing token", roleName)
-		}
 		return "Bearer " + roleAuth.Token, nil
 
 	case "api_key":
-		if roleAuth.APIKey == "" {
-			return "", fmt.Errorf("role %s: missing api_key", roleName)
-		}
-		// Header vs query param handled by caller
 		return roleAuth.APIKey, nil
 
 	case "basic":
-		if roleAuth.Username == "" || roleAuth.Password == "" {
-			return "", fmt.Errorf("role %s: missing username or password", roleName)
+		if roleAuth.Credentials != nil {
+			encoded := base64.StdEncoding.EncodeToString([]byte(*roleAuth.Credentials))
+			return "Basic " + encoded, nil
 		}
 		credentials := roleAuth.Username + ":" + roleAuth.Password
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		return "Basic " + encoded, nil
 
 	case "cookie":
-		if roleAuth.Cookie == "" {
-			return "", fmt.Errorf("role %s: missing cookie", roleName)
-		}
 		cookieName := c.CookieName
 		if cookieName == "" {
 			cookieName = "session"
@@ -164,11 +175,16 @@ func (c *AuthConfig) GetAuth(roleName string) (string, error) {
 	}
 }
 
-// GetAuthInfo returns full authentication info for role (method, location, key name, value)
+// GetAuthInfo returns full authentication info for role (method, location, key name, value).
+// Returns (nil, nil) when the role has no_auth: true — the caller should not set any auth header.
 func (c *AuthConfig) GetAuthInfo(roleName string) (*AuthInfo, error) {
 	role, ok := c.Roles[roleName]
 	if !ok {
 		return nil, fmt.Errorf("role '%s' not found in auth config", roleName)
+	}
+
+	if role.NoAuth {
+		return nil, nil
 	}
 
 	info := &AuthInfo{
@@ -179,25 +195,18 @@ func (c *AuthConfig) GetAuthInfo(roleName string) (*AuthInfo, error) {
 
 	switch c.Method {
 	case "bearer":
-		if role.Token == "" {
-			return nil, fmt.Errorf("role '%s' has no bearer token", roleName)
-		}
 		info.Value = "Bearer " + role.Token
 	case "api_key":
-		if role.APIKey == "" {
-			return nil, fmt.Errorf("role '%s' has no API key", roleName)
-		}
 		info.Value = role.APIKey
 	case "basic":
-		if role.Username == "" || role.Password == "" {
-			return nil, fmt.Errorf("role '%s' missing basic auth credentials", roleName)
+		if role.Credentials != nil {
+			creds := base64.StdEncoding.EncodeToString([]byte(*role.Credentials))
+			info.Value = "Basic " + creds
+		} else {
+			creds := base64.StdEncoding.EncodeToString([]byte(role.Username + ":" + role.Password))
+			info.Value = "Basic " + creds
 		}
-		creds := base64.StdEncoding.EncodeToString([]byte(role.Username + ":" + role.Password))
-		info.Value = "Basic " + creds
 	case "cookie":
-		if role.Cookie == "" {
-			return nil, fmt.Errorf("role '%s' has no cookie value", roleName)
-		}
 		cookieName := c.CookieName
 		if cookieName == "" {
 			cookieName = "session"

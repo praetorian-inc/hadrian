@@ -17,4 +17,8 @@ roles:
     password: "user2pass"
   anonymous:
     username: ""
-    password: ""  # No authentication for anonymous role
+    password: ""  # Sends "Authorization: Basic Og==" (base64 of ":")
+  empty_basic:
+    credentials: ""  # Sends "Authorization: Basic " (empty base64)
+  no_header:
+    no_auth: true  # Sends request without any Authorization header
