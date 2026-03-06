@@ -169,7 +169,11 @@ func executeTemplate(
 			// Execute template
 			result, err := executor.Execute(ctx, tmpl, op, authInfo, variables)
 			if err != nil {
-				return nil, err
+				if ctx.Err() != nil {
+					return findings, ctx.Err()
+				}
+				log.Warn("request failed for %s on %s %s (attacker=%s): %v", tmpl.ID, op.Method, op.Path, attackerRole.Name, err)
+				continue
 			}
 
 			// Check if vulnerability detected
