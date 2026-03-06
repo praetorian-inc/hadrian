@@ -331,8 +331,6 @@ Hadrian includes built-in safeguards to prevent accidental testing against produ
 
 | Safeguard | Default | Override Flag |
 |-----------|---------|---------------|
-| Block production URLs | Enabled | `--allow-production` |
-| Block internal/private IPs | Enabled | `--allow-internal` |
 | Concurrency limit | 1 (max: 10) | `--concurrency <n>` |
 | YAML bomb protection | 1MB size, 20-depth | Not configurable |
 | TLS 1.3 enforcement | Enabled | Not configurable |

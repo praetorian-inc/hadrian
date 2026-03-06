@@ -62,7 +62,6 @@ HADRIAN_TEMPLATES=./templates/owasp hadrian test \
   --api openapi.yaml \
   --roles roles.yaml \
   --auth auth-apikey.yaml \
-  --allow-internal \
   --verbose
 
 # Run only non-destructive templates (01-13)
@@ -70,7 +69,6 @@ HADRIAN_TEMPLATES=./templates/owasp hadrian test \
   --api openapi.yaml \
   --roles roles.yaml \
   --auth auth-apikey.yaml \
-  --allow-internal \
   --template "0[1-9]-*" --template "1[0-3]-*"
 
 # Run and then reset

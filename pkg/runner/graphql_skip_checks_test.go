@@ -43,7 +43,7 @@ func TestRunSecurityChecks_SkipsBuiltinChecks(t *testing.T) {
 
 	config := GraphQLConfig{
 		SkipBuiltinChecks: true,
-		Templates:         "",
+		Templates:         []string{},
 		Verbose:           false,
 	}
 
@@ -86,20 +86,20 @@ func TestNewTestGraphQLCmd_SkipBuiltinChecksDefault(t *testing.T) {
 
 func TestGraphQLConfig_SkipBuiltinChecksDocsExample(t *testing.T) {
 	// Test the example from the task description
-	// Running: ./hadrian test graphql --target http://172.17.0.1:5013 --templates templates/graphql --skip-builtin-checks --verbose
+	// Running: ./hadrian test graphql --target http://172.17.0.1:5013 --template-dir templates/graphql --skip-builtin-checks --verbose
 	// Should only show template findings (not the 3 built-in check findings)
 
 	config := GraphQLConfig{
 		Target:            "http://172.17.0.1:5013",
 		Endpoint:          "/graphql",
-		Templates:         "templates/graphql",
+		TemplateDir:       "templates/graphql",
 		SkipBuiltinChecks: true,
 		Verbose:           true,
 	}
 
 	// Verify config has the correct settings
 	assert.Equal(t, "http://172.17.0.1:5013", config.Target)
-	assert.Equal(t, "templates/graphql", config.Templates)
+	assert.Equal(t, "templates/graphql", config.TemplateDir)
 	assert.True(t, config.SkipBuiltinChecks)
 	assert.True(t, config.Verbose)
 

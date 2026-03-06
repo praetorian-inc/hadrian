@@ -23,19 +23,17 @@ import (
 // GRPCConfig holds gRPC-specific test configuration
 type GRPCConfig struct {
 	// Common config (shared with REST/GraphQL)
-	Target          string
-	Roles           string
-	Auth            string
-	Proxy           string
-	Insecure        bool
-	RateLimit       float64
-	Timeout         int
-	AllowInternal   bool
-	AllowProduction bool
-	Output          string
-	OutputFile      string
-	Verbose         bool
-	DryRun          bool
+	Target     string
+	Roles      string
+	Auth       string
+	Proxy      string
+	Insecure   bool
+	RateLimit  float64
+	Timeout    int
+	Output     string
+	OutputFile string
+	Verbose    bool
+	DryRun     bool
 
 	// gRPC-specific flags
 	Proto       string   // Proto file path
@@ -111,7 +109,7 @@ func newTestGRPCCmd() *cobra.Command {
 
 	// Template configuration
 	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "gRPC templates directory (e.g., templates/grpc)")
-	cmd.Flags().StringSliceVar(&config.Templates, "templates", []string{}, "Filter templates by ID or name (can specify multiple)")
+	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 
 	// TLS options
 	cmd.Flags().BoolVar(&config.Plaintext, "plaintext", false, "Use plaintext connection (no TLS)")
@@ -122,8 +120,6 @@ func newTestGRPCCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&config.Insecure, "insecure", false, "Skip TLS verification")
 	cmd.Flags().Float64Var(&config.RateLimit, "rate-limit", 5.0, "Rate limit (req/s)")
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
-	cmd.Flags().BoolVar(&config.AllowInternal, "allow-internal", false, "Allow internal IP addresses")
-	cmd.Flags().BoolVar(&config.AllowProduction, "allow-production", false, "Allow testing production URLs")
 
 	// Output options
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")

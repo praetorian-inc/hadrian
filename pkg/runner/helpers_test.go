@@ -690,62 +690,6 @@ func TestParseCmdHandler_InvalidFile(t *testing.T) {
 }
 
 // =============================================================================
-// filterTemplatesByOWASP tests
-// =============================================================================
-
-func TestFilterTemplatesByOWASP_NoFilter(t *testing.T) {
-	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API1:2023"}}},
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API2:2023"}}},
-	}
-
-	result := filterTemplatesByOWASP(tmpls, []string{})
-	assert.Len(t, result, 2, "empty filter should return all templates")
-}
-
-func TestFilterTemplatesByOWASP_SingleCategory(t *testing.T) {
-	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API1:2023"}}},
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API2:2023"}}},
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API5:2023"}}},
-	}
-
-	result := filterTemplatesByOWASP(tmpls, []string{"API1"})
-	assert.Len(t, result, 1)
-	assert.Equal(t, "API1:2023", result[0].Info.Category)
-}
-
-func TestFilterTemplatesByOWASP_MultipleCategories(t *testing.T) {
-	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API1:2023"}}},
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API2:2023"}}},
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API5:2023"}}},
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API9:2023"}}},
-	}
-
-	result := filterTemplatesByOWASP(tmpls, []string{"API1", "API5"})
-	assert.Len(t, result, 2)
-}
-
-func TestFilterTemplatesByOWASP_CaseInsensitive(t *testing.T) {
-	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API1:2023"}}},
-	}
-
-	result := filterTemplatesByOWASP(tmpls, []string{"api1"})
-	assert.Len(t, result, 1, "should match case-insensitively")
-}
-
-func TestFilterTemplatesByOWASP_NoMatch(t *testing.T) {
-	tmpls := []*templates.CompiledTemplate{
-		{Template: &templates.Template{Info: templates.TemplateInfo{Category: "API1:2023"}}},
-	}
-
-	result := filterTemplatesByOWASP(tmpls, []string{"API99"})
-	assert.Len(t, result, 0, "non-matching filter should return empty")
-}
-
-// =============================================================================
 // verboseLog tests
 // =============================================================================
 
@@ -1110,8 +1054,6 @@ detection:
 		RateLimitMaxRetries:  5,
 		RateLimitStatusCodes: []int{429, 503},
 		Timeout:              30,
-		AllowProduction:      true,
-		AllowInternal:        true,
 		Output:               "terminal",
 		Categories:           []string{"owasp"},
 		DryRun:               true,

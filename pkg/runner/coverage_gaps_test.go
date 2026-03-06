@@ -434,39 +434,6 @@ func TestFilterGraphQLTemplatesByID_NoMatch(t *testing.T) {
 }
 
 // =============================================================================
-// filterGraphQLTemplatesByOWASP tests (more coverage)
-// =============================================================================
-
-func TestFilterGraphQLTemplatesByOWASP_EmptyFilter(t *testing.T) {
-	tmpls := []*templates.Template{
-		{Info: templates.TemplateInfo{Category: "API1:2023"}},
-		{Info: templates.TemplateInfo{Category: "API2:2023"}},
-	}
-
-	result := filterGraphQLTemplatesByOWASP(tmpls, []string{})
-	assert.Len(t, result, 2)
-}
-
-func TestFilterGraphQLTemplatesByOWASP_SingleMatch(t *testing.T) {
-	tmpls := []*templates.Template{
-		{Info: templates.TemplateInfo{Category: "API1:2023"}},
-		{Info: templates.TemplateInfo{Category: "API2:2023"}},
-	}
-
-	result := filterGraphQLTemplatesByOWASP(tmpls, []string{"API1:2023"})
-	assert.Len(t, result, 1)
-}
-
-func TestFilterGraphQLTemplatesByOWASP_NoMatch(t *testing.T) {
-	tmpls := []*templates.Template{
-		{Info: templates.TemplateInfo{Category: "API1:2023"}},
-	}
-
-	result := filterGraphQLTemplatesByOWASP(tmpls, []string{"API99"})
-	assert.Len(t, result, 0)
-}
-
-// =============================================================================
 // gRPC helper tests
 // =============================================================================
 

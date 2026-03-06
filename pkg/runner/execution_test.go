@@ -756,49 +756,6 @@ func TestRunTest_InvalidAPISpec(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse API spec")
 }
 
-func TestRunTest_ProductionBlocked(t *testing.T) {
-	// Create API spec with production URL
-	tmpDir := t.TempDir()
-
-	apiFile := filepath.Join(tmpDir, "api.yaml")
-	apiContent := `openapi: "3.0.0"
-info:
-  title: Prod API
-  version: "1.0"
-servers:
-  - url: https://api.example.com
-paths:
-  /users:
-    get:
-      summary: List users
-      responses:
-        "200":
-          description: Success
-`
-	_ = os.WriteFile(apiFile, []byte(apiContent), 0644)
-
-	rolesFile := filepath.Join(tmpDir, "roles.yaml")
-	_ = os.WriteFile(rolesFile, []byte("roles:\n  - name: user\n    level: 10\n    permissions:\n      - \"read:*:*\"\n"), 0644)
-
-	ctx := context.Background()
-	config := Config{
-		API:                  apiFile,
-		Roles:                rolesFile,
-		RateLimit:            5.0,
-		RateLimitBackoff:     "exponential",
-		RateLimitMaxWait:     60000000000,
-		RateLimitMaxRetries:  5,
-		RateLimitStatusCodes: []int{429, 503},
-		Output:               "terminal",
-		Concurrency:          1,
-		AllowProduction:      false, // should block
-	}
-
-	err := runTest(ctx, config)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "production testing blocked")
-}
-
 func TestRunTest_FullPipeline(t *testing.T) {
 	// Create a test server that responds to requests
 	server := newTestServer(200, `{"id": 1, "name": "test"}`)
@@ -864,7 +821,6 @@ detection:
 		Output:               "terminal",
 		Concurrency:          1,
 		Timeout:              10,
-		AllowInternal:        true,
 	}
 
 	err := runTest(ctx, config)
@@ -907,7 +863,6 @@ paths:
 		RateLimitStatusCodes: []int{429, 503},
 		Output:               "terminal",
 		Concurrency:          1,
-		AllowInternal:        true,
 	}
 
 	err := runTest(ctx, config)

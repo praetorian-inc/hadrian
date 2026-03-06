@@ -104,8 +104,7 @@ set -a && source test/crapi/.env && set +a && \
 HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
   --api test/crapi/crapi-openapi-spec.json \
   --roles test/crapi/roles.yaml \
-  --auth test/crapi/auth.yaml \
-  --allow-internal
+  --auth test/crapi/auth.yaml
 
 # Optional: add --verbose for detailed output
 # Optional: add --proxy http://127.0.0.1:8080 to route through Burp Suite

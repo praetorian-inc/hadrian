@@ -266,7 +266,6 @@ run_hadrian() {
             --api "${SCRIPT_DIR}/openapi.yaml" \
             --roles "${SCRIPT_DIR}/roles.yaml" \
             --auth "${SCRIPT_DIR}/${auth_config}" \
-            --allow-internal \
             --concurrency 1 \
             ${proxy_flags} \
             ${VERBOSE}
@@ -276,7 +275,6 @@ run_hadrian() {
             --api "${SCRIPT_DIR}/openapi.yaml" \
             --roles "${SCRIPT_DIR}/roles.yaml" \
             --auth "${SCRIPT_DIR}/${auth_config}" \
-            --allow-internal \
             --concurrency 1 \
             --output json \
             --output-file "${output_file}" \

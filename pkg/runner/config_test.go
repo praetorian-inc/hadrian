@@ -209,11 +209,10 @@ func TestValidate_InvalidOutputFormat(t *testing.T) {
 
 func TestToHTTPClientConfig(t *testing.T) {
 	config := &Config{
-		Proxy:         "http://localhost:8080",
-		CACert:        "/path/to/cert.pem",
-		Insecure:      true,
-		Timeout:       45,
-		AllowInternal: true,
+		Proxy:    "http://localhost:8080",
+		CACert:   "/path/to/cert.pem",
+		Insecure: true,
+		Timeout:  45,
 	}
 
 	httpConfig := config.ToHTTPClientConfig()
@@ -230,7 +229,5 @@ func TestToHTTPClientConfig(t *testing.T) {
 	if httpConfig.Timeout.Seconds() != 45 {
 		t.Errorf("Timeout = %v; want 45s", httpConfig.Timeout)
 	}
-	if !httpConfig.AllowInternal {
-		t.Error("AllowInternal = false; want true")
-	}
+
 }

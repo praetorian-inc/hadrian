@@ -13,7 +13,6 @@ Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that te
 - **Mutation Testing**: Three-phase setup/attack/verify testing pattern for proving write/delete vulnerabilities (BFLA and BOPLA)
 - **Template-Driven**: YAML templates for customizable security tests
 - **Multiple Output Formats**: Terminal, JSON, and Markdown reports
-- **Production Safety**: Built-in safeguards against testing production systems
 - **Adaptive Rate Limiting**: Proactive request throttling with reactive backoff on 429/503 responses
 - **Proxy Support**: Route traffic through Burp Suite or other proxies
 - **LLM Triage**: Optional AI-powered finding analysis (Ollama)
@@ -72,9 +71,6 @@ hadrian test grpc --target localhost:50051 --proto service.proto --auth auth.yam
 ```bash
 # Dry run (show what would be tested)
 hadrian test rest --api api.yaml --roles roles.yaml --dry-run
-
-# Test specific OWASP categories
-hadrian test rest --api api.yaml --roles roles.yaml --owasp API1,API2,API5
 
 # Output to JSON file
 hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file report.json

@@ -11,9 +11,6 @@ hadrian test rest --api api.yaml --roles roles.yaml
 # With authentication
 hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 
-# Test specific OWASP categories
-hadrian test rest --api api.yaml --roles roles.yaml --owasp API1,API2,API5
-
 # Dry run (show what would be tested)
 hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
@@ -256,7 +253,6 @@ hadrian test rest \
   --api test/crapi/crapi-openapi-spec.json \
   --roles test/crapi/roles.yaml \
   --auth test/crapi/auth.yaml \
-  --allow-internal \
   --verbose
 ```
 
@@ -275,14 +271,6 @@ hadrian test rest --api api.yaml --roles roles.yaml --category all
 ### "Role has no credentials configured"
 
 This is an informational warning. Roles with empty credentials still send requests with the auth header set to the corresponding empty value (e.g., `Authorization: Bearer ` for an empty bearer token). See [Empty Credentials](configuration.md#empty-credentials) for details.
-
-### "Connection refused"
-
-For local testing, allow internal IPs:
-
-```bash
-hadrian test rest --api api.yaml --roles roles.yaml --allow-internal
-```
 
 ## Best Practices
 
