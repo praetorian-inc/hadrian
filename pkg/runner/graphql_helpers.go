@@ -69,11 +69,10 @@ func fetchSchema(ctx context.Context, config GraphQLConfig, httpClient templates
 // createGraphQLHTTPClient creates HTTP client with proxy, TLS, and timeout settings
 func createGraphQLHTTPClient(config GraphQLConfig) (templates.HTTPClient, error) {
 	httpConfig := &internalhttp.Config{
-		Proxy:         config.Proxy,
-		CACert:        config.CACert,
-		Insecure:      config.Insecure,
-		Timeout:       time.Duration(config.Timeout) * time.Second,
-		AllowInternal: config.AllowInternal,
+		Proxy:    config.Proxy,
+		CACert:   config.CACert,
+		Insecure: config.Insecure,
+		Timeout:  time.Duration(config.Timeout) * time.Second,
 	}
 	return internalhttp.New(httpConfig)
 }
@@ -242,7 +241,7 @@ func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient t
 
 	templateCount := 0
 	// Execute GraphQL templates if provided
-	if config.Templates != "" {
+	if config.TemplateDir != "" {
 		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs, reporter, customHeaders)
 		findings = append(findings, templateFindings...)
 		templateCount = count
@@ -269,51 +268,25 @@ func filterGraphQLTemplatesByID(tmpls []*templates.Template, filters []string) [
 	return filtered
 }
 
-// filterGraphQLTemplatesByOWASP filters GraphQL templates by OWASP API Security categories
-func filterGraphQLTemplatesByOWASP(tmpls []*templates.Template, categories []string) []*templates.Template {
-	if len(categories) == 0 {
-		return tmpls
-	}
-
-	// Build category lookup map
-	categoryMap := make(map[string]bool)
-	for _, cat := range categories {
-		categoryMap[cat] = true
-	}
-
-	var filtered []*templates.Template
-	for _, tmpl := range tmpls {
-		// Check if template's category matches any filter
-		if categoryMap[tmpl.Info.Category] {
-			filtered = append(filtered, tmpl)
-		}
-	}
-	return filtered
-}
-
 // runTemplateTests executes GraphQL templates and returns findings and template count
 func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo, reporter Reporter, customHeaders map[string]string) ([]*model.Finding, int) {
 	graphqlVerboseLog(config.Verbose, "\n=== Running GraphQL Templates ===")
 
 	// Load templates
-	tmplFiles, err := loadGraphQLTemplates(config.Templates)
+	tmplFiles, err := loadGraphQLTemplates(config.TemplateDir)
 	if err != nil {
 		fmt.Printf("Error loading templates: %v\n", err)
 		return nil, 0
 	}
 
 	// Apply filters
-	tmplFiles = filterGraphQLTemplatesByID(tmplFiles, config.TemplateFilters)
-	tmplFiles = filterGraphQLTemplatesByOWASP(tmplFiles, config.OWASPCategories)
+	tmplFiles = filterGraphQLTemplatesByID(tmplFiles, config.Templates)
 
 	templateCount := len(tmplFiles)
-	graphqlVerboseLog(config.Verbose, "Loaded %d template(s) from: %s", templateCount, config.Templates)
+	graphqlVerboseLog(config.Verbose, "Loaded %d template(s) from: %s", templateCount, config.TemplateDir)
 
-	if len(config.TemplateFilters) > 0 {
-		graphqlVerboseLog(config.Verbose, "Filtered by templates: %v", config.TemplateFilters)
-	}
-	if len(config.OWASPCategories) > 0 {
-		graphqlVerboseLog(config.Verbose, "Filtered by OWASP categories: %v", config.OWASPCategories)
+	if len(config.Templates) > 0 {
+		graphqlVerboseLog(config.Verbose, "Filtered by templates: %v", config.Templates)
 	}
 
 	// Create template executor

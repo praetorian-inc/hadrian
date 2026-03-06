@@ -170,7 +170,6 @@ cd /workspaces/praetorian-dev/modules/hadrian
 HADRIAN_TEMPLATES=test/ratelimit-demo/templates ./hadrian test \
   --api test/ratelimit-demo/openapi.yaml \
   --roles test/ratelimit-demo/roles.yaml \
-  --allow-internal \
   --verbose
 
 # Stop the server
@@ -288,8 +287,7 @@ ratelimit-demo/
 # Test with Hadrian
 HADRIAN_TEMPLATES=templates ./hadrian test \
   --api openapi.yaml \
-  --roles roles.yaml \
-  --allow-internal
+  --roles roles.yaml
 
 # Should find:
 # - LOW severity: Rate limits detected on /status-429/* and /status-503/*
@@ -349,9 +347,6 @@ curl -v "http://localhost:8080/api/v1/status-429/resource?limit=3"
 ### Hadrian Not Detecting Limits
 
 ```bash
-# Ensure --allow-internal flag is set (localhost is internal IP)
-./hadrian test --api openapi.yaml --allow-internal
-
 # Check template directory is correct
 ls templates/ratelimit/  # Should show *.yaml files
 ```

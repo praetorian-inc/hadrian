@@ -264,8 +264,6 @@ Hadrian includes templates for OWASP API Top 10 vulnerabilities:
 
 ## Security Safeguards
 
-- **Production URL Blocking**: Requires `--allow-production` flag
-- **Internal IP Blocking**: Requires `--allow-internal` flag
 - **Adaptive Rate Limiting**:
   - Proactive: Limits requests to configured rate (default 5 req/s)
   - Reactive: Detects 429/503 responses and implements backoff
@@ -286,7 +284,6 @@ hadrian test rest \
   --api crapi-openapi.yaml \
   --roles crapi-roles.yaml \
   --auth crapi-auth.yaml \
-  --owasp API1,API2,API5 \
   --output json \
   --output-file report.json
 ```
@@ -294,6 +291,5 @@ hadrian test rest \
 This command:
 1. Loads the crAPI OpenAPI spec
 2. Loads role definitions and auth tokens
-3. Filters to API1, API2, and API5 templates
-4. Tests cross-role access for each matching endpoint
-5. Outputs findings to JSON report
+3. Tests cross-role access for each matching endpoint
+4. Outputs findings to JSON report

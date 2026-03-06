@@ -17,7 +17,6 @@ func TestNewTestCmd_FlagDefaults(t *testing.T) {
 	assert.Equal(t, "1", cmd.Flags().Lookup("concurrency").DefValue)
 	assert.Equal(t, "5", cmd.Flags().Lookup("rate-limit").DefValue)
 	assert.Equal(t, "30", cmd.Flags().Lookup("timeout").DefValue)
-	assert.Equal(t, "false", cmd.Flags().Lookup("allow-production").DefValue)
 	assert.Equal(t, "terminal", cmd.Flags().Lookup("output").DefValue)
 	assert.Equal(t, "false", cmd.Flags().Lookup("insecure").DefValue)
 	assert.Equal(t, ".hadrian/audit.log", cmd.Flags().Lookup("audit-log").DefValue)

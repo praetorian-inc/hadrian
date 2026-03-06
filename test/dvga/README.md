@@ -120,8 +120,7 @@ go build -o hadrian ./cmd/hadrian
 ./hadrian test graphql \
   --target http://localhost:5013 \
   --schema test/dvga/schema.graphql \
-  --templates test/dvga/templates/owasp \
-  --allow-internal \
+  --template-dir test/dvga/templates/owasp \
   --verbose
 ```
 
@@ -133,10 +132,9 @@ set -a && source test/dvga/.env && set +a && \
 ./hadrian test graphql \
   --target http://localhost:5013 \
   --schema test/dvga/schema.graphql \
-  --templates test/dvga/templates/owasp \
+  --template-dir test/dvga/templates/owasp \
   --auth test/dvga/auth.yaml \
   --roles test/dvga/roles.yaml \
-  --allow-internal \
   --verbose
 ```
 
@@ -146,8 +144,7 @@ set -a && source test/dvga/.env && set +a && \
 # Run all GraphQL attack templates
 ./hadrian test graphql \
   --target http://localhost:5013 \
-  --templates templates/graphql \
-  --allow-internal \
+  --template-dir templates/graphql \
   --verbose
 ```
 
@@ -156,8 +153,7 @@ set -a && source test/dvga/.env && set +a && \
 ```bash
 ./hadrian test graphql \
   --target http://localhost:5013 \
-  --templates test/dvga/templates/owasp \
-  --allow-internal \
+  --template-dir test/dvga/templates/owasp \
   --output json \
   --output-file dvga-results.json
 ```
@@ -228,7 +224,7 @@ docker restart dvga
 
 - Ensure DVGA is running on port 5013
 - Check firewall/network settings
-- Use `--allow-internal` flag when testing local/Docker endpoints
+- Check firewall settings when testing local/Docker endpoints
 
 ### No Findings Reported
 
@@ -240,13 +236,12 @@ docker restart dvga
 
 ```bash
 # Test with introspection (default)
-./hadrian test graphql --target http://localhost:5013 --allow-internal
+./hadrian test graphql --target http://localhost:5013
 
 # Or use local SDL schema file
 ./hadrian test graphql \
   --target http://localhost:5013 \
-  --schema test/dvga/schema.graphql \
-  --allow-internal
+  --schema test/dvga/schema.graphql
 ```
 
 ## Integration Tests

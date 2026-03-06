@@ -713,7 +713,7 @@ detection:
 # Test a gRPC server
 hadrian grpc \
   --server localhost:50051 \
-  --templates templates/grpc/ \
+  --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml
 ```
@@ -723,30 +723,10 @@ hadrian grpc \
 ```bash
 hadrian grpc \
   --server localhost:50051 \
-  --templates templates/grpc/ \
+  --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml \
   --verbose
-```
-
-### Filter by OWASP Category
-
-```bash
-# Test only BOLA (API1)
-hadrian grpc \
-  --server localhost:50051 \
-  --templates templates/grpc/ \
-  --auth auth.yaml \
-  --roles roles.yaml \
-  --owasp API1
-
-# Test BOLA and BFLA (API1, API5)
-hadrian grpc \
-  --server localhost:50051 \
-  --templates templates/grpc/ \
-  --auth auth.yaml \
-  --roles roles.yaml \
-  --owasp API1,API5
 ```
 
 ### Output to JSON
@@ -754,7 +734,7 @@ hadrian grpc \
 ```bash
 hadrian grpc \
   --server localhost:50051 \
-  --templates templates/grpc/ \
+  --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml \
   --output json \
@@ -766,7 +746,7 @@ hadrian grpc \
 ```bash
 hadrian grpc \
   --server localhost:50051 \
-  --templates templates/grpc/ \
+  --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml \
   --dry-run
@@ -817,7 +797,7 @@ make run
 # In another terminal, run Hadrian
 hadrian grpc \
   --server localhost:50051 \
-  --templates test/grpc-server/templates/owasp/ \
+  --template-dir test/grpc-server/templates/owasp/ \
   --auth test/grpc-server/auth.yaml \
   --roles test/grpc-server/roles.yaml \
   --verbose

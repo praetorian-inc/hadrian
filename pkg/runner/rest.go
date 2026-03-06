@@ -34,15 +34,12 @@ type Config struct {
 	RateLimitMaxRetries  int           // Maximum retry attempts on rate limit
 	RateLimitStatusCodes []int         // Status codes that trigger rate limit retry
 	Timeout              int
-	AllowProduction      bool
-	AllowInternal        bool
 	Output               string
 	OutputFile           string
 	Categories           []string
 	TemplateDir          string   // Directory containing templates
 	Templates            []string // Filter templates by ID or name
 	AuditLog             string
-	OWASPCategories      []string
 	Verbose              bool
 	DryRun               bool
 	RequestIDsLimit      int      // Number of request IDs to display per finding (0 = all)
@@ -84,15 +81,12 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.RateLimitMaxRetries, "rate-limit-max-retries", 5, "Maximum retry attempts on rate limit response")
 	cmd.Flags().IntSliceVar(&config.RateLimitStatusCodes, "rate-limit-status-codes", []int{429, 503}, "Status codes that trigger rate limit retry")
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout (seconds)")
-	cmd.Flags().BoolVar(&config.AllowProduction, "allow-production", false, "Allow testing production URLs")
-	cmd.Flags().BoolVar(&config.AllowInternal, "allow-internal", false, "Allow testing internal/private IP addresses")
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
 	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Test categories (owasp, custom)")
 	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)")
 	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 	cmd.Flags().StringVar(&config.AuditLog, "audit-log", ".hadrian/audit.log", "Audit log file")
-	cmd.Flags().StringSliceVar(&config.OWASPCategories, "owasp", []string{}, "OWASP API categories to test (e.g., API1,API2,API5,API9)")
 	cmd.Flags().BoolVarP(&config.Verbose, "verbose", "v", false, "Enable verbose logging output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Show what would be tested without making requests")
 	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids", 1, "Number of request IDs to display per finding (0 = all)")
@@ -133,21 +127,13 @@ func runTest(ctx context.Context, config Config) error {
 		return fmt.Errorf("failed to parse API spec: %w", err)
 	}
 
-	// 3. Production safety checks (HR-1, CR-4)
-	if err := ConfirmProductionTesting(spec.BaseURL, config.AllowProduction); err != nil {
-		return err
-	}
-	if err := BlockInternalIPs(spec.BaseURL, config.AllowInternal); err != nil {
-		return err
-	}
-
-	// 4. Load role configuration
+	// 3. Load role configuration
 	rolesCfg, err := roles.Load(config.Roles)
 	if err != nil {
 		return fmt.Errorf("failed to load roles: %w", err)
 	}
 
-	// 5. Load auth configuration (optional)
+	// 4. Load auth configuration (optional)
 	var authCfg *auth.AuthConfig
 	if config.Auth != "" {
 		authCfg, err = auth.Load(config.Auth)
@@ -156,13 +142,13 @@ func runTest(ctx context.Context, config Config) error {
 		}
 	}
 
-	// 6. Create HTTP client with proxy support
+	// 5. Create HTTP client with proxy support
 	httpClient, err := createHTTPClient(config)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
-	// 6a. Wrap HTTP client with rate limiting
+	// 5a. Wrap HTTP client with rate limiting
 	rateLimitConfig := &RateLimitConfig{
 		Rate:           config.RateLimit,
 		Enabled:        true,
@@ -176,21 +162,21 @@ func runTest(ctx context.Context, config Config) error {
 	rateLimiter := NewRateLimiter(config.RateLimit, config.RateLimit)
 	rateLimitingClient := NewRateLimitingClient(httpClient, rateLimiter, rateLimitConfig)
 
-	// 7. Create reporter based on output format
+	// 6. Create reporter based on output format
 	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
 	defer func() { _ = rep.Close() }()
 
-	// 7a. Set LLM mode on terminal reporter if LLM is enabled
+	// 6a. Set LLM mode on terminal reporter if LLM is enabled
 	llmEnabled := hasLLMConfig() || config.LLMHost != ""
 	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
 		terminalReporter.SetLLMMode(true)
 		log.Debug("LLM mode enabled on terminal reporter")
 	}
 
-	// 8. Load templates
+	// 7. Load templates
 	templateDir := config.TemplateDir
 	if templateDir == "" {
 		templateDir = getTemplateDir()
@@ -207,12 +193,6 @@ func runTest(ctx context.Context, config Config) error {
 		if len(tmplFiles) == 0 {
 			return fmt.Errorf("no templates matched the specified filters: %v", config.Templates)
 		}
-	}
-
-	// Filter by OWASP categories if specified
-	if len(config.OWASPCategories) > 0 {
-		tmplFiles = filterTemplatesByOWASP(tmplFiles, config.OWASPCategories)
-		fmt.Printf("[INFO] Filtered to %d templates matching OWASP categories: %v\n", len(tmplFiles), config.OWASPCategories)
 	}
 
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
@@ -241,13 +221,13 @@ func runTest(ctx context.Context, config Config) error {
 		return nil
 	}
 
-	// 9. Create template executor with rate-limiting client
+	// 8. Create template executor with rate-limiting client
 	executor := templates.NewExecutor(rateLimitingClient, customHeaders)
 
-	// 10. Create mutation executor for mutation templates with rate-limiting client
+	// 9. Create mutation executor for mutation templates with rate-limiting client
 	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)
 
-	// 11. Run tests for each operation
+	// 10. Run tests for each operation
 	var allFindings []*model.Finding
 	for _, op := range spec.Operations {
 		for _, tmpl := range tmplFiles {
@@ -275,12 +255,12 @@ func runTest(ctx context.Context, config Config) error {
 		}
 	}
 
-	// 12. Optional LLM triage
+	// 11. Optional LLM triage
 	if hasLLMConfig() || config.LLMHost != "" {
 		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
 	}
 
-	// 13. Generate final report
+	// 12. Generate final report
 	log.Debug("Generating final report with %d findings", len(allFindings))
 	stats := calculateStats(allFindings, startTime)
 	stats.OperationCount = len(spec.Operations)
@@ -415,25 +395,6 @@ func filterByTemplates(tmpls []*templates.CompiledTemplate, templateFilters []st
 	for _, tmpl := range tmpls {
 		if templateMatchesAnyFilter(tmpl, templateFilters) {
 			result = append(result, tmpl)
-		}
-	}
-	return result
-}
-
-// filterTemplatesByOWASP filters templates by OWASP category prefix.
-// If owaspCategories is empty, returns all templates unchanged.
-func filterTemplatesByOWASP(tmpls []*templates.CompiledTemplate, owaspCategories []string) []*templates.CompiledTemplate {
-	if len(owaspCategories) == 0 {
-		return tmpls
-	}
-
-	var result []*templates.CompiledTemplate
-	for _, tmpl := range tmpls {
-		for _, cat := range owaspCategories {
-			if strings.HasPrefix(strings.ToUpper(tmpl.Info.Category), strings.ToUpper(cat)) {
-				result = append(result, tmpl)
-				break
-			}
 		}
 	}
 	return result

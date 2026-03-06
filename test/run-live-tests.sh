@@ -401,7 +401,6 @@ EOF
             --roles "${SCRIPT_DIR}/vulnerable-api/roles.yaml" \
             --auth "$AUTH_FILE" \
             --template-dir "${SCRIPT_DIR}/vulnerable-api/templates/owasp" \
-            --allow-internal \
             --output json \
             --output-file "$RESULT_FILE" \
             --concurrency 1 \
@@ -524,9 +523,8 @@ EOF
         run_hadrian "dvga" test graphql \
             --target "http://localhost:${DVGA_PORT}" \
             --schema "${SCRIPT_DIR}/dvga/schema.graphql" \
-            --templates "${SCRIPT_DIR}/dvga/templates/owasp" \
+            --template-dir "${SCRIPT_DIR}/dvga/templates/owasp" \
             --skip-builtin-checks \
-            --allow-internal \
             --output json \
             --output-file "$RESULT_FILE" \
             $DVGA_AUTH_FLAGS \
@@ -570,7 +568,6 @@ if echo "$TARGETS" | grep -q "grpc"; then
             --roles "${SCRIPT_DIR}/grpc-server/roles.yaml" \
             --auth "${SCRIPT_DIR}/grpc-server/auth.yaml" \
             --template-dir "${SCRIPT_DIR}/grpc-server/templates/owasp" \
-            --allow-internal \
             --output json \
             --output-file "$RESULT_FILE" \
             $VERBOSE
@@ -697,7 +694,6 @@ EOF
                 --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
                 --auth "$CRAPI_AUTH_FILE" \
                 --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
-                --allow-internal \
                 --output json \
                 --output-file "$RESULT_FILE" \
                 $VERBOSE
