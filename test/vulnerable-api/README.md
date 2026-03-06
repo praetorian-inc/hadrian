@@ -239,7 +239,6 @@ HADRIAN_TEMPLATES=./templates/rest hadrian test \
   --api openapi.yaml \
   --roles roles.yaml \
   --auth auth-apikey.yaml \
-  --allow-internal \
   --verbose
 
 # Reset data after tests

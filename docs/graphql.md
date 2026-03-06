@@ -29,7 +29,7 @@ Flags:
       --schema string          GraphQL SDL schema file (optional, uses introspection if not provided)
       --roles string           Roles and permissions YAML file
       --auth string            Authentication configuration YAML file
-      --templates string       GraphQL templates directory
+      --template-dir string    GraphQL templates directory
       --depth-limit int        Maximum query depth for DoS testing (default 10)
       --complexity-limit int   Maximum complexity score for DoS testing (default 1000)
       --batch-size int         Number of queries in batch attack tests (default 100)
@@ -38,7 +38,6 @@ Flags:
       --insecure               Skip TLS verification
       --rate-limit float       Rate limit in requests per second (default 5.0)
       --timeout int            Request timeout in seconds (default 30)
-      --allow-internal         Allow testing internal IP addresses
       --output string          Output format: terminal, json, markdown (default "terminal")
       --output-file string     Output file path
       --verbose                Verbose output
@@ -173,7 +172,7 @@ GraphQL security tests are defined using YAML templates. Hadrian includes 12 bui
 
 ### Custom Templates
 
-Create custom templates in a directory and specify with `--templates`:
+Create custom templates in a directory and specify with `--template-dir`:
 
 ```yaml
 # my-templates/custom-check.yaml
@@ -224,7 +223,7 @@ detection:
 The `store_response_fields` directive uses JSON path expressions to extract values from GraphQL responses for use in subsequent phases. These paths only support **dot-separated object key traversal** (e.g., `data.user.id`). Array indexing (e.g., `data.users[0].id`), keys containing dots, and nested arrays are not supported — unsupported paths silently return empty strings.
 
 ```bash
-hadrian test graphql --target https://api.example.com --templates ./my-templates
+hadrian test graphql --target https://api.example.com --template-dir ./my-templates
 ```
 
 ## Example: Testing DVGA
@@ -246,7 +245,7 @@ docker-compose up -d
 
 ```bash
 # Basic scan
-hadrian test graphql --target http://localhost:5013 --allow-internal
+hadrian test graphql --target http://localhost:5013
 
 # Expected findings:
 # [MEDIUM] introspection-disclosure: GraphQL introspection is enabled
@@ -339,15 +338,6 @@ If the target has introspection disabled, provide a schema file:
 
 ```bash
 hadrian test graphql --target https://api.example.com --schema schema.graphql
-```
-
-### "Connection refused"
-
-Ensure the target is accessible and check if internal IP blocking is enabled:
-
-```bash
-# Allow internal IPs for local testing
-hadrian test graphql --target http://localhost:5013 --allow-internal
 ```
 
 ### "TLS certificate error"

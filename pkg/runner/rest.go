@@ -127,13 +127,13 @@ func runTest(ctx context.Context, config Config) error {
 		return fmt.Errorf("failed to parse API spec: %w", err)
 	}
 
-	// 4. Load role configuration
+	// 3. Load role configuration
 	rolesCfg, err := roles.Load(config.Roles)
 	if err != nil {
 		return fmt.Errorf("failed to load roles: %w", err)
 	}
 
-	// 5. Load auth configuration (optional)
+	// 4. Load auth configuration (optional)
 	var authCfg *auth.AuthConfig
 	if config.Auth != "" {
 		authCfg, err = auth.Load(config.Auth)
@@ -142,13 +142,13 @@ func runTest(ctx context.Context, config Config) error {
 		}
 	}
 
-	// 6. Create HTTP client with proxy support
+	// 5. Create HTTP client with proxy support
 	httpClient, err := createHTTPClient(config)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP client: %w", err)
 	}
 
-	// 6a. Wrap HTTP client with rate limiting
+	// 5a. Wrap HTTP client with rate limiting
 	rateLimitConfig := &RateLimitConfig{
 		Rate:           config.RateLimit,
 		Enabled:        true,
@@ -162,21 +162,21 @@ func runTest(ctx context.Context, config Config) error {
 	rateLimiter := NewRateLimiter(config.RateLimit, config.RateLimit)
 	rateLimitingClient := NewRateLimitingClient(httpClient, rateLimiter, rateLimitConfig)
 
-	// 7. Create reporter based on output format
+	// 6. Create reporter based on output format
 	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
 	defer func() { _ = rep.Close() }()
 
-	// 7a. Set LLM mode on terminal reporter if LLM is enabled
+	// 6a. Set LLM mode on terminal reporter if LLM is enabled
 	llmEnabled := hasLLMConfig() || config.LLMHost != ""
 	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
 		terminalReporter.SetLLMMode(true)
 		log.Debug("LLM mode enabled on terminal reporter")
 	}
 
-	// 8. Load templates
+	// 7. Load templates
 	templateDir := config.TemplateDir
 	if templateDir == "" {
 		templateDir = getTemplateDir()
@@ -221,13 +221,13 @@ func runTest(ctx context.Context, config Config) error {
 		return nil
 	}
 
-	// 9. Create template executor with rate-limiting client
+	// 8. Create template executor with rate-limiting client
 	executor := templates.NewExecutor(rateLimitingClient, customHeaders)
 
-	// 10. Create mutation executor for mutation templates with rate-limiting client
+	// 9. Create mutation executor for mutation templates with rate-limiting client
 	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)
 
-	// 11. Run tests for each operation
+	// 10. Run tests for each operation
 	var allFindings []*model.Finding
 	for _, op := range spec.Operations {
 		for _, tmpl := range tmplFiles {
@@ -255,12 +255,12 @@ func runTest(ctx context.Context, config Config) error {
 		}
 	}
 
-	// 12. Optional LLM triage
+	// 11. Optional LLM triage
 	if hasLLMConfig() || config.LLMHost != "" {
 		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
 	}
 
-	// 13. Generate final report
+	// 12. Generate final report
 	log.Debug("Generating final report with %d findings", len(allFindings))
 	stats := calculateStats(allFindings, startTime)
 	stats.OperationCount = len(spec.Operations)

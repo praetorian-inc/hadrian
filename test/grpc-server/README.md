@@ -275,7 +275,7 @@ hadrian grpc \
   --server localhost:50051 \
   --auth auth.yaml \
   --roles roles.yaml \
-  --templates templates/owasp/ \
+  --template-dir templates/owasp/ \
   --verbose
 
 # Using production templates (in ../../templates/grpc/)
@@ -283,7 +283,7 @@ hadrian grpc \
   --server localhost:50051 \
   --auth auth.yaml \
   --roles roles.yaml \
-  --templates ../../templates/grpc/ \
+  --template-dir ../../templates/grpc/ \
   --verbose
 ```
 
@@ -362,7 +362,7 @@ hadrian grpc \
   --server localhost:50051 \
   --auth auth.yaml \
   --roles roles.yaml \
-  --templates templates/owasp/ \
+  --template-dir templates/owasp/ \
   --verbose
 
 # Run only mutation tests (test_pattern: "mutation")
@@ -370,17 +370,8 @@ hadrian grpc \
   --server localhost:50051 \
   --auth auth.yaml \
   --roles roles.yaml \
-  --templates templates/owasp/ \
+  --template-dir templates/owasp/ \
   --template-filter "mutation" \
-  --verbose
-
-# Run only BOLA tests (API1)
-hadrian grpc \
-  --server localhost:50051 \
-  --auth auth.yaml \
-  --roles roles.yaml \
-  --templates templates/owasp/ \
-  --owasp API1 \
   --verbose
 ```
 

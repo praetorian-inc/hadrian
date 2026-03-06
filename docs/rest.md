@@ -11,9 +11,6 @@ hadrian test rest --api api.yaml --roles roles.yaml
 # With authentication
 hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 
-# Test specific OWASP categories
-hadrian test rest --api api.yaml --roles roles.yaml --owasp API1,API2,API5
-
 # Dry run (show what would be tested)
 hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
@@ -35,7 +32,6 @@ Optional Flags:
       --template-dir <dir>      Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)
       --template <list>         Specific template files to run
       --category <list>         Test categories: owasp, custom (default: owasp)
-      --owasp <list>            OWASP API categories to test (e.g., API1,API2,API5,API9)
       --concurrency <n>         Concurrent requests (default: 1, max: 10)
       --timeout <n>             Request timeout in seconds (default: 30)
       --verbose, -v             Enable verbose logging output
@@ -254,7 +250,6 @@ hadrian test rest \
   --api test/crapi/crapi-openapi-spec.json \
   --roles test/crapi/roles.yaml \
   --auth test/crapi/auth.yaml \
-  --allow-internal \
   --verbose
 ```
 
@@ -273,14 +268,6 @@ hadrian test rest --api api.yaml --roles roles.yaml --category all
 ### "Role has no credentials configured"
 
 Ensure the environment variables or tokens in your `auth.yaml` are set. See [Authentication Configuration](configuration.md#authentication-authyaml).
-
-### "Connection refused"
-
-For local testing, allow internal IPs:
-
-```bash
-hadrian test rest --api api.yaml --roles roles.yaml --allow-internal
-```
 
 ## Best Practices
 
