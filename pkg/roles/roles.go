@@ -3,7 +3,6 @@ package roles
 import (
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
@@ -151,53 +150,20 @@ func (p *Permission) Matches(action, object, scope string) bool {
 
 // GetRolesByPermissionLevel returns roles grouped by privilege level
 func (c *RoleConfig) GetRolesByPermissionLevel(level string) []*Role {
-	levels := make(map[string]int)
-	for _, role := range c.Roles {
-		levels[role.Name] = role.Level
+	switch level {
+	case "lower", "higher", "all":
+		// Return all roles — the execution loop filters by relative level
+		// (attacker.Level < victim.Level) to determine valid pairings
+		result := make([]*Role, len(c.Roles))
+		copy(result, c.Roles)
+		return result
+	case "none":
+		// "none" means no authenticated role (anonymous attacker) — return empty slice
+		return []*Role{}
+	default:
+		log.Warn("unrecognized permission level %q — returning no roles (check template for typos)", level)
+		return []*Role{}
 	}
-
-	median := calculateMedian(levels)
-
-	result := []*Role{}
-	for _, role := range c.Roles {
-		switch level {
-		case "lower":
-			if role.Level < median {
-				result = append(result, role)
-			}
-		case "higher":
-			if role.Level >= median {
-				result = append(result, role)
-			}
-		case "all":
-			result = append(result, role)
-		case "none":
-			// "none" means no authenticated role (anonymous attacker) — return empty slice
-		default:
-			log.Warn("unrecognized permission level %q — returning no roles (check template for typos)", level)
-		}
-	}
-
-	return result
-}
-
-func calculateMedian(counts map[string]int) int {
-	if len(counts) == 0 {
-		return 0
-	}
-
-	values := make([]int, 0, len(counts))
-	for _, count := range counts {
-		values = append(values, count)
-	}
-
-	sort.Ints(values)
-
-	n := len(values)
-	if n%2 == 0 {
-		return (values[n/2-1] + values[n/2]) / 2
-	}
-	return values[n/2]
 }
 
 func contains(slice []string, item string) bool {

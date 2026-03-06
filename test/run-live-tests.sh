@@ -74,7 +74,7 @@ DO_START=true
 
 # Track results per target using associative arrays
 declare -A STATUS FINDINGS DURATION
-for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic dvga grpc crapi; do
+for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie dvga grpc crapi; do
     STATUS["$_t"]="NOT_RUN"
     FINDINGS["$_t"]="0"
     DURATION["$_t"]="0"
@@ -281,8 +281,8 @@ mkdir -p "$OUTPUT_DIR"
 
 # ==== Test: vulnerable-api ====
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    # Test all three auth methods: bearer, api_key, basic
-    VULN_API_AUTH_METHODS="bearer api_key basic"
+    # Test all four auth methods: bearer, api_key, basic, cookie
+    VULN_API_AUTH_METHODS="bearer api_key basic cookie"
     VULN_API_SKIP_ALL=false
 
     for auth_method in $VULN_API_AUTH_METHODS; do
@@ -291,6 +291,7 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
             bearer)  target_suffix="bearer" ; auth_label="Bearer JWT" ;;
             api_key) target_suffix="apikey" ; auth_label="API Key" ;;
             basic)   target_suffix="basic"  ; auth_label="Basic Auth" ;;
+            cookie)  target_suffix="cookie" ; auth_label="Cookie Auth" ;;
         esac
 
         target_name="vulnerable-api-${target_suffix}"
@@ -391,6 +392,22 @@ roles:
   anonymous:
     username: ""
     password: ""
+EOF
+            )
+        elif [ "$auth_method" = "cookie" ]; then
+            log_info "Using cookie session IDs..."
+            (umask 077; cat > "$AUTH_FILE" <<EOF
+method: cookie
+cookie_name: session_id
+roles:
+  admin:
+    cookie: "admin-session-xyz789"
+  user1:
+    cookie: "user1-session-abc123"
+  user2:
+    cookie: "user2-session-def456"
+  anonymous:
+    cookie: ""
 EOF
             )
         fi
@@ -722,7 +739,7 @@ TOTAL_SKIP=0
 
 ALL_TARGETS=""
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic"
+    ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie"
 fi
 for extra in dvga grpc crapi; do
     if echo "$TARGETS" | grep -q "${extra}"; then

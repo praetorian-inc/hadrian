@@ -606,33 +606,37 @@ func buildRequest(
 		req.Header.Set(key, value)
 	}
 
-	// Add headers
+	// Add template-defined headers (skip auth placeholders).
+	// Auth is applied below from authInfo, so template headers containing
+	// auth placeholder values are skipped to avoid sending literal unsubstituted
+	// strings. Recognized placeholder values:
+	//   - "Bearer {{attacker_token}}" (legacy bearer auth placeholder)
+	//   - "{{attacker_token}}" (legacy generic auth placeholder)
+	// If new auth placeholder patterns are needed, add them here.
 	for key, value := range test.Headers {
-		if (value == "Bearer {{attacker_token}}" || value == "{{attacker_token}}") && authInfo != nil && authInfo.Value != "" {
-			// Handle authentication based on method
-			switch authInfo.Method {
-			case "bearer", "basic":
-				// Bearer and Basic both use Authorization header
-				req.Header.Set("Authorization", authInfo.Value)
-			case "api_key":
-				// API key auth: check location
-				if authInfo.Location == "header" {
-					// Set custom header (e.g., X-API-Key)
-					req.Header.Set(authInfo.KeyName, authInfo.Value)
-				} else if authInfo.Location == "query" {
-					// Add as query parameter
-					q := req.URL.Query()
-					q.Set(authInfo.KeyName, authInfo.Value)
-					req.URL.RawQuery = q.Encode()
-				}
-			case "cookie":
-				req.Header.Set("Cookie", authInfo.Value)
-			}
-		} else {
-			req.Header.Set(key, value)
+		if value == "Bearer {{attacker_token}}" || value == "{{attacker_token}}" {
+			continue
 		}
+		req.Header.Set(key, value)
 	}
 
+	// Apply authentication from auth config (independent of template headers)
+	if authInfo != nil && authInfo.Value != "" {
+		switch authInfo.Method {
+		case "bearer", "basic":
+			req.Header.Set("Authorization", authInfo.Value)
+		case "api_key":
+			if authInfo.Location == "header" {
+				req.Header.Set(authInfo.KeyName, authInfo.Value)
+			} else if authInfo.Location == "query" {
+				q := req.URL.Query()
+				q.Set(authInfo.KeyName, authInfo.Value)
+				req.URL.RawQuery = q.Encode()
+			}
+		case "cookie":
+			req.Header.Set("Cookie", authInfo.Value)
+		}
+	}
 	return req, nil
 }
 

@@ -29,7 +29,6 @@ http:
   - method: "{{operation.method}}"
     path: "{{operation.path}}"
     headers:
-      Authorization: "Bearer {{attacker_token}}"
       Content-Type: "application/json"
     body: '{"full_name": "Attacker Modified", "phone_number": "555-9999"}'
     matchers:

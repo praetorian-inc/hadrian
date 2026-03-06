@@ -73,6 +73,11 @@ func executeTemplate(
 		}
 
 		for _, victimRole := range victimRoles {
+			// Skip anonymous/unauthenticated victim roles - testing anonymous-vs-anonymous is meaningless
+			if victimRole != nil && victimRole.Level == 0 {
+				continue
+			}
+
 			variables := buildVariables(op, baseURL)
 
 			// Execute with nil auth (no authentication header)
@@ -135,6 +140,11 @@ func executeTemplate(
 				continue
 			}
 
+			// Skip if attacker has equal or higher privilege than victim
+			if victimRole != nil && attackerRole.Level >= victimRole.Level {
+				continue
+			}
+
 			// Build auth info for attacker
 			var authInfo *templates.AuthInfo
 			if authCfg != nil {
@@ -164,8 +174,12 @@ func executeTemplate(
 
 			// Check if vulnerability detected
 			if result.Matched {
+				victimName := "no-victim"
+				if victimRole != nil {
+					victimName = victimRole.Name
+				}
 				finding := &model.Finding{
-					ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), attackerRole.Name, victimName),
 					Category:        tmpl.Info.Category,
 					Name:            tmpl.Info.Name,
 					Severity:        model.Severity(tmpl.Info.Severity),
@@ -252,7 +266,7 @@ func executeMutationTemplate(
 
 			if result.Matched {
 				finding := &model.Finding{
-					ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), attackerRole.Name, victimRole.Name),
 					Category:        tmpl.Info.Category,
 					Name:            tmpl.Info.Name,
 					Severity:        model.Severity(tmpl.Info.Severity),

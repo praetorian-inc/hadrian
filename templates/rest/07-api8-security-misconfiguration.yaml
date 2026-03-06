@@ -28,7 +28,7 @@ info:
 # - Both authenticated and unauthenticated endpoints
 # - Any HTTP method
 endpoint_selector:
-  requires_auth: false
+  requires_auth: true
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
 
 # Role configuration:
@@ -42,7 +42,6 @@ http:
   - method: "{{operation.method}}"
     path: "{{operation.path}}"
     headers:
-      Authorization: "Bearer {{attacker_token}}"
       Content-Type: "application/json"
     body: |
       {
