@@ -115,8 +115,8 @@ func TestExecuteTemplate_UnauthenticatedEndpoint(t *testing.T) {
 		Path:   "/api/public",
 	}
 	rolesCfg := makeTestRolesConfig()
-	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -148,8 +148,8 @@ func TestExecuteTemplate_UnauthenticatedEndpoint_WithPathParams(t *testing.T) {
 		},
 	}
 	rolesCfg := makeTestRolesConfig()
-	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -179,8 +179,8 @@ func TestExecuteTemplate_UnauthenticatedEndpoint_PathParamDefaultValue(t *testin
 		},
 	}
 	rolesCfg := makeTestRolesConfig()
-	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -216,8 +216,8 @@ func TestExecuteTemplate_AuthenticatedEndpoint_SkipsSameRole(t *testing.T) {
 		"admin": "admin-token",
 	})
 
-	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -252,8 +252,8 @@ func TestExecuteTemplate_AuthenticatedEndpoint_NoVictimRole(t *testing.T) {
 		"admin": "admin-token",
 	})
 
-	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
 
 	findings, err := executeTemplate(
 		context.Background(),
@@ -288,8 +288,8 @@ func TestExecuteTemplate_AuthenticatedEndpoint_RoleNotConfigured(t *testing.T) {
 		// admin has no token
 	})
 
-	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
 
 	// Should not error - roles without auth are skipped
 	findings, err := executeTemplate(
@@ -319,8 +319,8 @@ func TestExecuteTemplate_NilAuthConfig(t *testing.T) {
 	}
 	rolesCfg := makeTestRolesConfig()
 
-	executor := templates.NewExecutor(server.Client())
-	mutationExecutor := orchestrator.NewMutationExecutor(server.Client())
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
 
 	// With nil auth config, auth info will be nil for all roles
 	findings, err := executeTemplate(

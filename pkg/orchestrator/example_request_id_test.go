@@ -75,7 +75,7 @@ func Example_requestIDTracking() {
 	}
 
 	// Execute the test
-	executor := orchestrator.NewMutationExecutor(http.DefaultClient)
+	executor := orchestrator.NewMutationExecutor(http.DefaultClient, nil)
 	authInfos := map[string]*auth.AuthInfo{
 		"attacker": {Method: "bearer", Value: "Bearer attacker-token"},
 		"victim":   {Method: "bearer", Value: "Bearer victim-token"},

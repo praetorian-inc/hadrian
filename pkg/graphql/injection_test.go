@@ -51,7 +51,7 @@ func TestGraphQLInjection_SecurityScanner_CheckBOLA(t *testing.T) {
 			"attacker": {Method: "bearer", Value: "attacker-token"},
 		}
 
-		executor := NewExecutor(http.DefaultClient, server.URL)
+		executor := NewExecutor(http.DefaultClient, server.URL, nil)
 		scanner := NewSecurityScanner(schema, executor, ScanConfig{})
 
 		ctx := context.Background()

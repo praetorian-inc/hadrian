@@ -28,7 +28,7 @@ func TestExecutor_Execute(t *testing.T) {
 	}))
 	defer server.Close()
 
-	executor := NewExecutor(http.DefaultClient, server.URL)
+	executor := NewExecutor(http.DefaultClient, server.URL, nil)
 	result, err := executor.Execute(
 		context.Background(),
 		"{ user(id: 1) { id name } }",
@@ -52,7 +52,7 @@ func TestExecutor_WithAuth(t *testing.T) {
 	}))
 	defer server.Close()
 
-	executor := NewExecutor(http.DefaultClient, server.URL)
+	executor := NewExecutor(http.DefaultClient, server.URL, nil)
 	_, err := executor.Execute(
 		context.Background(),
 		"{ hello }",
@@ -75,7 +75,7 @@ func TestExecutor_ErrorHandling(t *testing.T) {
 	}))
 	defer server.Close()
 
-	executor := NewExecutor(http.DefaultClient, server.URL)
+	executor := NewExecutor(http.DefaultClient, server.URL, nil)
 	result, err := executor.Execute(
 		context.Background(),
 		"{ unknownField }",
@@ -128,7 +128,7 @@ func TestExecutor_ResponseSizeLimit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	executor := NewExecutor(http.DefaultClient, server.URL)
+	executor := NewExecutor(http.DefaultClient, server.URL, nil)
 	_, err := executor.Execute(
 		context.Background(),
 		"{ test }",

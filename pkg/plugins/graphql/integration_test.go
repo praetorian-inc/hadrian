@@ -38,7 +38,7 @@ func TestIntegration_QueryExecution(t *testing.T) {
 		t.Skip("DVGA_ENDPOINT not set, skipping integration test")
 	}
 
-	executor := graphql.NewExecutor(http.DefaultClient, endpoint)
+	executor := graphql.NewExecutor(http.DefaultClient, endpoint, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -59,7 +59,7 @@ func TestIntegration_AuthenticatedRequest(t *testing.T) {
 		t.Skip("DVGA_ADMIN_TOKEN not set, skipping authenticated test")
 	}
 
-	executor := graphql.NewExecutor(http.DefaultClient, endpoint)
+	executor := graphql.NewExecutor(http.DefaultClient, endpoint, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

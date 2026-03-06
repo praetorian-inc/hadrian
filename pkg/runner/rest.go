@@ -42,11 +42,12 @@ type Config struct {
 	AuditLog             string
 	Verbose              bool
 	DryRun               bool
-	RequestIDsLimit      int    // Number of request IDs to display per finding (0 = all)
-	LLMHost              string // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel             string // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout           int    // LLM request timeout in seconds
-	LLMContext           string // Additional context for LLM prompts
+	RequestIDsLimit      int      // Number of request IDs to display per finding (0 = all)
+	LLMHost              string   // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel             string   // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout           int      // LLM request timeout in seconds
+	LLMContext           string   // Additional context for LLM prompts
+	Headers              []string // Custom HTTP headers (format: "Key: Value")
 }
 
 // newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
@@ -96,6 +97,9 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 180, "LLM request timeout in seconds")
 	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM analysis (e.g., 'This API handles financial data')")
 
+	// Custom headers
+	cmd.Flags().StringArrayVarP(&config.Headers, "header", "H", []string{}, "Custom HTTP header (format: 'Key: Value', can specify multiple)")
+
 	return cmd
 }
 
@@ -109,6 +113,12 @@ func runTest(ctx context.Context, config Config) error {
 	// 1. Validate configuration
 	if err := config.Validate(); err != nil {
 		return fmt.Errorf("configuration error: %w", err)
+	}
+
+	// Parse custom headers
+	customHeaders, err := ParseCustomHeaders(config.Headers)
+	if err != nil {
+		return fmt.Errorf("invalid custom header: %w", err)
 	}
 
 	// 2. Parse API specification
@@ -188,11 +198,34 @@ func runTest(ctx context.Context, config Config) error {
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
 	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
 
+	// Dry-run: print what would be tested and exit before any HTTP execution
+	if config.DryRun {
+		testCount := 0
+		opCount := 0
+		for _, op := range spec.Operations {
+			opMatched := false
+			for _, tmpl := range tmplFiles {
+				if !templateApplies(tmpl, op) {
+					continue
+				}
+				fmt.Printf("[DRY-RUN] Would test %s %s with %s\n", op.Method, op.Path, tmpl.ID)
+				testCount++
+				opMatched = true
+			}
+			if opMatched {
+				opCount++
+			}
+		}
+		fmt.Printf("[DRY-RUN] Total: %d tests across %d operations and %d templates\n", testCount, opCount, len(tmplFiles))
+		fmt.Println("[DRY-RUN] Dry run complete - no requests were sent")
+		return nil
+	}
+
 	// 9. Create template executor with rate-limiting client
-	executor := templates.NewExecutor(rateLimitingClient)
+	executor := templates.NewExecutor(rateLimitingClient, customHeaders)
 
 	// 10. Create mutation executor for mutation templates with rate-limiting client
-	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient)
+	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)
 
 	// 11. Run tests for each operation
 	var allFindings []*model.Finding
@@ -222,12 +255,12 @@ func runTest(ctx context.Context, config Config) error {
 		}
 	}
 
-	// 11. Optional LLM triage
+	// 12. Optional LLM triage
 	if hasLLMConfig() || config.LLMHost != "" {
 		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
 	}
 
-	// 12. Generate final report
+	// 13. Generate final report
 	log.Debug("Generating final report with %d findings", len(allFindings))
 	stats := calculateStats(allFindings, startTime)
 	stats.OperationCount = len(spec.Operations)

@@ -66,10 +66,11 @@ type GraphQLConfig struct {
 	SkipBuiltinChecks bool     // Skip built-in security checks (introspection, depth limit, batching)
 
 	// LLM triage (optional)
-	LLMHost    string // LLM service host
-	LLMModel   string // LLM model name
-	LLMTimeout int    // LLM request timeout (seconds)
-	LLMContext string // Additional context for LLM
+	LLMHost    string   // LLM service host
+	LLMModel   string   // LLM model name
+	LLMTimeout int      // LLM request timeout (seconds)
+	LLMContext string   // Additional context for LLM
+	Headers    []string // Custom HTTP headers (format: "Key: Value")
 }
 
 // newTestGraphQLCmd creates the "test graphql" subcommand
@@ -135,6 +136,9 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 30, "LLM request timeout (seconds)")
 	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM triage")
 
+	// Custom headers
+	cmd.Flags().StringArrayVarP(&config.Headers, "header", "H", []string{}, "Custom HTTP header (format: 'Key: Value', can specify multiple)")
+
 	return cmd
 }
 
@@ -191,6 +195,12 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 		return err
 	}
 
+	// Parse custom headers
+	customHeaders, err := ParseCustomHeaders(config.Headers)
+	if err != nil {
+		return fmt.Errorf("invalid custom header: %w", err)
+	}
+
 	// Create HTTP client with proxy, TLS, timeout (shared infrastructure)
 	httpClient, err := createGraphQLHTTPClient(config)
 	if err != nil {
@@ -201,7 +211,7 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	rateLimitedClient := wrapWithRateLimiting(httpClient, config)
 
 	// Get schema
-	schema, err := fetchSchema(ctx, config, rateLimitedClient)
+	schema, err := fetchSchema(ctx, config, rateLimitedClient, customHeaders)
 	if err != nil {
 		return err
 	}
@@ -233,7 +243,7 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint
-	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter)
+	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders)
 
 	// Only report findings if not already reported via callback (non-verbose mode)
 	if config.Output == "terminal" && config.LLMHost == "" && !config.Verbose {

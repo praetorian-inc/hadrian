@@ -32,12 +32,13 @@ const MaxGRPCResponseBodySize = 10 * 1024 * 1024
 
 // GRPCExecutor handles gRPC test execution
 type GRPCExecutor struct {
-	conn        *grpc.ClientConn
-	target      string
-	plaintext   bool
-	insecure    bool
-	timeout     time.Duration
-	rateLimiter *rate.Limiter
+	conn          *grpc.ClientConn
+	target        string
+	plaintext     bool
+	insecure      bool
+	timeout       time.Duration
+	rateLimiter   *rate.Limiter
+	customHeaders map[string]string
 }
 
 // GRPCExecutorConfig holds configuration for the gRPC executor
@@ -102,6 +103,11 @@ func NewGRPCExecutor(config GRPCExecutorConfig) (*GRPCExecutor, error) {
 		timeout:     timeout,
 		rateLimiter: rateLimiter,
 	}, nil
+}
+
+// SetCustomHeaders sets custom metadata headers for all gRPC requests
+func (e *GRPCExecutor) SetCustomHeaders(headers map[string]string) {
+	e.customHeaders = headers
 }
 
 // Close closes the gRPC connection
@@ -192,6 +198,11 @@ func (e *GRPCExecutor) executeGRPCTest(
 
 	// Build request metadata
 	md := metadata.New(nil)
+
+	// Add custom headers as metadata first (auth metadata takes precedence)
+	for key, value := range e.customHeaders {
+		md.Set(strings.ToLower(key), value)
+	}
 
 	// Add auth metadata
 	if authInfo != nil {

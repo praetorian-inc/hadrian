@@ -22,7 +22,7 @@ func TestAPIKeyAuth_UsesCustomHeader(t *testing.T) {
 		},
 	}
 
-	executor := NewMutationExecutor(mockClient)
+	executor := NewMutationExecutor(mockClient, nil)
 
 	// Create auth infos with API Key using custom header
 	authInfos := map[string]*auth.AuthInfo{
@@ -78,7 +78,7 @@ func TestAPIKeyAuth_InQueryParameter(t *testing.T) {
 		},
 	}
 
-	executor := NewMutationExecutor(mockClient)
+	executor := NewMutationExecutor(mockClient, nil)
 
 	// Create auth infos with API Key using query parameter
 	authInfos := map[string]*auth.AuthInfo{
@@ -136,7 +136,7 @@ func TestBearerAuth_StillUsesAuthorizationHeader(t *testing.T) {
 		},
 	}
 
-	executor := NewMutationExecutor(mockClient)
+	executor := NewMutationExecutor(mockClient, nil)
 
 	// Create auth infos with Bearer token
 	authInfos := map[string]*auth.AuthInfo{
@@ -188,7 +188,7 @@ func TestBasicAuth_StillUsesAuthorizationHeader(t *testing.T) {
 		},
 	}
 
-	executor := NewMutationExecutor(mockClient)
+	executor := NewMutationExecutor(mockClient, nil)
 
 	// Create auth infos with Basic auth
 	authInfos := map[string]*auth.AuthInfo{
