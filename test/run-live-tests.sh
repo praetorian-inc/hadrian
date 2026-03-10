@@ -52,7 +52,7 @@ if [ -f "$CONFIG_FILE" ]; then
 fi
 
 # Target ports (env vars > config file > defaults)
-VULN_API_PORT="${VULN_API_PORT:-8080}"
+VULN_API_PORT="${VULN_API_PORT:-8889}"
 DVGA_PORT="${DVGA_PORT:-5013}"
 GRPC_PORT="${GRPC_PORT:-50051}"
 CRAPI_PORT="${CRAPI_PORT:-8888}"

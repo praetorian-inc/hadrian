@@ -770,7 +770,7 @@ func main() {
 	// Load configuration
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8889"
 	}
 
 	authMethodEnv := os.Getenv("AUTH_METHOD")

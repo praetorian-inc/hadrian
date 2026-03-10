@@ -24,7 +24,7 @@ set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-API_PORT="${API_PORT:-8080}"
+API_PORT="${API_PORT:-8889}"
 API_URL="http://localhost:${API_PORT}"
 HADRIAN_BIN="${HADRIAN_BIN:-hadrian}"
 TEMPLATES_DIR="${SCRIPT_DIR}/templates/owasp"

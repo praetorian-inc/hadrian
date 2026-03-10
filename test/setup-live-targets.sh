@@ -25,7 +25,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
 # Default ports
-VULN_API_PORT=8080
+VULN_API_PORT=8889
 DVGA_PORT=5013
 GRPC_PORT=50051
 CRAPI_PORT=8888
@@ -178,9 +178,9 @@ fi
 log_header "Resolving Ports"
 
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    VULN_API_PORT=$(find_available_port 8080)
+    VULN_API_PORT=$(find_available_port 8889)
     if [ -z "$VULN_API_PORT" ]; then
-        log_fail "No available port near 8080 for vulnerable-api"
+        log_fail "No available port near 8889 for vulnerable-api"
         exit 1
     fi
     log_ok "vulnerable-api -> port $VULN_API_PORT"
