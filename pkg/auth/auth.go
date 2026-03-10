@@ -12,6 +12,9 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DefaultCookieName is the default cookie name used when cookie_name is not specified.
+const DefaultCookieName = "session"
+
 // AuthConfig represents auth.yaml configuration
 type AuthConfig struct {
 	Method string               `yaml:"method"` // bearer, api_key, basic, cookie
@@ -40,9 +43,10 @@ type RoleAuth struct {
 	Username string `yaml:"username,omitempty"`
 	Password string `yaml:"password,omitempty"`
 
-	// Credentials is a raw string that gets base64-encoded for Basic auth,
-	// bypassing the username:password format. Use credentials: "" to send
-	// "Basic " with empty base64.
+	// Credentials is a raw, pre-combined string (not pre-encoded) that gets
+	// base64-encoded for Basic auth, bypassing the username:password format.
+	// For example, credentials: "admin:secret" sends the same as username/password,
+	// while credentials: "" sends "Authorization: Basic " with empty base64.
 	Credentials *string `yaml:"credentials,omitempty"`
 
 	// Cookie
@@ -73,14 +77,16 @@ func Load(filePath string) (*AuthConfig, error) {
 	}
 
 	// Expand environment variables (CR-3)
+	// Only expand values that look like env var references (contain ${...})
+	// to avoid corrupting values that contain literal $ characters
 	for roleName, roleAuth := range config.Roles {
-		roleAuth.Token = os.ExpandEnv(roleAuth.Token)
-		roleAuth.APIKey = os.ExpandEnv(roleAuth.APIKey)
-		roleAuth.Username = os.ExpandEnv(roleAuth.Username)
-		roleAuth.Password = os.ExpandEnv(roleAuth.Password)
-		roleAuth.Cookie = os.ExpandEnv(roleAuth.Cookie)
+		roleAuth.Token = expandEnvSafe(roleAuth.Token)
+		roleAuth.APIKey = expandEnvSafe(roleAuth.APIKey)
+		roleAuth.Username = expandEnvSafe(roleAuth.Username)
+		roleAuth.Password = expandEnvSafe(roleAuth.Password)
+		roleAuth.Cookie = expandEnvSafe(roleAuth.Cookie)
 		if roleAuth.Credentials != nil {
-			expanded := os.ExpandEnv(*roleAuth.Credentials)
+			expanded := expandEnvSafe(*roleAuth.Credentials)
 			roleAuth.Credentials = &expanded
 		}
 
@@ -94,6 +100,9 @@ func Load(filePath string) (*AuthConfig, error) {
 		if detectHardcodedSecret(roleAuth.Cookie) {
 			log.Warn("SECURITY: Role '%s' has hardcoded cookie. Use environment variables: ${COOKIE_VAR}", roleName)
 		}
+		if roleAuth.Credentials != nil && detectHardcodedSecret(*roleAuth.Credentials) {
+			log.Warn("SECURITY: Role '%s' has hardcoded credentials. Use environment variables: ${CREDS_VAR}", roleName)
+		}
 
 		// Info about empty credentials — requests will be sent without authentication
 		if roleAuth.NoAuth {
@@ -104,6 +113,15 @@ func Load(filePath string) (*AuthConfig, error) {
 	}
 
 	return &config, nil
+}
+
+// expandEnvSafe only expands environment variables in strings containing ${...} references.
+// Plain values with literal $ characters (e.g., passwords like "pa$$word") are returned unchanged.
+func expandEnvSafe(value string) string {
+	if strings.Contains(value, "${") {
+		return os.ExpandEnv(value)
+	}
+	return value
 }
 
 // detectHardcodedSecret identifies JWT, API keys, etc. (CR-3)
@@ -166,7 +184,7 @@ func (c *AuthConfig) GetAuth(roleName string) (string, error) {
 	case "cookie":
 		cookieName := c.CookieName
 		if cookieName == "" {
-			cookieName = "session"
+			cookieName = DefaultCookieName
 		}
 		return cookieName + "=" + roleAuth.Cookie, nil
 
@@ -209,7 +227,7 @@ func (c *AuthConfig) GetAuthInfo(roleName string) (*AuthInfo, error) {
 	case "cookie":
 		cookieName := c.CookieName
 		if cookieName == "" {
-			cookieName = "session"
+			cookieName = DefaultCookieName
 		}
 		info.KeyName = cookieName
 		info.Value = cookieName + "=" + role.Cookie

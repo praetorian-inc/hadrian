@@ -57,6 +57,12 @@ DVGA_PORT="${DVGA_PORT:-5013}"
 GRPC_PORT="${GRPC_PORT:-50051}"
 CRAPI_PORT="${CRAPI_PORT:-8888}"
 
+# Require Bash 4+ for associative arrays
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "ERROR: This script requires Bash 4+ (found ${BASH_VERSION}). On macOS: brew install bash" >&2
+    exit 1
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'

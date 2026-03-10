@@ -587,7 +587,7 @@ func makeTestCookieAuthConfig(roleCookies map[string]string) *auth.AuthConfig {
 	}
 }
 
-func TestExecuteTemplate_ThreeRoles_AnonymousSendsRequests(t *testing.T) {
+func TestExecuteTemplate_ThreeRoles_SkipsLevelZeroAttacker(t *testing.T) {
 	var mu sync.Mutex
 	receivedCookies := make([]string, 0)
 
@@ -624,35 +624,88 @@ func TestExecuteTemplate_ThreeRoles_AnonymousSendsRequests(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Expect 3 role combos: monitoring→admin, anonymous→admin, anonymous→monitoring
-	assert.Len(t, receivedCookies, 3, "should send 3 requests")
+	// Level-0 anonymous is skipped as BOLA attacker (tested via "none" templates).
+	// Only monitoring(50)→administrator(100) pairing should execute.
+	assert.Len(t, receivedCookies, 1, "should send 1 request (level-0 attackers skipped)")
 
-	anonymousCookieCount := 0
 	monitoringCookieCount := 0
 	for _, c := range receivedCookies {
-		if c == "JSESSIONID=d" {
-			anonymousCookieCount++
-		} else if c == "JSESSIONID=MONITORING_COOKIE" {
+		if c == "JSESSIONID=MONITORING_COOKIE" {
 			monitoringCookieCount++
 		}
 	}
 	assert.Equal(t, 1, monitoringCookieCount, "monitoring should send 1 request")
-	assert.Equal(t, 2, anonymousCookieCount, "anonymous should send 2 requests")
 
 	attackerRoles := make(map[string]int)
 	for _, f := range findings {
 		attackerRoles[f.AttackerRole]++
 	}
-	assert.Contains(t, attackerRoles, "anonymous")
+	assert.NotContains(t, attackerRoles, "anonymous", "level-0 anonymous should not appear as BOLA attacker")
 	assert.Contains(t, attackerRoles, "monitoring")
 }
 
-func TestExecuteTemplate_FailedRoleDoesNotAbortRemaining(t *testing.T) {
-	// Server closes connection for monitoring cookie but succeeds for anonymous.
-	// Before the fix, the monitoring failure caused `return nil, err` which aborted
-	// anonymous testing and discarded all findings.
+func TestExecuteTemplate_ThreeAuthenticatedRoles_AllPairingsExecute(t *testing.T) {
+	var mu sync.Mutex
+	receivedCookies := make([]string, 0)
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Cookie") == "JSESSIONID=MONITORING_COOKIE" {
+		mu.Lock()
+		receivedCookies = append(receivedCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"data": "test"}`))
+	}))
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("bola-test", true, []string{"GET"}, "lower", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users/{id}",
+		RequiresAuth: true,
+		PathParams:   []model.Parameter{{Name: "id", Example: "42"}},
+	}
+	// All roles have non-zero levels — all are authenticated
+	rolesCfg := &roles.RoleConfig{
+		Roles: []*roles.Role{
+			{Name: "admin", Level: 100},
+			{Name: "manager", Level: 50},
+			{Name: "viewer", Level: 10},
+		},
+	}
+	authCfg := makeTestCookieAuthConfig(map[string]string{
+		"admin":   "ADMIN_COOKIE",
+		"manager": "MANAGER_COOKIE",
+		"viewer":  "VIEWER_COOKIE",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(), executor, mutationExecutor,
+		tmpl, op, rolesCfg, authCfg, server.URL,
+	)
+
+	require.NoError(t, err)
+
+	// Expect 3 pairings: viewer→manager, viewer→admin, manager→admin
+	assert.Len(t, receivedCookies, 3, "should send 3 requests")
+	assert.Len(t, findings, 3, "should produce 3 findings")
+
+	attackerRoles := make(map[string]int)
+	for _, f := range findings {
+		attackerRoles[f.AttackerRole]++
+	}
+	assert.Equal(t, 2, attackerRoles["viewer"], "viewer attacks manager and admin")
+	assert.Equal(t, 1, attackerRoles["manager"], "manager attacks admin")
+}
+
+func TestExecuteTemplate_FailedRoleDoesNotAbortRemaining(t *testing.T) {
+	// Server closes connection for manager cookie but succeeds for viewer.
+	// Before the fix, the manager failure caused `return nil, err` which aborted
+	// viewer testing and discarded all findings.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Cookie") == "JSESSIONID=MANAGER_COOKIE" {
 			hj, ok := w.(http.Hijacker)
 			if ok {
 				conn, _, _ := hj.Hijack()
@@ -672,11 +725,17 @@ func TestExecuteTemplate_FailedRoleDoesNotAbortRemaining(t *testing.T) {
 		RequiresAuth: true,
 		PathParams:   []model.Parameter{{Name: "id", Example: "42"}},
 	}
-	rolesCfg := makeThreeRoleConfig()
+	rolesCfg := &roles.RoleConfig{
+		Roles: []*roles.Role{
+			{Name: "admin", Level: 100},
+			{Name: "manager", Level: 50},
+			{Name: "viewer", Level: 10},
+		},
+	}
 	authCfg := makeTestCookieAuthConfig(map[string]string{
-		"administrator": "ADMIN_COOKIE",
-		"monitoring":    "MONITORING_COOKIE",
-		"anonymous":     "d",
+		"admin":   "ADMIN_COOKIE",
+		"manager": "MANAGER_COOKIE",
+		"viewer":  "VIEWER_COOKIE",
 	})
 
 	executor := templates.NewExecutor(server.Client(), nil)
@@ -690,18 +749,18 @@ func TestExecuteTemplate_FailedRoleDoesNotAbortRemaining(t *testing.T) {
 	// Should not return error — failed role is logged and skipped
 	require.NoError(t, err)
 
-	// Anonymous findings should still exist despite monitoring failure
-	anonymousFindings := 0
+	// Viewer findings should still exist despite manager failure
+	viewerFindings := 0
 	for _, f := range findings {
-		if f.AttackerRole == "anonymous" {
-			anonymousFindings++
+		if f.AttackerRole == "viewer" {
+			viewerFindings++
 		}
 	}
-	assert.Equal(t, 2, anonymousFindings, "anonymous should produce 2 findings (vs admin and vs monitoring)")
+	assert.Equal(t, 2, viewerFindings, "viewer should produce 2 findings (vs admin and vs manager)")
 
-	// Monitoring findings should be absent (its request failed)
+	// Manager findings should be absent (its request failed)
 	for _, f := range findings {
-		assert.NotEqual(t, "monitoring", f.AttackerRole, "monitoring should have no findings (request failed)")
+		assert.NotEqual(t, "manager", f.AttackerRole, "manager should have no findings (request failed)")
 	}
 }
 

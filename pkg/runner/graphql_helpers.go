@@ -10,6 +10,7 @@ import (
 	"time"
 
 	internalhttp "github.com/praetorian-inc/hadrian/internal/http"
+	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -142,6 +143,12 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 	authConfigs := make(map[string]*graphql.AuthInfo)
 
 	for role, roleAuth := range authConfig.Roles {
+		// Handle no_auth roles — send requests without authentication
+		if roleAuth.NoAuth {
+			authConfigs[role] = nil
+			continue
+		}
+
 		// Determine auth value based on method and validate required fields
 		var authValue string
 		switch authConfig.Method {
@@ -158,11 +165,14 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 			authValue = roleAuth.APIKey
 
 		case "basic":
-			if roleAuth.Username == "" || roleAuth.Password == "" {
-				return nil, fmt.Errorf("role %s: basic auth requires 'username' and 'password' fields", role)
+			if roleAuth.Credentials != nil {
+				authValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(*roleAuth.Credentials))
+			} else {
+				if roleAuth.Username == "" || roleAuth.Password == "" {
+					return nil, fmt.Errorf("role %s: basic auth requires 'username' and 'password' fields (or 'credentials')", role)
+				}
+				authValue = "Basic " + base64.StdEncoding.EncodeToString([]byte(roleAuth.Username+":"+roleAuth.Password))
 			}
-			// Encode username:password for Basic auth
-			authValue = base64.StdEncoding.EncodeToString([]byte(roleAuth.Username + ":" + roleAuth.Password))
 
 		case "cookie":
 			if roleAuth.Cookie == "" {
@@ -170,7 +180,7 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 			}
 			cookieName := authConfig.CookieName
 			if cookieName == "" {
-				cookieName = "session"
+				cookieName = auth.DefaultCookieName
 			}
 			authValue = cookieName + "=" + roleAuth.Cookie
 

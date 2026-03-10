@@ -83,6 +83,8 @@ roles:
 | `api_key` | Custom header or query param | `api_key`, `location`, `key_name` | `X-API-Key: <key>` |
 | `cookie` | Cookie-based auth | `cookie`, `cookie_name` | `Cookie: session=<value>` |
 
+> **Note:** Cookie auth sends the raw `Cookie` header as `<cookie_name>=<value>`. The value is sent as-is without encoding — ensure it matches the exact session cookie format expected by the target API.
+
 ### No Authentication Header
 
 Use `no_auth: true` on a role to send requests without any authentication header. This works with any auth method:
