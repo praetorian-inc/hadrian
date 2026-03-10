@@ -291,6 +291,15 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
     VULN_API_AUTH_METHODS="bearer api_key basic cookie"
     VULN_API_SKIP_ALL=false
 
+    # If using a non-default port, patch the OpenAPI spec's server URL
+    VULN_API_SPEC="${SCRIPT_DIR}/vulnerable-api/openapi.yaml"
+    if [ "$VULN_API_PORT" != "8889" ]; then
+        VULN_API_SPEC="${OUTPUT_DIR}/vulnerable-api-openapi.yaml"
+        sed "s|http://localhost:8889|http://localhost:${VULN_API_PORT}|g" \
+            "${SCRIPT_DIR}/vulnerable-api/openapi.yaml" > "$VULN_API_SPEC"
+        log_info "Patched OpenAPI spec to use port $VULN_API_PORT"
+    fi
+
     for auth_method in $VULN_API_AUTH_METHODS; do
         # Map auth_method to target name suffix (api_key -> apikey for variable names)
         case "$auth_method" in
@@ -430,7 +439,7 @@ EOF
 
         RESULT_FILE="${OUTPUT_DIR}/vulnerable-api-${target_suffix}-results.json"
         run_hadrian "$target_name" test rest \
-            --api "${SCRIPT_DIR}/vulnerable-api/openapi.yaml" \
+            --api "$VULN_API_SPEC" \
             --roles "${SCRIPT_DIR}/vulnerable-api/roles.yaml" \
             --auth "$AUTH_FILE" \
             --template-dir "${SCRIPT_DIR}/vulnerable-api/templates/owasp" \
