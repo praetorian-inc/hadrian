@@ -27,6 +27,9 @@ role_selector:
 http:
   - method: "{{operation.method}}"
     path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200, 201]
 
 detection:
   success_indicators:
