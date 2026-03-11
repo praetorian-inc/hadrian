@@ -33,23 +33,18 @@ You should receive a JSON response with GraphQL type names.
 
 ### 3. Create Test Users
 
-Create accounts for authentication testing:
+DVGA ships with two default users: `admin` (password: `changeme`) and `operator` (password: `password123`). Create additional users for BOLA testing:
 
 ```bash
-# Create admin user
-curl -X POST http://localhost:5013/graphql \
-  -H "Content-Type: application/json" \
-  -d '{"query": "mutation { createUser(username: \"admin\", password: \"admin123\") { username } }"}'
-
 # Create regular user
 curl -X POST http://localhost:5013/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query": "mutation { createUser(username: \"user1\", password: \"user123\") { username } }"}'
+  -d '{"query": "mutation { createUser(userData: {username: \"user1\", email: \"user1@test.com\", password: \"user123\"}) { user { username } } }"}'
 
 # Create second user (for BOLA testing)
 curl -X POST http://localhost:5013/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query": "mutation { createUser(username: \"user2\", password: \"user456\") { username } }"}'
+  -d '{"query": "mutation { createUser(userData: {username: \"user2\", email: \"user2@test.com\", password: \"user456\"}) { user { username } } }"}'
 ```
 
 ### 4. Get JWT Tokens
@@ -57,10 +52,10 @@ curl -X POST http://localhost:5013/graphql \
 Login with each user to get JWT tokens:
 
 ```bash
-# Get admin token
+# Get admin token (default password: changeme)
 curl -X POST http://localhost:5013/graphql \
   -H "Content-Type: application/json" \
-  -d '{"query": "mutation { login(username: \"admin\", password: \"admin123\") { accessToken } }"}' | jq -r '.data.login.accessToken'
+  -d '{"query": "mutation { login(username: \"admin\", password: \"changeme\") { accessToken } }"}' | jq -r '.data.login.accessToken'
 
 # Get user1 token
 curl -X POST http://localhost:5013/graphql \
