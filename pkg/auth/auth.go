@@ -163,8 +163,8 @@ func expandEnvSafe(value string) string {
 // Pre-compiled patterns for hardcoded secret detection (CR-3)
 var hardcodedSecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$`), // JWT
-	regexp.MustCompile(`^sk-[A-Za-z0-9]{32,}$`),                                   // OpenAI API key
-	regexp.MustCompile(`^[A-Za-z0-9]{40,}$`),                                      // Generic long key
+	regexp.MustCompile(`^sk-[A-Za-z0-9]{32,}$`),                                  // OpenAI API key
+	regexp.MustCompile(`^[A-Za-z0-9]{40,}$`),                                     // Generic long key
 }
 
 // detectHardcodedSecret identifies JWT, API keys, etc. (CR-3)
