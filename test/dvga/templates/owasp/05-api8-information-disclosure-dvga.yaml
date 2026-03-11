@@ -25,7 +25,18 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["systemHealth"]
+        words: ["System Load"]
+        part: body
+
+  - query: |
+      query SystemUpdateDisclosure {
+        systemUpdate
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["systemUpdate"]
         part: body
 
   - query: |
@@ -40,16 +51,16 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["systemDebug", "systemHealth"]
+        words: ["systemDebug", "systemDiagnostics"]
         part: body
 
 detection:
   success_indicators:
-    - type: status_code
-      status_code: 200
     - type: body_field
-      body_field: "data"
+      body_field: "data.systemHealth"
       exists: true
+    - type: regex_match
+      pattern: "(System Load|systemDebug|systemDiagnostics)"
     - type: body_field
       body_field: "errors"
       exists: false

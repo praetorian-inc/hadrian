@@ -44,11 +44,12 @@ graphql:
         }
       }
     auth: "victim"
-    store_response_fields:
-      original_id: "data.paste.id"
     matchers:
       - type: status
         status: [200]
+      - type: word
+        words: ["ownerId"]
+        part: body
 
   # Phase 2: Attack - attacker performs unauthorized deletion
   - query: |
@@ -62,7 +63,7 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["result"]
+        words: ["deletePaste"]
         part: body
 
   # Phase 3: Verify - resource was deleted (returns null)
@@ -79,11 +80,12 @@ graphql:
     matchers:
       - type: status
         status: [200]
+      - type: word
+        words: ["null"]
+        part: body
 
 detection:
   success_indicators:
-    - type: status_code
-      status_code: 200
     - type: body_field
       body_field: "data.paste"
       value: null

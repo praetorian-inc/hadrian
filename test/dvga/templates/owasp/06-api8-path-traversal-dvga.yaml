@@ -19,69 +19,36 @@ role_selector:
 graphql:
   - query: |
       mutation PathTraversalBasic {
-        uploadPaste(content: "malicious content", filename: "../../../tmp/evil.txt") {
+        uploadPaste(content: "hadrian-traversal-test", filename: "../../../tmp/evil.txt") {
           result
-          filename
         }
       }
     matchers:
       - type: status
         status: [200]
       - type: word
-        words: ["uploadPaste", "result"]
-        part: body
-
-  - query: |
-      mutation PathTraversalEncoded {
-        uploadPaste(content: "test payload", filename: "..%2f..%2f..%2ftmp%2ftest.txt") {
-          result
-          filename
-        }
-      }
-    matchers:
-      - type: status
-        status: [200]
-      - type: word
-        words: ["data"]
+        words: ["hadrian-traversal-test"]
         part: body
 
   - query: |
       mutation PathTraversalAbsolute {
-        uploadPaste(content: "pwned", filename: "/tmp/pwned.txt") {
+        uploadPaste(content: "hadrian-absolute-test", filename: "/tmp/pwned.txt") {
           result
-          filename
         }
       }
     matchers:
       - type: status
         status: [200]
       - type: word
-        words: ["uploadPaste"]
+        words: ["hadrian-absolute-test"]
         part: body
-
-  - query: |
-      mutation PathTraversalDoubleEncoded {
-        uploadPaste(content: "double encoded", filename: "..%252f..%252ftmp%252fmalicious.txt") {
-          result
-          filename
-        }
-      }
-    matchers:
-      - type: status
-        status: [200, 400]
-      - type: word
-        words: ["data", "errors"]
-        part: body
-        condition: or
 
 detection:
   success_indicators:
-    - type: status_code
-      status_code: 200
-    - type: body_field
-      body_field: "data.uploadPaste"
-      exists: true
     - type: body_field
       body_field: "data.uploadPaste.result"
       exists: true
+    - type: body_field
+      body_field: "errors"
+      exists: false
   vulnerability_pattern: "dvga_path_traversal_uploadpaste"

