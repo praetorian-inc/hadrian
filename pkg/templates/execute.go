@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
@@ -55,10 +56,17 @@ type AuthInfo struct {
 	Value    string // The actual auth value (token, API key, or Basic credentials)
 }
 
-// Executor runs compiled templates against operations
+// Executor runs compiled templates against operations.
+//
+// Concurrency: Individual field accesses to requestIDs are mutex-protected,
+// but Execute/ExecuteGraphQL must NOT be called concurrently on the same
+// Executor instance — each call resets requestIDs at the start, so concurrent
+// calls would interleave or lose each other's IDs. Use separate Executor
+// instances for concurrent execution.
 type Executor struct {
 	httpClient    HTTPClient
 	cache         *Cache
+	mu            sync.Mutex
 	requestIDs    []string
 	customHeaders map[string]string
 }
@@ -81,7 +89,9 @@ func (e *Executor) Execute(
 	variables map[string]string,
 ) (*ExecutionResult, error) {
 	// Clear request IDs for this execution
+	e.mu.Lock()
 	e.requestIDs = make([]string, 0)
+	e.mu.Unlock()
 
 	result := &ExecutionResult{
 		TemplateID: tmpl.ID,
@@ -165,7 +175,9 @@ func (e *Executor) Execute(
 				// Add request ID header and track it
 				requestID := generateRequestID()
 				req.Header.Set("X-Hadrian-Request-Id", requestID)
+				e.mu.Lock()
 				e.requestIDs = append(e.requestIDs, requestID)
+				e.mu.Unlock()
 
 				// Execute HTTP request
 				resp, err = e.httpClient.Do(req)
@@ -338,7 +350,9 @@ func (e *Executor) Execute(
 	}
 
 	// Add tracked request IDs to result
+	e.mu.Lock()
 	result.RequestIDs = e.requestIDs
+	e.mu.Unlock()
 
 	return result, nil
 }
@@ -352,7 +366,9 @@ func (e *Executor) ExecuteGraphQL(
 	variables map[string]string,
 ) (*ExecutionResult, error) {
 	// Clear request IDs for this execution
+	e.mu.Lock()
 	e.requestIDs = make([]string, 0)
+	e.mu.Unlock()
 
 	result := &ExecutionResult{
 		TemplateID: tmpl.ID,
@@ -445,7 +461,9 @@ func (e *Executor) ExecuteGraphQL(
 		// Add request ID header and track it
 		requestID := generateRequestID()
 		req.Header.Set("X-Hadrian-Request-Id", requestID)
+		e.mu.Lock()
 		e.requestIDs = append(e.requestIDs, requestID)
+		e.mu.Unlock()
 
 		// Determine which auth to use
 		var authInfo *AuthInfo
@@ -543,7 +561,9 @@ func (e *Executor) ExecuteGraphQL(
 	}
 
 	// Add tracked request IDs to result
+	e.mu.Lock()
 	result.RequestIDs = e.requestIDs
+	e.mu.Unlock()
 
 	return result, nil
 }

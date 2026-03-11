@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
@@ -54,6 +55,22 @@ func New(config *Config) (*Client, error) {
 	}
 
 	// Configure transport with proxy support
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		// Control callback runs after DNS resolution with the resolved IP,
+		// catching both literal IPs and hostnames that resolve to internal addresses.
+		Control: func(network, address string, c syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err == nil {
+				if ip := net.ParseIP(host); ip != nil && isInternalIP(ip) {
+					log.Warn("SECURITY: connecting to internal/reserved IP %s — ensure this is intentional", ip)
+				}
+			}
+			return nil // warn only, do not block
+		},
+	}
+
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment, // Respects HTTP_PROXY env var
 		TLSClientConfig: &tls.Config{
@@ -61,11 +78,7 @@ func New(config *Config) (*Client, error) {
 			InsecureSkipVerify: config.Insecure,
 			MinVersion:         tls.VersionTLS13, // TLS 1.3 enforcement (HR-3)
 		},
-		// Custom DialContext with connection timeout settings
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		DialContext: dialer.DialContext,
 	}
 
 	// Override with explicit proxy if provided
@@ -116,4 +129,14 @@ func New(config *Config) (*Client, error) {
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
+}
+
+// isInternalIP returns true if the IP is in a private, loopback, link-local,
+// or cloud metadata range (RFC 1918, RFC 4193, 169.254.0.0/16).
+func isInternalIP(ip net.IP) bool {
+	// Cloud metadata endpoint
+	if ip.Equal(net.ParseIP("169.254.169.254")) {
+		return true
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
 }

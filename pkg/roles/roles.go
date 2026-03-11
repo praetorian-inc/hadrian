@@ -148,8 +148,16 @@ func (p *Permission) Matches(action, object, scope string) bool {
 	return true
 }
 
-// GetRolesByPermissionLevel returns roles grouped by privilege level
+// GetRolesByPermissionLevel is deprecated: use GetCandidateRoles instead.
 func (c *RoleConfig) GetRolesByPermissionLevel(level string) []*Role {
+	return c.GetCandidateRoles(level)
+}
+
+// GetCandidateRoles returns candidate roles for the given permission level selector.
+// For "lower", "higher", and "all", it returns ALL roles — the execution loop
+// filters by relative level (e.g., attacker.Level < victim.Level) to determine valid pairings.
+// For "none", it returns an empty slice (anonymous/unauthenticated attacker).
+func (c *RoleConfig) GetCandidateRoles(level string) []*Role {
 	switch level {
 	case "lower", "higher", "all":
 		// Return all roles — the execution loop filters by relative level

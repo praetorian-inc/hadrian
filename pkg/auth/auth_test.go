@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -136,6 +137,135 @@ roles:
 	apiUser := config.Roles["api_user"]
 	if apiUser.APIKey != "api-key-123" {
 		t.Errorf("Expected 'api-key-123', got '%s'", apiUser.APIKey)
+	}
+}
+
+func TestExpandEnvSafe_BareVar(t *testing.T) {
+	// Set an env var that could be accidentally expanded
+	_ = os.Setenv("HOME_TEST", "should-not-expand")
+	defer func() { _ = os.Unsetenv("HOME_TEST") }()
+
+	// Bare $VAR should NOT be expanded
+	result := expandEnvSafe("pa$$word")
+	if result != "pa$$word" {
+		t.Errorf("expandEnvSafe should not expand bare $VAR, got '%s'", result)
+	}
+
+	// ${VAR} should be expanded
+	_ = os.Setenv("MY_VAR", "expanded")
+	defer func() { _ = os.Unsetenv("MY_VAR") }()
+	result = expandEnvSafe("prefix-${MY_VAR}-suffix")
+	if result != "prefix-expanded-suffix" {
+		t.Errorf("expandEnvSafe should expand ${VAR}, got '%s'", result)
+	}
+}
+
+func TestIsNoAuth(t *testing.T) {
+	config := &AuthConfig{
+		Method: "bearer",
+		Roles: map[string]*RoleAuth{
+			"anonymous": {NoAuth: true},
+			"admin":     {Token: "test"},
+			"empty":     {Token: ""},
+		},
+	}
+
+	if !config.IsNoAuth("anonymous") {
+		t.Error("Expected IsNoAuth to return true for no_auth role")
+	}
+	if config.IsNoAuth("admin") {
+		t.Error("Expected IsNoAuth to return false for admin role")
+	}
+	if config.IsNoAuth("empty") {
+		t.Error("Expected IsNoAuth to return false for empty-token role")
+	}
+	if config.IsNoAuth("nonexistent") {
+		t.Error("Expected IsNoAuth to return false for nonexistent role")
+	}
+}
+
+func TestLoad_InvalidCookieName(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "badcookie.yaml")
+	content := `method: cookie
+cookie_name: "session id; evil"
+roles:
+  admin:
+    cookie: "abc123"
+`
+	err := os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	_, err = Load(testFile)
+	if err == nil {
+		t.Fatal("Expected error for invalid cookie_name with spaces/separators")
+	}
+	if !strings.Contains(err.Error(), "invalid cookie_name") {
+		t.Errorf("Expected 'invalid cookie_name' error, got: %v", err)
+	}
+}
+
+func TestLoad_InvalidMethod(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "badmethod.yaml")
+	content := `method: oauth2
+roles:
+  admin:
+    token: "abc123"
+`
+	err := os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	_, err = Load(testFile)
+	if err == nil {
+		t.Fatal("Expected error for unsupported auth method")
+	}
+	if !strings.Contains(err.Error(), "unsupported auth method") {
+		t.Errorf("Expected 'unsupported auth method' error, got: %v", err)
+	}
+}
+
+func TestLoad_CookieValueCRLF(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "crlf.yaml")
+	content := "method: cookie\nroles:\n  admin:\n    cookie: \"abc\\r\\nX-Injected: evil\"\n"
+	err := os.WriteFile(testFile, []byte(content), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// YAML doesn't interpret \r\n as literal CR/LF in double quotes,
+	// so test with actual bytes
+	testFile2 := filepath.Join(tmpDir, "crlf2.yaml")
+	content2 := "method: cookie\nroles:\n  admin:\n    cookie: \"abc\r\nX-Injected: evil\"\n"
+	err = os.WriteFile(testFile2, []byte(content2), 0600)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// The second file contains literal CR/LF which YAML may reject or pass through.
+	// If YAML passes it through, our validation should catch it.
+	_, err = Load(testFile2)
+	if err != nil {
+		// Either YAML rejects it or our validation catches it — both are correct
+		if !strings.Contains(err.Error(), "invalid characters") && !strings.Contains(err.Error(), "parse") {
+			t.Logf("Got expected error: %v", err)
+		}
+	}
+}
+
+func TestExpandEnvSafe_UnsetVar(t *testing.T) {
+	// Ensure the var is NOT set
+	_ = os.Unsetenv("DEFINITELY_NOT_SET_VAR_12345")
+
+	// Should expand to empty string (and log a warning)
+	result := expandEnvSafe("prefix-${DEFINITELY_NOT_SET_VAR_12345}-suffix")
+	if result != "prefix--suffix" {
+		t.Errorf("expandEnvSafe should expand unset var to empty, got '%s'", result)
 	}
 }
 

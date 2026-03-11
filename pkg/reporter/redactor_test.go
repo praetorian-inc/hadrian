@@ -315,6 +315,46 @@ func TestRedactPassword(t *testing.T) {
 	}
 }
 
+// Test cookie header redaction
+func TestRedactCookie(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Cookie header",
+			input:    "Cookie: session=abc123; token=xyz789",
+			expected: "[COOKIE-REDACTED]",
+		},
+		{
+			name:     "Set-Cookie header",
+			input:    "Set-Cookie: session_id=secret123; Path=/; HttpOnly",
+			expected: "[COOKIE-REDACTED]",
+		},
+		{
+			name:     "Cookie header lowercase",
+			input:    "cookie: JSESSIONID=node01abc",
+			expected: "[COOKIE-REDACTED]",
+		},
+		{
+			name:     "No cookie",
+			input:    "Content-Type: application/json",
+			expected: "Content-Type: application/json",
+		},
+	}
+
+	redactor := NewRedactor()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := redactor.Redact(tt.input)
+			if result != tt.expected {
+				t.Errorf("Redact() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
 // Test Stripe/Twilio style API keys
 func TestRedactSKKey(t *testing.T) {
 	tests := []struct {
