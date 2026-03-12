@@ -3,6 +3,7 @@ package http
 import (
 	"crypto/tls"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -35,9 +36,22 @@ func TestNew_CustomTimeout(t *testing.T) {
 	assert.Equal(t, 60*time.Second, client.httpClient.Timeout)
 }
 
-func TestNew_TLS13Enforcement(t *testing.T) {
-	// Test TLS 1.3 minimum version enforcement
+func TestNew_TLS12Default(t *testing.T) {
+	// Test TLS 1.2 minimum version by default
 	client, err := New(nil)
+
+	require.NoError(t, err)
+	transport, ok := client.httpClient.Transport.(*http.Transport)
+	require.True(t, ok, "Transport should be *http.Transport")
+	assert.Equal(t, uint16(tls.VersionTLS12), transport.TLSClientConfig.MinVersion)
+}
+
+func TestNew_TLS13Configurable(t *testing.T) {
+	// Test TLS 1.3 can be explicitly configured
+	client, err := New(&Config{
+		TLSMinVersion: tls.VersionTLS13,
+		Timeout:       30 * time.Second,
+	})
 
 	require.NoError(t, err)
 	transport, ok := client.httpClient.Transport.(*http.Transport)
@@ -150,6 +164,33 @@ func TestNew_ProxyWithAuth(t *testing.T) {
 	assert.NotNil(t, client)
 	// Note: We can't easily test the actual proxy auth without a real proxy server
 	// This test verifies that the client is created successfully with env vars set
+}
+
+func TestIsInternalIP(t *testing.T) {
+	tests := []struct {
+		name     string
+		ip       string
+		expected bool
+	}{
+		{"loopback IPv4", "127.0.0.1", true},
+		{"loopback IPv6", "::1", true},
+		{"private 10.x", "10.0.0.1", true},
+		{"private 172.16.x", "172.16.0.1", true},
+		{"private 192.168.x", "192.168.1.1", true},
+		{"link-local", "169.254.1.1", true},
+		{"cloud metadata", "169.254.169.254", true},
+		{"public IP", "8.8.8.8", false},
+		{"public IP 2", "93.184.216.34", false},
+		{"IPv6 public", "2001:db8::1", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ip := net.ParseIP(tt.ip)
+			require.NotNil(t, ip, "failed to parse IP %s", tt.ip)
+			assert.Equal(t, tt.expected, isInternalIP(ip))
+		})
+	}
 }
 
 func TestNew_ProxyFromEnvironment(t *testing.T) {

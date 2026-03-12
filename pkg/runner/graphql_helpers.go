@@ -295,6 +295,10 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 		if authConfigs != nil {
 			tmplAuthInfos = make(map[string]*templates.AuthInfo)
 			for role, info := range authConfigs {
+				if info == nil {
+					tmplAuthInfos[role] = nil
+					continue
+				}
 				tmplAuthInfos[role] = &templates.AuthInfo{
 					Method:   info.Method,
 					Value:    info.Value,

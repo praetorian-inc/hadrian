@@ -22,10 +22,11 @@ type Client struct {
 }
 
 type Config struct {
-	Proxy    string        // http://localhost:8080
-	CACert   string        // Path to CA certificate (Burp)
-	Insecure bool          // Skip TLS verification
-	Timeout  time.Duration // Request timeout
+	Proxy         string        // http://localhost:8080
+	CACert        string        // Path to CA certificate (Burp)
+	Insecure      bool          // Skip TLS verification
+	Timeout       time.Duration // Request timeout
+	TLSMinVersion uint16        // Minimum TLS version (default: TLS 1.2)
 }
 
 func New(config *Config) (*Client, error) {
@@ -76,7 +77,7 @@ func New(config *Config) (*Client, error) {
 		TLSClientConfig: &tls.Config{
 			RootCAs:            rootCAs,
 			InsecureSkipVerify: config.Insecure,
-			MinVersion:         tls.VersionTLS13, // TLS 1.3 enforcement (HR-3)
+			MinVersion:         tlsMinVersion(config.TLSMinVersion),
 		},
 		DialContext: dialer.DialContext,
 	}
@@ -129,6 +130,14 @@ func New(config *Config) (*Client, error) {
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
+}
+
+// tlsMinVersion returns the configured TLS minimum version, defaulting to TLS 1.2.
+func tlsMinVersion(v uint16) uint16 {
+	if v != 0 {
+		return v
+	}
+	return tls.VersionTLS12
 }
 
 // isInternalIP returns true if the IP is in a private, loopback, link-local,

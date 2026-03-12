@@ -114,8 +114,8 @@ func (e *Executor) Execute(
 	// Set Content-Type after custom headers to ensure GraphQL requests always use JSON
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add auth
-	if authInfo != nil && authInfo.Value != "" {
+	// Add auth (nil means no_auth role — skip header entirely)
+	if authInfo != nil {
 		switch authInfo.Method {
 		case "bearer":
 			req.Header.Set("Authorization", authInfo.Value)
