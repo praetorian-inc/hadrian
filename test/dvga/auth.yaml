@@ -1,19 +1,24 @@
 # DVGA Authentication Configuration
 # For testing against Damn Vulnerable GraphQL Application
+#
+# Populate tokens by running Steps 3-5 in README.md, then either:
+#   1. Use env vars: set -a && source test/dvga/.env && set +a
+#   2. Replace ${...} placeholders below with actual JWT values
+#
+# NOTE: Bearer auth requires all roles to have a non-empty token.
+# Unauthenticated testing does not require --auth; omit the flag instead.
 
-auth_method: bearer_token
+method: bearer
 
 roles:
   admin:
-    # Admin user with full access
-    # Create via DVGA UI or mutation: createUser(username: "admin", password: "admin123")
-    token: ""  # Populate after login via: mutation { login(username: "admin", password: "admin123") { accessToken } }
+    # Admin user (default password: changeme)
+    token: "${DVGA_ADMIN_TOKEN}"
 
   user:
-    # Regular user with limited access
-    # Create via DVGA UI or mutation: createUser(username: "user1", password: "user123")
-    token: ""  # Populate after login
+    # Regular user (created in Step 3, password: user123)
+    token: "${DVGA_USER1_TOKEN}"
 
-  guest:
-    # Unauthenticated user
-    token: ""
+  user2:
+    # Second user for BOLA testing (created in Step 3, password: user456)
+    token: "${DVGA_USER2_TOKEN}"

@@ -83,23 +83,23 @@ Note: The `.env` file is gitignored to prevent committing secrets.
 
 ### 6. Update Auth Configuration
 
-Update `auth.yaml` with the tokens:
+The `auth.yaml` file uses environment variable references (`${DVGA_ADMIN_TOKEN}`, etc.) that are expanded at runtime. If you completed Step 5, no manual editing is needed — just make sure to source the `.env` file before running Hadrian (see Option B below).
+
+If you prefer to use hardcoded tokens instead of env vars, replace the `${...}` placeholders:
 
 ```yaml
 method: bearer
-location: header
-key_name: Authorization
 
 roles:
   admin:
-    token: "eyJ..."  # DVGA_ADMIN_TOKEN
+    token: "eyJ..."  # or "${DVGA_ADMIN_TOKEN}"
   user:
-    token: "eyJ..."  # DVGA_USER1_TOKEN
+    token: "eyJ..."  # or "${DVGA_USER1_TOKEN}"
   user2:
-    token: "eyJ..."  # DVGA_USER2_TOKEN
-  anonymous:
-    token: ""
+    token: "eyJ..."  # or "${DVGA_USER2_TOKEN}"
 ```
+
+> **Note:** Bearer auth requires all defined roles to have a non-empty token. To test unauthenticated access, simply omit the `--auth` flag (see Option A).
 
 ### 7. Run Hadrian
 
@@ -161,12 +161,13 @@ DVGA is intentionally vulnerable. Hadrian should detect:
 
 | OWASP Category | Vulnerability | Template | Severity |
 |----------------|---------------|----------|----------|
-| API1:2023 | BOLA - Access other user's pastes | `api1-bola-dvga.yaml` | HIGH |
+| API1:2023 | BOLA - Delete other user's pastes | `01-api1-bola-delete-paste-mutation.yaml` | HIGH |
+| API1:2023 | BOLA - Edit other user's pastes | `02-api1-bola-edit-paste-mutation.yaml` | HIGH |
 | API3:2023 | Sensitive Data Exposure in user queries | `03-api3-sensitive-data-exposure-dvga.yaml` | MEDIUM |
-| API7:2023 | SSRF via `importPaste` mutation | `api7-ssrf-dvga.yaml` | HIGH |
 | API8:2023 | Command Injection via `systemDiagnostics` | `04-api8-command-injection-dvga.yaml` | CRITICAL |
+| API8:2023 | Information Disclosure via system queries | `05-api8-information-disclosure-dvga.yaml` | LOW |
+| API7:2023 | SSRF via `importPaste` mutation | `api7-ssrf-dvga.yaml` (*TODO: not yet implemented*) | HIGH |
 | API8:2023 | Path Traversal via `uploadPaste` filename | `06-api8-path-traversal-dvga.yaml` | HIGH |
-| API8:2023 | GraphQL Error Information Disclosure | `05-api8-information-disclosure-dvga.yaml` | LOW |
 
 ### Generic GraphQL Templates (`templates/graphql/`)
 
@@ -198,7 +199,9 @@ DVGA exposes these intentionally vulnerable GraphQL operations:
 | `admin` | Full system access | `DVGA_ADMIN_TOKEN` |
 | `user` | Regular user | `DVGA_USER1_TOKEN` |
 | `user2` | Second user for BOLA tests | `DVGA_USER2_TOKEN` |
-| `anonymous` | Unauthenticated | (none) |
+| `guest` | Unauthenticated (roles.yaml only, not in auth.yaml) | (none) |
+
+> **Note:** The `guest` role is defined in `roles.yaml` for permission modeling but is not included in `auth.yaml` because bearer auth requires a non-empty token. To test unauthenticated access, omit the `--auth` flag.
 
 ## Troubleshooting
 

@@ -26,6 +26,14 @@ roles:
       - "write:pastes:own"
       - "delete:pastes:own"
 
+  - name: user2
+    level: 50
+    permissions:
+      - "read:users:own"
+      - "read:pastes:all"
+      - "write:pastes:own"
+      - "delete:pastes:own"
+
   - name: guest
     level: 0
     permissions:
