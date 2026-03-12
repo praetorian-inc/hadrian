@@ -117,11 +117,15 @@ func (e *Executor) Execute(
 	// Add auth (nil means no_auth role — skip header entirely)
 	if authInfo != nil {
 		switch authInfo.Method {
-		case "bearer":
+		case "bearer", "basic":
 			req.Header.Set("Authorization", authInfo.Value)
 		case "api_key":
 			if authInfo.Location == "header" {
 				req.Header.Set(authInfo.KeyName, authInfo.Value)
+			} else if authInfo.Location == "query" {
+				q := req.URL.Query()
+				q.Set(authInfo.KeyName, authInfo.Value)
+				req.URL.RawQuery = q.Encode()
 			}
 		case "cookie":
 			req.Header.Set("Cookie", authInfo.Value)
