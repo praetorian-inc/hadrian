@@ -95,7 +95,7 @@ func TestValidate_ConcurrencyTooLow(t *testing.T) {
 	config := &Config{
 		API:                  apiSpec,
 		Roles:                rolesFile,
-		Concurrency:          0,
+		Concurrency:          -1,
 		Output:               "terminal",
 		RateLimit:            rate,
 		RateLimitBackoff:     backoff,

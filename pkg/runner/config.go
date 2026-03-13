@@ -11,6 +11,8 @@ import (
 
 // Validate checks configuration for errors and security issues
 func (c *Config) Validate() error {
+	c.setDefaults()
+
 	// Validate required files exist
 	if _, err := os.Stat(c.API); err != nil {
 		return fmt.Errorf("API spec file not found: %s", c.API)
@@ -75,6 +77,39 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// setDefaults fills zero-valued fields with sensible defaults for library usage.
+// When hadrian is invoked via CLI, cobra flags provide these defaults; for
+// direct library callers the fields may be unset.
+func (c *Config) setDefaults() {
+	if c.Output == "" {
+		c.Output = "json"
+	}
+	if c.RateLimit <= 0 {
+		c.RateLimit = 5.0
+	}
+	if c.RateLimitBackoff == "" {
+		c.RateLimitBackoff = "exponential"
+	}
+	if c.RateLimitMaxWait <= 0 {
+		c.RateLimitMaxWait = 60 * time.Second
+	}
+	if c.RateLimitMaxRetries <= 0 {
+		c.RateLimitMaxRetries = 5
+	}
+	if len(c.RateLimitStatusCodes) == 0 {
+		c.RateLimitStatusCodes = []int{429, 503}
+	}
+	if c.Concurrency == 0 {
+		c.Concurrency = 1
+	}
+	if c.Timeout <= 0 {
+		c.Timeout = 30
+	}
+	if len(c.Categories) == 0 {
+		c.Categories = []string{"owasp"}
+	}
 }
 
 // ToHTTPClientConfig converts to HTTP client configuration
