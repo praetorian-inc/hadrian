@@ -177,55 +177,55 @@ func TestBuildAuthConfigs_BasicAuth(t *testing.T) {
 	assert.NotEmpty(t, authConfigs["admin"].Value)
 }
 
-// TestBuildAuthConfigs_MissingTokenForBearer tests validation
-func TestBuildAuthConfigs_MissingTokenForBearer(t *testing.T) {
+// TestBuildAuthConfigs_EmptyTokenForBearer tests that empty tokens are allowed (matches REST behavior)
+func TestBuildAuthConfigs_EmptyTokenForBearer(t *testing.T) {
 	authConfig := &auth.AuthConfig{
 		Method:   "bearer",
 		Location: "header",
 		KeyName:  "Authorization",
 		Roles: map[string]*auth.RoleAuth{
-			"admin": {Token: ""}, // Missing token
+			"admin": {Token: ""}, // Empty token — sends "Bearer "
 		},
 	}
 
 	authConfigs, err := buildAuthConfigs(authConfig)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "bearer auth requires 'token' field")
-	assert.Nil(t, authConfigs)
+	assert.NoError(t, err)
+	assert.NotNil(t, authConfigs)
+	assert.Equal(t, "Bearer ", authConfigs["admin"].Value)
 }
 
-// TestBuildAuthConfigs_MissingAPIKey tests API key validation
-func TestBuildAuthConfigs_MissingAPIKey(t *testing.T) {
+// TestBuildAuthConfigs_EmptyAPIKey tests that empty API keys are allowed (matches REST behavior)
+func TestBuildAuthConfigs_EmptyAPIKey(t *testing.T) {
 	authConfig := &auth.AuthConfig{
 		Method:   "api_key",
 		Location: "header",
 		KeyName:  "X-API-Key",
 		Roles: map[string]*auth.RoleAuth{
-			"service": {APIKey: ""}, // Missing API key
+			"service": {APIKey: ""}, // Empty API key
 		},
 	}
 
 	authConfigs, err := buildAuthConfigs(authConfig)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "api_key auth requires 'api_key' field")
-	assert.Nil(t, authConfigs)
+	assert.NoError(t, err)
+	assert.NotNil(t, authConfigs)
+	assert.Equal(t, "", authConfigs["service"].Value)
 }
 
-// TestBuildAuthConfigs_MissingBasicAuthCredentials tests basic auth validation
-func TestBuildAuthConfigs_MissingBasicAuthCredentials(t *testing.T) {
+// TestBuildAuthConfigs_EmptyBasicAuthCredentials tests that empty basic auth is allowed (matches REST behavior)
+func TestBuildAuthConfigs_EmptyBasicAuthCredentials(t *testing.T) {
 	authConfig := &auth.AuthConfig{
 		Method:   "basic",
 		Location: "header",
 		KeyName:  "Authorization",
 		Roles: map[string]*auth.RoleAuth{
-			"admin": {Username: "admin", Password: ""}, // Missing password
+			"admin": {Username: "admin", Password: ""}, // Empty password
 		},
 	}
 
 	authConfigs, err := buildAuthConfigs(authConfig)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "basic auth requires 'username' and 'password' fields")
-	assert.Nil(t, authConfigs)
+	assert.NoError(t, err)
+	assert.NotNil(t, authConfigs)
+	assert.Contains(t, authConfigs["admin"].Value, "Basic ")
 }
 
 // TestBuildAuthConfigs_UnsupportedMethod tests unsupported auth method

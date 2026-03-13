@@ -77,7 +77,8 @@ paths:
 	require.NoError(t, err)
 	require.Len(t, result.Operations, 6, "Should have 6 operations")
 
-	// Expected order: alphabetically by path, then by method
+	// Expected order: alphabetically by path, then by safe method order
+	// (GET < POST < PUT < DELETE) to ensure reads before destructive ops
 	expectedOrder := []struct {
 		path   string
 		method string
@@ -85,9 +86,9 @@ paths:
 		{"/orders/{orderId}", "GET"},
 		{"/pets", "GET"},
 		{"/pets", "POST"},
-		{"/users/{id}", "DELETE"},
 		{"/users/{id}", "GET"},
 		{"/users/{id}", "PUT"},
+		{"/users/{id}", "DELETE"},
 	}
 
 	// Verify operations are in deterministic order
@@ -150,12 +151,12 @@ paths:
 	assert.Equal(t, results[0], results[1], "First and second parse should have same operation order")
 	assert.Equal(t, results[1], results[2], "Second and third parse should have same operation order")
 
-	// Verify expected sorted order
+	// Verify expected sorted order (safe method ordering: PUT before DELETE)
 	expected := []string{
 		"/a-first GET",
-		"/m-middle DELETE",
 		"/m-middle PUT",
+		"/m-middle DELETE",
 		"/z-last POST",
 	}
-	assert.Equal(t, expected, results[0], "Operations should be sorted by path then method")
+	assert.Equal(t, expected, results[0], "Operations should be sorted by path then safe method order")
 }

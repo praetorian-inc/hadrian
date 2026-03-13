@@ -686,6 +686,36 @@ func TestBuildRequest_BearerAuthPreserved(t *testing.T) {
 	}
 }
 
+func TestBuildRequest_CookieAuth(t *testing.T) {
+	test := HTTPTest{
+		Method: "GET",
+		Path:   "/api/users/1",
+		Headers: map[string]string{
+			"Cookie": "{{attacker_token}}",
+		},
+	}
+
+	operation := &model.Operation{
+		Method: "GET",
+		Path:   "/api/users/1",
+	}
+
+	authInfo := &AuthInfo{
+		Method: "cookie",
+		Value:  "session_id=abc123",
+	}
+
+	req, err := buildRequest(context.Background(), test, operation, authInfo, nil, nil)
+	if err != nil {
+		t.Fatalf("buildRequest failed: %v", err)
+	}
+
+	cookie := req.Header.Get("Cookie")
+	if cookie != "session_id=abc123" {
+		t.Errorf("Expected Cookie header 'session_id=abc123', got '%s'", cookie)
+	}
+}
+
 // TestBuildRequest_BasicAuthPreserved tests that basic auth still works correctly
 func TestBuildRequest_BasicAuthPreserved(t *testing.T) {
 	test := HTTPTest{

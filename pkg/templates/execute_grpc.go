@@ -215,8 +215,10 @@ func (e *GRPCExecutor) executeGRPCTest(
 			} else {
 				md.Set("authorization", authInfo.Value)
 			}
+		case "cookie":
+			md.Set("cookie", authInfo.Value)
 		default:
-			log.Warn("unsupported gRPC auth method %q (supported: bearer, api_key)", authInfo.Method)
+			log.Warn("unsupported gRPC auth method %q (supported: bearer, api_key, cookie)", authInfo.Method)
 		}
 	}
 

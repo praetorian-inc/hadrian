@@ -362,10 +362,12 @@ func TestGetRolesByPermissionLevel_Lower(t *testing.T) {
 	}
 
 	lower := config.GetRolesByPermissionLevel("lower")
-	// Median of [10,50,100] = 50
-	// Lower means < 50
-	assert.Len(t, lower, 1)
-	assert.Equal(t, "limited", lower[0].Name)
+	// "lower" returns all roles — the execution loop filters by relative level
+	assert.Len(t, lower, 3)
+	names := []string{lower[0].Name, lower[1].Name, lower[2].Name}
+	assert.Contains(t, names, "limited")
+	assert.Contains(t, names, "moderate")
+	assert.Contains(t, names, "powerful")
 }
 
 func TestGetRolesByPermissionLevel_Higher(t *testing.T) {
@@ -378,10 +380,10 @@ func TestGetRolesByPermissionLevel_Higher(t *testing.T) {
 	}
 
 	higher := config.GetRolesByPermissionLevel("higher")
-	// Median of [10,50,100] = 50
-	// Higher means >= 50
-	assert.Len(t, higher, 2)
-	names := []string{higher[0].Name, higher[1].Name}
+	// "higher" returns all roles — the execution loop filters by relative level
+	assert.Len(t, higher, 3)
+	names := []string{higher[0].Name, higher[1].Name, higher[2].Name}
+	assert.Contains(t, names, "limited")
 	assert.Contains(t, names, "moderate")
 	assert.Contains(t, names, "powerful")
 }
@@ -411,20 +413,25 @@ func TestGetRolesByPermissionLevel_BOLAScenario(t *testing.T) {
 		},
 	}
 
-	// Median of [0, 10, 10, 100] = (10 + 10) / 2 = 10
-	// Higher: >= 10 → admin (100), user1 (10), user2 (10)
-	// Lower: < 10 → anonymous (0)
+	// Both "higher" and "lower" return all roles.
+	// The execution loop's level comparison (attacker.Level < victim.Level)
+	// determines valid pairings at runtime.
 
 	higher := config.GetRolesByPermissionLevel("higher")
-	assert.Len(t, higher, 3)
-	names := []string{higher[0].Name, higher[1].Name, higher[2].Name}
-	assert.Contains(t, names, "admin")
-	assert.Contains(t, names, "user1")
-	assert.Contains(t, names, "user2")
+	assert.Len(t, higher, 4)
+	higherNames := []string{higher[0].Name, higher[1].Name, higher[2].Name, higher[3].Name}
+	assert.Contains(t, higherNames, "admin")
+	assert.Contains(t, higherNames, "user1")
+	assert.Contains(t, higherNames, "user2")
+	assert.Contains(t, higherNames, "anonymous")
 
 	lower := config.GetRolesByPermissionLevel("lower")
-	assert.Len(t, lower, 1)
-	assert.Equal(t, "anonymous", lower[0].Name)
+	assert.Len(t, lower, 4)
+	lowerNames := []string{lower[0].Name, lower[1].Name, lower[2].Name, lower[3].Name}
+	assert.Contains(t, lowerNames, "admin")
+	assert.Contains(t, lowerNames, "user1")
+	assert.Contains(t, lowerNames, "user2")
+	assert.Contains(t, lowerNames, "anonymous")
 }
 
 func TestLoad_VulnerableAPIRoles(t *testing.T) {
@@ -451,15 +458,12 @@ func TestLoad_VulnerableAPIRoles(t *testing.T) {
 	assert.Equal(t, 0, anonymous.Level)
 
 	// Verify GetRolesByPermissionLevel behavior
-	// Median of [0, 5, 50, 100] = 27.5 (rounds to higher roles: user1 and admin)
+	// Both "higher" and "lower" return all roles — execution loop filters by relative level
 	higher := config.GetRolesByPermissionLevel("higher")
-	assert.Len(t, higher, 2) // admin, user1
+	assert.Len(t, higher, 6) // all roles returned
 
 	lower := config.GetRolesByPermissionLevel("lower")
-	assert.Len(t, lower, 2) // anonymous, user2
-	// Lower privilege roles in ascending order
-	assert.Contains(t, []string{lower[0].Name, lower[1].Name}, "anonymous")
-	assert.Contains(t, []string{lower[0].Name, lower[1].Name}, "user2")
+	assert.Len(t, lower, 6) // all roles returned
 }
 
 // Helper function
@@ -470,4 +474,29 @@ func findRole(roles []*Role, name string) *Role {
 		}
 	}
 	return nil
+}
+
+func TestGetRolesByPermissionLevel_None(t *testing.T) {
+	config := &RoleConfig{
+		Roles: []*Role{
+			{Name: "user", Level: 10},
+			{Name: "admin", Level: 100},
+		},
+	}
+
+	result := config.GetRolesByPermissionLevel("none")
+	assert.Empty(t, result)
+}
+
+func TestGetRolesByPermissionLevel_Unrecognized(t *testing.T) {
+	config := &RoleConfig{
+		Roles: []*Role{
+			{Name: "user", Level: 10},
+			{Name: "admin", Level: 100},
+		},
+	}
+
+	// Unrecognized level should return empty slice (and log a warning)
+	result := config.GetRolesByPermissionLevel("low")
+	assert.Empty(t, result)
 }

@@ -221,13 +221,13 @@ func runTest(ctx context.Context, config Config) error {
 		return nil
 	}
 
-	// 8. Create template executor with rate-limiting client
+	// 9. Create template executor with rate-limiting client
 	executor := templates.NewExecutor(rateLimitingClient, customHeaders)
 
-	// 9. Create mutation executor for mutation templates with rate-limiting client
+	// 10. Create mutation executor for mutation templates with rate-limiting client
 	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)
 
-	// 10. Run tests for each operation
+	// 11. Run tests for each operation
 	var allFindings []*model.Finding
 	for _, op := range spec.Operations {
 		for _, tmpl := range tmplFiles {
@@ -255,12 +255,12 @@ func runTest(ctx context.Context, config Config) error {
 		}
 	}
 
-	// 11. Optional LLM triage
+	// 12. Optional LLM triage
 	if hasLLMConfig() || config.LLMHost != "" {
 		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
 	}
 
-	// 12. Generate final report
+	// 13. Generate final report
 	log.Debug("Generating final report with %d findings", len(allFindings))
 	stats := calculateStats(allFindings, startTime)
 	stats.OperationCount = len(spec.Operations)

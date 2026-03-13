@@ -73,20 +73,43 @@ func (p *RESTPlugin) Parse(input []byte) (*model.APISpec, error) {
 		}
 	}
 
-	// Sort operations by path (primary) and method (secondary) for deterministic ordering
-	// Path is primary sort - ensures operations for /api/documents come before /api/orders
-	// Method is secondary sort - ensures deterministic ordering within each path
+	// Sort operations by path (primary) and method (secondary) for deterministic ordering.
+	// Path is primary sort - ensures operations for /api/documents come before /api/orders.
+	// Method is secondary sort using safe ordering: read operations before writes,
+	// destructive operations last. This prevents DELETE from destroying resources
+	// before GET/PUT templates can test them.
 	sort.Slice(spec.Operations, func(i, j int) bool {
 		if spec.Operations[i].Path != spec.Operations[j].Path {
 			return spec.Operations[i].Path < spec.Operations[j].Path
 		}
-		return spec.Operations[i].Method < spec.Operations[j].Method
+		return methodOrder(spec.Operations[i].Method) < methodOrder(spec.Operations[j].Method)
 	})
 
 	return spec, nil
 }
 
-// Helper functions (to be implemented)
+// methodOrder returns a sort key that orders HTTP methods safely:
+// reads first, then writes, then destructive operations last.
+func methodOrder(method string) int {
+	switch strings.ToUpper(method) {
+	case "GET":
+		return 0
+	case "HEAD":
+		return 1
+	case "OPTIONS":
+		return 2
+	case "POST":
+		return 3
+	case "PUT":
+		return 4
+	case "PATCH":
+		return 5
+	case "DELETE":
+		return 6
+	default:
+		return 7
+	}
+}
 
 func extractBaseURL(doc *openapi3.T) string {
 	if len(doc.Servers) > 0 {

@@ -38,9 +38,19 @@ roles:
       - "read:documents:public"
 
   - name: anonymous
-    level: 0            # Lowest privilege (unauthenticated)
+    level: 0            # Lowest privilege (empty credentials)
     permissions:
       - "read:documents:public" # Can only read public documents
+
+  - name: empty_basic
+    level: 0            # Lowest privilege (empty base64 credentials)
+    permissions:
+      - "read:documents:public"
+
+  - name: no_header
+    level: 0            # Lowest privilege (no auth header at all)
+    permissions:
+      - "read:documents:public"
 
 # Valid objects in this API
 objects:

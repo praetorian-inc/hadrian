@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"syscall"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
@@ -21,10 +22,11 @@ type Client struct {
 }
 
 type Config struct {
-	Proxy    string        // http://localhost:8080
-	CACert   string        // Path to CA certificate (Burp)
-	Insecure bool          // Skip TLS verification
-	Timeout  time.Duration // Request timeout
+	Proxy         string        // http://localhost:8080
+	CACert        string        // Path to CA certificate (Burp)
+	Insecure      bool          // Skip TLS verification
+	Timeout       time.Duration // Request timeout
+	TLSMinVersion uint16        // Minimum TLS version (default: TLS 1.2)
 }
 
 func New(config *Config) (*Client, error) {
@@ -54,18 +56,30 @@ func New(config *Config) (*Client, error) {
 	}
 
 	// Configure transport with proxy support
+	dialer := &net.Dialer{
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		// Control callback runs after DNS resolution with the resolved IP,
+		// catching both literal IPs and hostnames that resolve to internal addresses.
+		Control: func(network, address string, c syscall.RawConn) error {
+			host, _, err := net.SplitHostPort(address)
+			if err == nil {
+				if ip := net.ParseIP(host); ip != nil && isInternalIP(ip) {
+					log.Warn("SECURITY: connecting to internal/reserved IP %s — ensure this is intentional", ip)
+				}
+			}
+			return nil // warn only, do not block
+		},
+	}
+
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment, // Respects HTTP_PROXY env var
 		TLSClientConfig: &tls.Config{
 			RootCAs:            rootCAs,
 			InsecureSkipVerify: config.Insecure,
-			MinVersion:         tls.VersionTLS13, // TLS 1.3 enforcement (HR-3)
+			MinVersion:         tlsMinVersion(config.TLSMinVersion),
 		},
-		// Custom DialContext with connection timeout settings
-		DialContext: (&net.Dialer{
-			Timeout:   30 * time.Second,
-			KeepAlive: 30 * time.Second,
-		}).DialContext,
+		DialContext: dialer.DialContext,
 	}
 
 	// Override with explicit proxy if provided
@@ -116,4 +130,22 @@ func New(config *Config) (*Client, error) {
 
 func (c *Client) Do(req *http.Request) (*http.Response, error) {
 	return c.httpClient.Do(req)
+}
+
+// tlsMinVersion returns the configured TLS minimum version, defaulting to TLS 1.2.
+func tlsMinVersion(v uint16) uint16 {
+	if v != 0 {
+		return v
+	}
+	return tls.VersionTLS12
+}
+
+// isInternalIP returns true if the IP is in a private, loopback, link-local,
+// or cloud metadata range (RFC 1918, RFC 4193, 169.254.0.0/16).
+func isInternalIP(ip net.IP) bool {
+	// Cloud metadata endpoint
+	if ip.Equal(net.ParseIP("169.254.169.254")) {
+		return true
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast()
 }

@@ -114,7 +114,7 @@ CRAPI_PORT=8889 ./test/run-live-tests.sh --targets crapi
 
 | Target | Default Port |
 |--------|-------------|
-| vulnerable-api | 8080 |
+| vulnerable-api | 8889 |
 | dvga | 5013 |
 | grpc-server | 50051 |
 | crapi | 8888 |

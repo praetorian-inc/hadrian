@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
@@ -450,6 +451,317 @@ func TestTemplateApplies_AllFiltersMatch(t *testing.T) {
 	}
 
 	assert.True(t, templateApplies(tmpl, op))
+}
+
+func TestExecuteTemplate_NoneAttacker_AuthEndpoint(t *testing.T) {
+	// Server returns 200 — endpoint accepts unauthenticated request (vulnerable)
+	server := newTestServer(200, `{"data": "exposed"}`)
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("none-attacker-test", true, []string{"GET"}, "none", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users",
+		RequiresAuth: true,
+	}
+	rolesCfg := makeTestRolesConfig()
+	authCfg := makeTestAuthConfig(map[string]string{
+		"user":  "user-token",
+		"admin": "admin-token",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(),
+		executor,
+		mutationExecutor,
+		tmpl,
+		op,
+		rolesCfg,
+		authCfg,
+		server.URL,
+	)
+
+	require.NoError(t, err)
+	require.NotEmpty(t, findings, "should produce findings when server accepts unauthenticated request")
+	for _, f := range findings {
+		assert.Equal(t, "anonymous", f.AttackerRole)
+	}
+}
+
+func TestExecuteTemplate_NoneAttacker_ServerRejects(t *testing.T) {
+	// Server returns 401 — endpoint properly rejects unauthenticated request
+	server := newTestServer(401, `{"error": "unauthorized"}`)
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("none-attacker-reject", true, []string{"GET"}, "none", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users",
+		RequiresAuth: true,
+	}
+	rolesCfg := makeTestRolesConfig()
+	authCfg := makeTestAuthConfig(map[string]string{
+		"user":  "user-token",
+		"admin": "admin-token",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(),
+		executor,
+		mutationExecutor,
+		tmpl,
+		op,
+		rolesCfg,
+		authCfg,
+		server.URL,
+	)
+
+	require.NoError(t, err)
+	assert.Empty(t, findings, "should produce zero findings when server properly rejects")
+}
+
+func TestExecuteTemplate_NoneAttacker_NoVictim(t *testing.T) {
+	// Server returns 200 — no victim role specified
+	server := newTestServer(200, `{"data": "exposed"}`)
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("none-attacker-no-victim", true, []string{"GET"}, "none", "", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/config",
+		RequiresAuth: true,
+	}
+	rolesCfg := makeTestRolesConfig()
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(),
+		executor,
+		mutationExecutor,
+		tmpl,
+		op,
+		rolesCfg,
+		nil, // no auth config needed
+		server.URL,
+	)
+
+	require.NoError(t, err)
+	require.Len(t, findings, 1, "should produce exactly one finding with no victim role")
+	assert.Equal(t, "anonymous", findings[0].AttackerRole)
+	assert.Empty(t, findings[0].VictimRole)
+}
+
+// =============================================================================
+// Three-role execution tests (anonymous role bug fix)
+// =============================================================================
+
+// makeThreeRoleConfig creates a role config with administrator, monitoring, and anonymous roles.
+func makeThreeRoleConfig() *roles.RoleConfig {
+	return &roles.RoleConfig{
+		Roles: []*roles.Role{
+			{Name: "administrator", Level: 100},
+			{Name: "monitoring", Level: 50},
+			{Name: "anonymous", Level: 0},
+		},
+	}
+}
+
+// makeTestCookieAuthConfig creates a cookie auth config with the given role cookies.
+func makeTestCookieAuthConfig(roleCookies map[string]string) *auth.AuthConfig {
+	roleAuths := make(map[string]*auth.RoleAuth)
+	for name, cookie := range roleCookies {
+		roleAuths[name] = &auth.RoleAuth{Cookie: cookie}
+	}
+	return &auth.AuthConfig{
+		Method:     "cookie",
+		CookieName: "JSESSIONID",
+		Roles:      roleAuths,
+	}
+}
+
+func TestExecuteTemplate_ThreeRoles_SkipsLevelZeroAttacker(t *testing.T) {
+	var mu sync.Mutex
+	receivedCookies := make([]string, 0)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		receivedCookies = append(receivedCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"data": "test"}`))
+	}))
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("bola-test", true, []string{"GET"}, "lower", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users/{id}",
+		RequiresAuth: true,
+		PathParams:   []model.Parameter{{Name: "id", Example: "42"}},
+	}
+	rolesCfg := makeThreeRoleConfig()
+	authCfg := makeTestCookieAuthConfig(map[string]string{
+		"administrator": "ADMIN_COOKIE",
+		"monitoring":    "MONITORING_COOKIE",
+		"anonymous":     "d",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(), executor, mutationExecutor,
+		tmpl, op, rolesCfg, authCfg, server.URL,
+	)
+
+	require.NoError(t, err)
+
+	// Level-0 anonymous is skipped as BOLA attacker (tested via "none" templates).
+	// Only monitoring(50)→administrator(100) pairing should execute.
+	assert.Len(t, receivedCookies, 1, "should send 1 request (level-0 attackers skipped)")
+
+	monitoringCookieCount := 0
+	for _, c := range receivedCookies {
+		if c == "JSESSIONID=MONITORING_COOKIE" {
+			monitoringCookieCount++
+		}
+	}
+	assert.Equal(t, 1, monitoringCookieCount, "monitoring should send 1 request")
+
+	attackerRoles := make(map[string]int)
+	for _, f := range findings {
+		attackerRoles[f.AttackerRole]++
+	}
+	assert.NotContains(t, attackerRoles, "anonymous", "level-0 anonymous should not appear as BOLA attacker")
+	assert.Contains(t, attackerRoles, "monitoring")
+}
+
+func TestExecuteTemplate_ThreeAuthenticatedRoles_AllPairingsExecute(t *testing.T) {
+	var mu sync.Mutex
+	receivedCookies := make([]string, 0)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		receivedCookies = append(receivedCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"data": "test"}`))
+	}))
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("bola-test", true, []string{"GET"}, "lower", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users/{id}",
+		RequiresAuth: true,
+		PathParams:   []model.Parameter{{Name: "id", Example: "42"}},
+	}
+	// All roles have non-zero levels — all are authenticated
+	rolesCfg := &roles.RoleConfig{
+		Roles: []*roles.Role{
+			{Name: "admin", Level: 100},
+			{Name: "manager", Level: 50},
+			{Name: "viewer", Level: 10},
+		},
+	}
+	authCfg := makeTestCookieAuthConfig(map[string]string{
+		"admin":   "ADMIN_COOKIE",
+		"manager": "MANAGER_COOKIE",
+		"viewer":  "VIEWER_COOKIE",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(), executor, mutationExecutor,
+		tmpl, op, rolesCfg, authCfg, server.URL,
+	)
+
+	require.NoError(t, err)
+
+	// Expect 3 pairings: viewer→manager, viewer→admin, manager→admin
+	assert.Len(t, receivedCookies, 3, "should send 3 requests")
+	assert.Len(t, findings, 3, "should produce 3 findings")
+
+	attackerRoles := make(map[string]int)
+	for _, f := range findings {
+		attackerRoles[f.AttackerRole]++
+	}
+	assert.Equal(t, 2, attackerRoles["viewer"], "viewer attacks manager and admin")
+	assert.Equal(t, 1, attackerRoles["manager"], "manager attacks admin")
+}
+
+func TestExecuteTemplate_FailedRoleDoesNotAbortRemaining(t *testing.T) {
+	// Server closes connection for manager cookie but succeeds for viewer.
+	// Before the fix, the manager failure caused `return nil, err` which aborted
+	// viewer testing and discarded all findings.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Cookie") == "JSESSIONID=MANAGER_COOKIE" {
+			hj, ok := w.(http.Hijacker)
+			if ok {
+				conn, _, _ := hj.Hijack()
+				_ = conn.Close()
+				return
+			}
+		}
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"data": "test"}`))
+	}))
+	defer server.Close()
+
+	tmpl := makeCompiledTemplate("bola-test", true, []string{"GET"}, "lower", "higher", "simple")
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/users/{id}",
+		RequiresAuth: true,
+		PathParams:   []model.Parameter{{Name: "id", Example: "42"}},
+	}
+	rolesCfg := &roles.RoleConfig{
+		Roles: []*roles.Role{
+			{Name: "admin", Level: 100},
+			{Name: "manager", Level: 50},
+			{Name: "viewer", Level: 10},
+		},
+	}
+	authCfg := makeTestCookieAuthConfig(map[string]string{
+		"admin":   "ADMIN_COOKIE",
+		"manager": "MANAGER_COOKIE",
+		"viewer":  "VIEWER_COOKIE",
+	})
+
+	executor := templates.NewExecutor(server.Client(), nil)
+	mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+	findings, err := executeTemplate(
+		context.Background(), executor, mutationExecutor,
+		tmpl, op, rolesCfg, authCfg, server.URL,
+	)
+
+	// Should not return error — failed role is logged and skipped
+	require.NoError(t, err)
+
+	// Viewer findings should still exist despite manager failure
+	viewerFindings := 0
+	for _, f := range findings {
+		if f.AttackerRole == "viewer" {
+			viewerFindings++
+		}
+	}
+	assert.Equal(t, 2, viewerFindings, "viewer should produce 2 findings (vs admin and vs manager)")
+
+	// Manager findings should be absent (its request failed)
+	for _, f := range findings {
+		assert.NotEqual(t, "manager", f.AttackerRole, "manager should have no findings (request failed)")
+	}
 }
 
 // =============================================================================

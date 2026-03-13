@@ -178,7 +178,7 @@ make run-basic
 ### Run Hadrian Tests
 
 ```bash
-hadrian test owasp-api http://localhost:8080 \
+hadrian test owasp-api http://localhost:8889 \
   --auth-username user1 \
   --auth-password user1pass
 ```
@@ -234,7 +234,7 @@ make build
 
 ## Port Configuration
 
-Default: 8080
+Default: 8889
 Override: `PORT=9000 go run main.go`
 
 ## Architecture Notes
