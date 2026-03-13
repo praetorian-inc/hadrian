@@ -34,16 +34,7 @@ func executeTemplate(
 
 	// For unauthenticated endpoints, run test only once without roles
 	if !tmpl.EndpointSelector.RequiresAuth {
-		variables := map[string]string{
-			"baseURL": baseURL,
-		}
-		for _, p := range op.PathParams {
-			if p.Example != nil {
-				variables[p.Name] = fmt.Sprintf("%v", p.Example)
-			} else {
-				variables[p.Name] = "1"
-			}
-		}
+		variables := buildVariables(op, baseURL)
 
 		result, err := executor.Execute(ctx, tmpl, op, nil, variables)
 		if err != nil {
@@ -52,7 +43,49 @@ func executeTemplate(
 
 		if result.Matched {
 			finding := &model.Finding{
-				ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", "no-victim"),
+				Category:        tmpl.Info.Category,
+				Name:            tmpl.Info.Name,
+				Severity:        model.Severity(tmpl.Info.Severity),
+				Endpoint:        op.Path,
+				Method:          op.Method,
+				AttackerRole:    "anonymous",
+				IsVulnerability: true,
+				Evidence: model.Evidence{
+					Response: result.Response,
+				},
+				RequestIDs: result.RequestIDs,
+				Timestamp:  time.Now(),
+			}
+			findings = append(findings, finding)
+		}
+		return findings, nil
+	}
+
+	// For "none" attacker permission level: test authenticated endpoints without any auth
+	// This tests that endpoints properly reject unauthenticated access
+	// Send a single unauthenticated request per endpoint (no per-victim duplication)
+	if tmpl.RoleSelector.AttackerPermissionLevel == "none" {
+		variables := buildVariables(op, baseURL)
+
+		// Execute with nil auth (no authentication header)
+		result, err := executor.Execute(ctx, tmpl, op, nil, variables)
+		if err != nil {
+			if ctx.Err() != nil {
+				return findings, ctx.Err()
+			}
+			log.Warn("request failed for %s on %s %s (anonymous): %v", tmpl.ID, op.Method, op.Path, err)
+			return findings, nil
+		}
+
+		if result.Matched {
+			// Warn if response body is empty — may indicate proxy interception or dropped request
+			if result.Response.Body == "" {
+				log.Warn("matched with empty response body for %s on %s %s — response may be from proxy, not target API",
+					tmpl.ID, op.Method, op.Path)
+			}
+			finding := &model.Finding{
+				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", "no-victim"),
 				Category:        tmpl.Info.Category,
 				Name:            tmpl.Info.Name,
 				Severity:        model.Severity(tmpl.Info.Severity),
@@ -73,62 +106,72 @@ func executeTemplate(
 
 	// Get roles based on selector
 	attackerRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.AttackerPermissionLevel)
-	victimRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.VictimPermissionLevel)
-
-	// If no victim roles needed, use single-role tests
+	var victimRoles []*roles.Role
 	if tmpl.RoleSelector.VictimPermissionLevel == "" {
 		victimRoles = []*roles.Role{nil}
+	} else {
+		victimRoles = rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.VictimPermissionLevel)
 	}
 
 	for _, attackerRole := range attackerRoles {
+		// Skip unauthenticated (level 0) attacker roles — these are tested
+		// separately via attacker_permission_level: "none" templates (API2).
+		// BOLA (API1) requires authenticated attackers accessing other users' objects.
+		if attackerRole.Level == 0 {
+			continue
+		}
+
 		for _, victimRole := range victimRoles {
 			// Skip same-role if testing cross-role
 			if victimRole != nil && attackerRole.Name == victimRole.Name {
 				continue
 			}
 
+			// Skip if attacker has equal or higher privilege than victim
+			if victimRole != nil && attackerRole.Level >= victimRole.Level {
+				continue
+			}
+
 			// Build auth info for attacker
 			var authInfo *templates.AuthInfo
 			if authCfg != nil {
-				authValue, err := authCfg.GetAuth(attackerRole.Name)
+				info, err := authCfg.GetAuthInfo(attackerRole.Name)
 				if err != nil {
-					// Role may not have auth configured
+					log.Warn("skipping attacker role '%s': %v", attackerRole.Name, err)
 					continue
 				}
-
-				// Create AuthInfo from auth config
-				authInfo = &templates.AuthInfo{
-					Method:   authCfg.Method,
-					Location: authCfg.Location,
-					KeyName:  authCfg.KeyName,
-					Value:    authValue,
+				// info is nil when the role has no_auth: true — send request without auth header
+				if info != nil {
+					authInfo = &templates.AuthInfo{
+						Method:   info.Method,
+						Location: info.Location,
+						KeyName:  info.KeyName,
+						Value:    info.Value,
+					}
 				}
 			}
 
 			// Build variables for template substitution
-			variables := map[string]string{
-				"baseURL": baseURL,
-			}
-
-			// Add path parameter values
-			for _, p := range op.PathParams {
-				if p.Example != nil {
-					variables[p.Name] = fmt.Sprintf("%v", p.Example)
-				} else {
-					variables[p.Name] = "1" // Default value
-				}
-			}
+			variables := buildVariables(op, baseURL)
 
 			// Execute template
 			result, err := executor.Execute(ctx, tmpl, op, authInfo, variables)
 			if err != nil {
-				return nil, err
+				if ctx.Err() != nil {
+					return findings, ctx.Err()
+				}
+				log.Warn("request failed for %s on %s %s (attacker=%s): %v", tmpl.ID, op.Method, op.Path, attackerRole.Name, err)
+				continue
 			}
 
 			// Check if vulnerability detected
 			if result.Matched {
+				victimName := "no-victim"
+				if victimRole != nil {
+					victimName = victimRole.Name
+				}
 				finding := &model.Finding{
-					ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), attackerRole.Name, victimName),
 					Category:        tmpl.Info.Category,
 					Name:            tmpl.Info.Name,
 					Severity:        model.Severity(tmpl.Info.Severity),
@@ -167,24 +210,58 @@ func executeMutationTemplate(
 ) ([]*model.Finding, error) {
 	var findings []*model.Finding
 
+	// Warn if "none" attacker is used with mutation tests — setup/verify phases need auth
+	if tmpl.RoleSelector.AttackerPermissionLevel == "none" {
+		log.Warn("template %s uses attacker_permission_level=\"none\" with mutation test pattern — "+
+			"setup/verify phases require authentication; skipping (set attacker_permission_level to \"lower\" or \"all\" for mutation tests)", tmpl.ID)
+		return findings, nil
+	}
+
 	attackerRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.AttackerPermissionLevel)
 	victimRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.VictimPermissionLevel)
 
 	for _, attackerRole := range attackerRoles {
+		// Skip unauthenticated (level 0) attacker roles in mutation tests
+		if attackerRole.Level == 0 {
+			continue
+		}
+
 		for _, victimRole := range victimRoles {
 			if victimRole == nil || attackerRole.Name == victimRole.Name {
+				continue
+			}
+
+			// Skip if attacker has equal or higher privilege than victim
+			if attackerRole.Level >= victimRole.Level {
 				continue
 			}
 
 			// Build auth info map for both roles
 			authInfos := make(map[string]*auth.AuthInfo)
 			if authCfg != nil {
-				if info, err := authCfg.GetAuthInfo(attackerRole.Name); err == nil {
-					authInfos["attacker"] = info
+				attackerInfo, err := authCfg.GetAuthInfo(attackerRole.Name)
+				if err != nil {
+					log.Warn("skipping mutation attacker role '%s': %v", attackerRole.Name, err)
+					continue
 				}
-				if info, err := authCfg.GetAuthInfo(victimRole.Name); err == nil {
-					authInfos["victim"] = info
+				// Skip no_auth attacker roles in mutation tests — setup/verify phases require auth
+				if attackerInfo == nil {
+					log.Debug("skipping no_auth attacker role '%s' in mutation test %s — setup/verify phases require authentication", attackerRole.Name, tmpl.ID)
+					continue
 				}
+				authInfos["attacker"] = attackerInfo
+
+				victimInfo, err := authCfg.GetAuthInfo(victimRole.Name)
+				if err != nil {
+					log.Warn("skipping mutation victim role '%s': %v", victimRole.Name, err)
+					continue
+				}
+				// Skip no_auth victim roles — verifying against unauthenticated victims is meaningless
+				if victimInfo == nil {
+					log.Debug("skipping no_auth victim role '%s' in mutation test %s", victimRole.Name, tmpl.ID)
+					continue
+				}
+				authInfos["victim"] = victimInfo
 			}
 
 			// Clear tracker between tests
@@ -208,7 +285,7 @@ func executeMutationTemplate(
 
 			if result.Matched {
 				finding := &model.Finding{
-					ID:              fmt.Sprintf("%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-")),
+					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), attackerRole.Name, victimRole.Name),
 					Category:        tmpl.Info.Category,
 					Name:            tmpl.Info.Name,
 					Severity:        model.Severity(tmpl.Info.Severity),
@@ -240,4 +317,19 @@ func executeMutationTemplate(
 	}
 
 	return findings, nil
+}
+
+// buildVariables creates the template substitution variables map from an operation and base URL.
+func buildVariables(op *model.Operation, baseURL string) map[string]string {
+	variables := map[string]string{
+		"baseURL": baseURL,
+	}
+	for _, p := range op.PathParams {
+		if p.Example != nil {
+			variables[p.Name] = fmt.Sprintf("%v", p.Example)
+		} else {
+			variables[p.Name] = "1"
+		}
+	}
+	return variables
 }

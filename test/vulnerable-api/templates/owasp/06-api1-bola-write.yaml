@@ -28,7 +28,6 @@ http:
   - method: "{{operation.method}}"
     path: "{{operation.path}}"
     headers:
-      Authorization: "Bearer {{attacker_token}}"
       Content-Type: "application/json"
     matchers:
       - type: status

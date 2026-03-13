@@ -20,16 +20,18 @@ const (
 	AuthMethodBearer = "bearer"
 	AuthMethodAPIKey = "api_key"
 	AuthMethodBasic  = "basic"
+	AuthMethodCookie = "cookie"
 )
 
 // Data models
 type User struct {
-	ID       int    `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	Password string `json:"-"`
-	APIKey   string `json:"-"`
+	ID        int    `json:"id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	Role      string `json:"role"`
+	Password  string `json:"-"`
+	APIKey    string `json:"-"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 type Profile struct {
@@ -77,9 +79,9 @@ var (
 func initData() {
 	// Seed users
 	users = []User{
-		{ID: 1, Username: "admin", Email: "admin@example.com", Role: "admin", Password: "admin123", APIKey: "admin-api-key-12345"},
-		{ID: 2, Username: "user1", Email: "user1@example.com", Role: "user", Password: "user1pass", APIKey: "user1-api-key-67890"},
-		{ID: 3, Username: "user2", Email: "user2@example.com", Role: "user", Password: "user2pass", APIKey: "user2-api-key-abcde"},
+		{ID: 1, Username: "admin", Email: "admin@example.com", Role: "admin", Password: "admin123", APIKey: "admin-api-key-12345", SessionID: "admin-session-xyz789"},
+		{ID: 2, Username: "user1", Email: "user1@example.com", Role: "user", Password: "user1pass", APIKey: "user1-api-key-67890", SessionID: "user1-session-abc123"},
+		{ID: 3, Username: "user2", Email: "user2@example.com", Role: "user", Password: "user2pass", APIKey: "user2-api-key-abcde", SessionID: "user2-session-def456"},
 	}
 
 	// Seed profiles
@@ -174,6 +176,16 @@ func findUserByAPIKey(apiKey string) *User {
 	return nil
 }
 
+// Helper: Find user by session ID
+func findUserBySessionID(sessionID string) *User {
+	for i := range users {
+		if users[i].SessionID == sessionID {
+			return &users[i]
+		}
+	}
+	return nil
+}
+
 // Middleware: CORS
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +256,31 @@ func authMiddleware(next http.Handler) http.Handler {
 			if user == nil {
 				err = fmt.Errorf("invalid credentials")
 			}
+
+		case AuthMethodCookie:
+			// Cookie-based session auth
+			cookieHeader := r.Header.Get("Cookie")
+			if cookieHeader == "" {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			// Parse session_id from cookie header
+			var sessionID string
+			for _, part := range strings.Split(cookieHeader, ";") {
+				part = strings.TrimSpace(part)
+				if strings.HasPrefix(part, "session_id=") {
+					sessionID = strings.TrimPrefix(part, "session_id=")
+					break
+				}
+			}
+			if sessionID == "" {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			user = findUserBySessionID(sessionID)
+			if user == nil {
+				err = fmt.Errorf("invalid session")
+			}
 		}
 
 		if err != nil || user == nil {
@@ -259,6 +296,66 @@ func authMiddleware(next http.Handler) http.Handler {
 
 		// This is the BOLA vulnerability: we authenticate but don't authorize
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// Middleware: Optional Authentication (BROKEN - auth should be required!)
+// This simulates a common misconfiguration where auth middleware uses next()
+// even when no credentials are provided. If valid credentials are present,
+// the user is extracted; if not, the request proceeds as unauthenticated.
+func optionalAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var user *User
+
+		switch authMethod {
+		case AuthMethodBearer:
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+				if u, err := validateJWT(tokenString); err == nil {
+					user = u
+				}
+			}
+		case AuthMethodAPIKey:
+			apiKey := r.Header.Get("X-API-Key")
+			if apiKey != "" {
+				user = findUserByAPIKey(apiKey)
+			}
+		case AuthMethodBasic:
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Basic ") {
+				payload, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
+				credentials := strings.SplitN(string(payload), ":", 2)
+				if len(credentials) == 2 {
+					user = findUserByCredentials(credentials[0], credentials[1])
+				}
+			}
+		case AuthMethodCookie:
+			cookieHeader := r.Header.Get("Cookie")
+			if cookieHeader != "" {
+				for _, part := range strings.Split(cookieHeader, ";") {
+					part = strings.TrimSpace(part)
+					if strings.HasPrefix(part, "session_id=") {
+						sessionID := strings.TrimPrefix(part, "session_id=")
+						if sessionID != "" {
+							user = findUserBySessionID(sessionID)
+						}
+						break
+					}
+				}
+			}
+		}
+
+		// BUG: Proceeds even without authentication!
+		if user != nil {
+			ctx := context.WithValue(r.Context(), "user", user)
+			r = r.WithContext(ctx)
+			log.Printf("[WEAK-AUTH] Authenticated request from %s (ID: %d)", user.Username, user.ID)
+		} else {
+			log.Printf("[WEAK-AUTH] Unauthenticated request to %s - SHOULD HAVE BEEN REJECTED", r.URL.Path)
+		}
+
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -357,6 +454,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		response["api_key"] = user.APIKey
 	case AuthMethodBasic:
 		// Basic auth doesn't return credentials, just user info
+	case AuthMethodCookie:
+		response["session_id"] = user.SessionID
 	}
 
 	jsonResponse(w, response, http.StatusOK)
@@ -583,6 +682,69 @@ func handleAdminStats(w http.ResponseWriter, r *http.Request) {
 	jsonResponse(w, stats, http.StatusOK)
 }
 
+// Broken Auth Handlers: Internal endpoints (auth is optional - vulnerability!)
+// These simulate endpoints where a developer forgot to enforce authentication.
+func handleInternalMetrics(w http.ResponseWriter, r *http.Request) {
+	user := getCurrentUser(r)
+	username := "anonymous"
+	if user != nil {
+		username = user.Username
+	}
+	log.Printf("[BROKEN-AUTH] /api/internal/metrics accessed by %s", username)
+
+	metrics := map[string]interface{}{
+		"requests_total":  12345,
+		"errors_total":    42,
+		"active_sessions": len(users),
+		"uptime_seconds":  3600,
+		"db_connections":  5,
+	}
+	jsonResponse(w, metrics, http.StatusOK)
+}
+
+func handleInternalConfig(w http.ResponseWriter, r *http.Request) {
+	user := getCurrentUser(r)
+	username := "anonymous"
+	if user != nil {
+		username = user.Username
+	}
+	log.Printf("[BROKEN-AUTH] /api/internal/config accessed by %s", username)
+
+	// Exposes internal configuration - should require admin auth!
+	config := map[string]interface{}{
+		"database_host":  "db.internal.example.com",
+		"cache_host":     "redis.internal.example.com",
+		"debug_mode":     true,
+		"api_version":    "1.0.0",
+		"secret_key_ref": "vault://secrets/api-key",
+	}
+	jsonResponse(w, config, http.StatusOK)
+}
+
+func handleInternalLogs(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/internal/logs/")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusBadRequest)
+		return
+	}
+
+	user := getCurrentUser(r)
+	username := "anonymous"
+	if user != nil {
+		username = user.Username
+	}
+	log.Printf("[BROKEN-AUTH] /api/internal/logs/%d accessed by %s", id, username)
+
+	// Simulate log entries with potentially sensitive data
+	logEntries := []map[string]interface{}{
+		{"id": id, "level": "INFO", "message": fmt.Sprintf("User login from IP 192.168.1.%d", id), "timestamp": time.Now().Add(-1 * time.Hour).Format(time.RFC3339)},
+		{"id": id + 100, "level": "WARN", "message": "Failed authentication attempt", "timestamp": time.Now().Add(-30 * time.Minute).Format(time.RFC3339)},
+		{"id": id + 200, "level": "ERROR", "message": "Database connection timeout", "timestamp": time.Now().Format(time.RFC3339)},
+	}
+	jsonResponse(w, logEntries, http.StatusOK)
+}
+
 // Reset handler (no auth required for testing convenience)
 func handleReset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -608,7 +770,7 @@ func main() {
 	// Load configuration
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "8889"
 	}
 
 	authMethodEnv := os.Getenv("AUTH_METHOD")
@@ -630,12 +792,17 @@ func main() {
 		fmt.Printf("  %s (ID: %d, Role: %s)\n", u.Username, u.ID, u.Role)
 		fmt.Printf("    Password: %s\n", u.Password)
 		fmt.Printf("    API Key: %s\n", u.APIKey)
+		fmt.Printf("    Session ID: %s\n", u.SessionID)
 	}
 	fmt.Println("\n--- Vulnerable Endpoints (BOLA) ---")
 	fmt.Println("  GET/PUT/DELETE /api/users/{id}")
 	fmt.Println("  GET/PUT        /api/profiles/{id}")
 	fmt.Println("  GET/POST/DELETE /api/orders/{id}")
 	fmt.Println("  GET/POST/PUT/DELETE /api/documents/{id}")
+	fmt.Println("\n--- Broken Auth Endpoints (API2:2023 - Auth Optional!) ---")
+	fmt.Println("  GET /api/internal/metrics")
+	fmt.Println("  GET /api/internal/config")
+	fmt.Println("  GET /api/internal/logs/{id}")
 	fmt.Println("\n--- Protected Endpoints (Admin Only) ---")
 	fmt.Println("  GET /api/admin/users")
 	fmt.Println("  GET /api/admin/stats")
@@ -664,6 +831,11 @@ func main() {
 	mux.Handle("/api/orders", authMiddleware(http.HandlerFunc(handleOrders)))
 	mux.Handle("/api/documents/", authMiddleware(http.HandlerFunc(handleDocuments)))
 	mux.Handle("/api/documents", authMiddleware(http.HandlerFunc(handleDocuments)))
+
+	// Broken auth routes (auth is optional - API2:2023 vulnerability!)
+	mux.Handle("/api/internal/metrics", optionalAuthMiddleware(http.HandlerFunc(handleInternalMetrics)))
+	mux.Handle("/api/internal/config", optionalAuthMiddleware(http.HandlerFunc(handleInternalConfig)))
+	mux.Handle("/api/internal/logs/", optionalAuthMiddleware(http.HandlerFunc(handleInternalLogs)))
 
 	// Admin-only routes (properly protected)
 	mux.Handle("/api/admin/users", authMiddleware(adminMiddleware(http.HandlerFunc(handleAdminUsers))))

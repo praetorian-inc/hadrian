@@ -20,7 +20,7 @@ The API implements authentication but deliberately **omits authorization checks*
 # Install dependencies
 go mod download
 
-# Run with default settings (Bearer JWT auth, port 8080)
+# Run with default settings (Bearer JWT auth, port 8889)
 go run main.go
 
 # Run with API key authentication
@@ -41,7 +41,7 @@ Configure via `AUTH_METHOD` environment variable:
 
 ```bash
 # Login
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8889/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"user1","password":"user1pass"}'
 
@@ -50,7 +50,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 # Use token in requests
 curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
-  http://localhost:8080/api/users/1
+  http://localhost:8889/api/users/1
 ```
 
 ### 2. API Key
@@ -59,7 +59,7 @@ curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..." \
 AUTH_METHOD=api_key go run main.go
 
 # Login returns API key
-curl -X POST http://localhost:8080/api/auth/login \
+curl -X POST http://localhost:8889/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"user1","password":"user1pass"}'
 
@@ -68,7 +68,7 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 # Use API key in requests
 curl -H "X-API-Key: user1-api-key-67890" \
-  http://localhost:8080/api/users/1
+  http://localhost:8889/api/users/1
 ```
 
 ### 3. Basic Authentication
@@ -77,7 +77,7 @@ curl -H "X-API-Key: user1-api-key-67890" \
 AUTH_METHOD=basic go run main.go
 
 # Use Basic Auth in requests (no login needed)
-curl -u user1:user1pass http://localhost:8080/api/users/1
+curl -u user1:user1pass http://localhost:8889/api/users/1
 ```
 
 ## Test Users
@@ -136,13 +136,13 @@ curl -u user1:user1pass http://localhost:8080/api/users/1
 
 ```bash
 # Login as user1 (ID: 2)
-TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8889/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"user1","password":"user1pass"}' | jq -r '.token')
 
 # VULNERABILITY: user1 can access user2's profile (ID: 3)
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/profiles/3
+  http://localhost:8889/api/profiles/3
 
 # Response includes SSN!
 {
@@ -159,13 +159,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 # Login as user2 (ID: 3)
-TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8889/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"user2","password":"user2pass"}' | jq -r '.token')
 
 # VULNERABILITY: user2 can delete user1's order (order ID: 2 belongs to user1)
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/orders/2
+  http://localhost:8889/api/orders/2
 
 # Returns 204 No Content - order deleted!
 ```
@@ -174,13 +174,13 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN" \
 
 ```bash
 # Login as user2
-TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:8889/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"user2","password":"user2pass"}' | jq -r '.token')
 
 # VULNERABILITY: user2 can read user1's private document (ID: 4)
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/documents/4
+  http://localhost:8889/api/documents/4
 
 # Response includes private content!
 {
@@ -242,7 +242,7 @@ HADRIAN_TEMPLATES=./templates/rest hadrian test \
   --verbose
 
 # Reset data after tests
-curl -X POST http://localhost:8080/api/reset
+curl -X POST http://localhost:8889/api/reset
 ```
 
 ### Template Execution Order

@@ -75,7 +75,7 @@ type ExecuteResult struct {
 
 // AuthInfo contains authentication information
 type AuthInfo struct {
-	Method   string // "bearer", "api_key"
+	Method   string // "bearer", "api_key", "basic", "cookie"
 	Value    string
 	Location string // "header", "query"
 	KeyName  string // Header name for api_key
@@ -114,15 +114,21 @@ func (e *Executor) Execute(
 	// Set Content-Type after custom headers to ensure GraphQL requests always use JSON
 	req.Header.Set("Content-Type", "application/json")
 
-	// Add auth
-	if authInfo != nil && authInfo.Value != "" {
+	// Add auth (nil means no_auth role — skip header entirely)
+	if authInfo != nil {
 		switch authInfo.Method {
-		case "bearer":
+		case "bearer", "basic":
 			req.Header.Set("Authorization", authInfo.Value)
 		case "api_key":
 			if authInfo.Location == "header" {
 				req.Header.Set(authInfo.KeyName, authInfo.Value)
+			} else if authInfo.Location == "query" {
+				q := req.URL.Query()
+				q.Set(authInfo.KeyName, authInfo.Value)
+				req.URL.RawQuery = q.Encode()
 			}
+		case "cookie":
+			req.Header.Set("Cookie", authInfo.Value)
 		}
 	}
 

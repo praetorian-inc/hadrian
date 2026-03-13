@@ -2,8 +2,8 @@
 # =============================================================================
 # run-all-auth-tests.sh
 #
-# Runs Hadrian security tests against the vulnerable API using all three
-# authentication methods: Bearer JWT, API Key, and Basic Auth.
+# Runs Hadrian security tests against the vulnerable API using all four
+# authentication methods: Bearer JWT, API Key, Basic Auth, and Cookie.
 #
 # Usage:
 #   ./run-all-auth-tests.sh [options]
@@ -15,6 +15,7 @@
 #   --no-build              Skip building the API
 #   --verbose               Enable verbose Hadrian output
 #   --cli-only              Print CLI output only (no JSON files)
+#   --proxy <url>           Route traffic through a proxy (e.g., http://127.0.0.1:8080 for Burp)
 #   --reset-between-tests   Reset API data before each auth method test (ensures consistent results)
 #   --help                  Show this help message
 # =============================================================================
@@ -23,7 +24,7 @@ set -e
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-API_PORT="${API_PORT:-8080}"
+API_PORT="${API_PORT:-8889}"
 API_URL="http://localhost:${API_PORT}"
 HADRIAN_BIN="${HADRIAN_BIN:-hadrian}"
 TEMPLATES_DIR="${SCRIPT_DIR}/templates/owasp"
@@ -39,9 +40,11 @@ NC='\033[0m' # No Color
 RUN_BEARER=true
 RUN_APIKEY=true
 RUN_BASIC=true
+RUN_COOKIE=true
 DO_BUILD=true
 VERBOSE=""
 CLI_ONLY=false
+PROXY=""
 RESET_BETWEEN_TESTS=false
 
 while [[ $# -gt 0 ]]; do
@@ -50,18 +53,28 @@ while [[ $# -gt 0 ]]; do
             RUN_BEARER=true
             RUN_APIKEY=false
             RUN_BASIC=false
+            RUN_COOKIE=false
             shift
             ;;
         --apikey-only)
             RUN_BEARER=false
             RUN_APIKEY=true
             RUN_BASIC=false
+            RUN_COOKIE=false
             shift
             ;;
         --basic-only)
             RUN_BEARER=false
             RUN_APIKEY=false
             RUN_BASIC=true
+            RUN_COOKIE=false
+            shift
+            ;;
+        --cookie-only)
+            RUN_BEARER=false
+            RUN_APIKEY=false
+            RUN_BASIC=false
+            RUN_COOKIE=true
             shift
             ;;
         --no-build)
@@ -75,6 +88,10 @@ while [[ $# -gt 0 ]]; do
         --cli-only)
             CLI_ONLY=true
             shift
+            ;;
+        --proxy)
+            PROXY="$2"
+            shift 2
             ;;
         --reset-between-tests)
             RESET_BETWEEN_TESTS=true
@@ -237,6 +254,12 @@ run_hadrian() {
     # Use --concurrency 1 to ensure tests run in alphabetical order.
     # This prevents DELETE tests from running before GET tests, which would
     # delete resources before BOLA read tests can detect vulnerabilities.
+    # Build proxy flags if set (--insecure needed for Burp Suite TLS interception)
+    local proxy_flags=""
+    if [[ -n "$PROXY" ]]; then
+        proxy_flags="--proxy ${PROXY} --insecure"
+    fi
+
     if [[ "$CLI_ONLY" == "true" ]]; then
         # CLI-only mode: print directly to terminal, no JSON files
         HADRIAN_TEMPLATES="${TEMPLATES_DIR}" "${HADRIAN_BIN}" test rest \
@@ -244,6 +267,7 @@ run_hadrian() {
             --roles "${SCRIPT_DIR}/roles.yaml" \
             --auth "${SCRIPT_DIR}/${auth_config}" \
             --concurrency 1 \
+            ${proxy_flags} \
             ${VERBOSE}
     else
         # Default mode: output to JSON files with log
@@ -254,6 +278,7 @@ run_hadrian() {
             --concurrency 1 \
             --output json \
             --output-file "${output_file}" \
+            ${proxy_flags} \
             ${VERBOSE} \
             2>&1 | tee "${SCRIPT_DIR}/hadrian-${auth_method}.log"
     fi
@@ -317,7 +342,11 @@ echo "  Hadrian:      ${HADRIAN_BIN}"
 echo "  Run Bearer:   ${RUN_BEARER}"
 echo "  Run API Key:  ${RUN_APIKEY}"
 echo "  Run Basic:    ${RUN_BASIC}"
+echo "  Run Cookie:   ${RUN_COOKIE}"
 echo "  CLI Only:     ${CLI_ONLY}"
+if [[ -n "$PROXY" ]]; then
+echo "  Proxy:        ${PROXY}"
+fi
 echo "  Reset Between Tests: ${RESET_BETWEEN_TESTS}"
 echo ""
 
@@ -331,12 +360,15 @@ fi
 # Check Hadrian is available
 if ! command -v "${HADRIAN_BIN}" &> /dev/null; then
     log_error "Hadrian binary not found: ${HADRIAN_BIN}"
-    log_info "Build Hadrian with: cd /workspaces/praetorian-dev/modules/hadrian && go build -o hadrian ./cmd/hadrian"
+    log_info "Build Hadrian with: go build -o hadrian ./cmd/hadrian (from the hadrian repo root)"
     exit 1
 fi
 
-# Track results
-declare -A RESULTS
+# Track results (using simple variables for macOS bash 3.x compatibility)
+RESULT_bearer=""
+RESULT_apikey=""
+RESULT_basic=""
+RESULT_cookie=""
 
 # -----------------------------------------------------------------------------
 # Test 1: Bearer JWT Authentication
@@ -360,6 +392,10 @@ roles:
     token: "${USER1_TOKEN}"
   user2:
     token: "${USER2_TOKEN}"
+  anonymous:
+    token: ""
+  no_header:
+    no_auth: true
 EOF
 
         # Reset data before test if enabled
@@ -368,15 +404,15 @@ EOF
         fi
 
         if run_hadrian "auth-bearer-active.yaml" "bearer"; then
-            RESULTS["bearer"]="PASS"
+            RESULT_bearer="PASS"
         else
-            RESULTS["bearer"]="FAIL"
+            RESULT_bearer="FAIL"
         fi
 
         # Cleanup temp file
         rm -f "${SCRIPT_DIR}/auth-bearer-active.yaml"
     else
-        RESULTS["bearer"]="ERROR (token generation failed)"
+        RESULT_bearer="ERROR (token generation failed)"
     fi
 fi
 
@@ -395,9 +431,9 @@ if [[ "$RUN_APIKEY" == "true" ]]; then
     fi
 
     if run_hadrian "auth-apikey.yaml" "apikey"; then
-        RESULTS["apikey"]="PASS"
+        RESULT_apikey="PASS"
     else
-        RESULTS["apikey"]="FAIL"
+        RESULT_apikey="FAIL"
     fi
 fi
 
@@ -416,9 +452,30 @@ if [[ "$RUN_BASIC" == "true" ]]; then
     fi
 
     if run_hadrian "auth-basic.yaml" "basic"; then
-        RESULTS["basic"]="PASS"
+        RESULT_basic="PASS"
     else
-        RESULTS["basic"]="FAIL"
+        RESULT_basic="FAIL"
+    fi
+fi
+
+# -----------------------------------------------------------------------------
+# Test 4: Cookie Authentication
+# -----------------------------------------------------------------------------
+
+if [[ "$RUN_COOKIE" == "true" ]]; then
+    log_header "Test 4: Cookie Authentication"
+
+    start_api "cookie"
+
+    # Reset data before test if enabled
+    if [[ "$RESET_BETWEEN_TESTS" == "true" ]]; then
+        reset_api_data
+    fi
+
+    if run_hadrian "auth-cookie.yaml" "cookie"; then
+        RESULT_cookie="PASS"
+    else
+        RESULT_cookie="FAIL"
     fi
 fi
 
@@ -431,9 +488,9 @@ log_header "Test Summary"
 echo "Authentication Method Results:"
 echo ""
 
-for method in bearer apikey basic; do
-    if [[ -n "${RESULTS[$method]}" ]]; then
-        result="${RESULTS[$method]}"
+for method in bearer apikey basic cookie; do
+    eval "result=\$RESULT_${method}"
+    if [[ -n "$result" ]]; then
         if [[ "$result" == "PASS" ]]; then
             echo -e "  ${method}:  ${GREEN}${result}${NC}"
         else
@@ -445,7 +502,7 @@ done
 if [[ "$CLI_ONLY" != "true" ]]; then
     echo ""
     echo "Output files:"
-    for method in bearer apikey basic; do
+    for method in bearer apikey basic cookie; do
         if [[ -f "${SCRIPT_DIR}/results-${method}.json" ]]; then
             echo "  - results-${method}.json"
         fi

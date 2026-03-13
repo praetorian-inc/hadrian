@@ -52,10 +52,16 @@ if [ -f "$CONFIG_FILE" ]; then
 fi
 
 # Target ports (env vars > config file > defaults)
-VULN_API_PORT="${VULN_API_PORT:-8080}"
+VULN_API_PORT="${VULN_API_PORT:-8889}"
 DVGA_PORT="${DVGA_PORT:-5013}"
 GRPC_PORT="${GRPC_PORT:-50051}"
 CRAPI_PORT="${CRAPI_PORT:-8888}"
+
+# Require Bash 4+ for associative arrays
+if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
+    echo "ERROR: This script requires Bash 4+ (found ${BASH_VERSION}). On macOS: brew install bash" >&2
+    exit 1
+fi
 
 # Colors
 RED='\033[0;31m'
@@ -74,7 +80,7 @@ DO_START=true
 
 # Track results per target using associative arrays
 declare -A STATUS FINDINGS DURATION
-for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic dvga grpc crapi; do
+for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie dvga grpc crapi; do
     STATUS["$_t"]="NOT_RUN"
     FINDINGS["$_t"]="0"
     DURATION["$_t"]="0"
@@ -281,9 +287,18 @@ mkdir -p "$OUTPUT_DIR"
 
 # ==== Test: vulnerable-api ====
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    # Test all three auth methods: bearer, api_key, basic
-    VULN_API_AUTH_METHODS="bearer api_key basic"
+    # Test all four auth methods: bearer, api_key, basic, cookie
+    VULN_API_AUTH_METHODS="bearer api_key basic cookie"
     VULN_API_SKIP_ALL=false
+
+    # If using a non-default port, patch the OpenAPI spec's server URL
+    VULN_API_SPEC="${SCRIPT_DIR}/vulnerable-api/openapi.yaml"
+    if [ "$VULN_API_PORT" != "8889" ]; then
+        VULN_API_SPEC="${OUTPUT_DIR}/vulnerable-api-openapi.yaml"
+        sed "s|http://localhost:8889|http://localhost:${VULN_API_PORT}|g" \
+            "${SCRIPT_DIR}/vulnerable-api/openapi.yaml" > "$VULN_API_SPEC"
+        log_info "Patched OpenAPI spec to use port $VULN_API_PORT"
+    fi
 
     for auth_method in $VULN_API_AUTH_METHODS; do
         # Map auth_method to target name suffix (api_key -> apikey for variable names)
@@ -291,6 +306,7 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
             bearer)  target_suffix="bearer" ; auth_label="Bearer JWT" ;;
             api_key) target_suffix="apikey" ; auth_label="API Key" ;;
             basic)   target_suffix="basic"  ; auth_label="Basic Auth" ;;
+            cookie)  target_suffix="cookie" ; auth_label="Cookie Auth" ;;
         esac
 
         target_name="vulnerable-api-${target_suffix}"
@@ -355,6 +371,8 @@ roles:
     token: "${USER2_TOKEN}"
   anonymous:
     token: ""
+  no_header:
+    no_auth: true
 EOF
             )
         elif [ "$auth_method" = "api_key" ]; then
@@ -372,6 +390,8 @@ roles:
     api_key: "user2-api-key-abcde"
   anonymous:
     api_key: ""
+  no_header:
+    no_auth: true
 EOF
             )
         elif [ "$auth_method" = "basic" ]; then
@@ -391,13 +411,35 @@ roles:
   anonymous:
     username: ""
     password: ""
+  empty_basic:
+    credentials: ""
+  no_header:
+    no_auth: true
+EOF
+            )
+        elif [ "$auth_method" = "cookie" ]; then
+            log_info "Using cookie session IDs..."
+            (umask 077; cat > "$AUTH_FILE" <<EOF
+method: cookie
+cookie_name: session_id
+roles:
+  admin:
+    cookie: "admin-session-xyz789"
+  user1:
+    cookie: "user1-session-abc123"
+  user2:
+    cookie: "user2-session-def456"
+  anonymous:
+    cookie: ""
+  no_header:
+    no_auth: true
 EOF
             )
         fi
 
         RESULT_FILE="${OUTPUT_DIR}/vulnerable-api-${target_suffix}-results.json"
         run_hadrian "$target_name" test rest \
-            --api "${SCRIPT_DIR}/vulnerable-api/openapi.yaml" \
+            --api "$VULN_API_SPEC" \
             --roles "${SCRIPT_DIR}/vulnerable-api/roles.yaml" \
             --auth "$AUTH_FILE" \
             --template-dir "${SCRIPT_DIR}/vulnerable-api/templates/owasp" \
@@ -718,7 +760,7 @@ TOTAL_SKIP=0
 
 ALL_TARGETS=""
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic"
+    ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie"
 fi
 for extra in dvga grpc crapi; do
     if echo "$TARGETS" | grep -q "${extra}"; then

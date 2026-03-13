@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
@@ -49,16 +50,23 @@ type HTTPClient interface {
 
 // AuthInfo contains authentication configuration for template execution
 type AuthInfo struct {
-	Method   string // bearer, api_key, basic
+	Method   string // bearer, api_key, basic, cookie
 	Location string // header, query (for api_key)
 	KeyName  string // Header name (e.g., X-API-Key) or query parameter name
 	Value    string // The actual auth value (token, API key, or Basic credentials)
 }
 
-// Executor runs compiled templates against operations
+// Executor runs compiled templates against operations.
+//
+// Concurrency: Individual field accesses to requestIDs are mutex-protected,
+// but Execute/ExecuteGraphQL must NOT be called concurrently on the same
+// Executor instance — each call resets requestIDs at the start, so concurrent
+// calls would interleave or lose each other's IDs. Use separate Executor
+// instances for concurrent execution.
 type Executor struct {
 	httpClient    HTTPClient
 	cache         *Cache
+	mu            sync.Mutex
 	requestIDs    []string
 	customHeaders map[string]string
 }
@@ -81,7 +89,9 @@ func (e *Executor) Execute(
 	variables map[string]string,
 ) (*ExecutionResult, error) {
 	// Clear request IDs for this execution
+	e.mu.Lock()
 	e.requestIDs = make([]string, 0)
+	e.mu.Unlock()
 
 	result := &ExecutionResult{
 		TemplateID: tmpl.ID,
@@ -165,7 +175,9 @@ func (e *Executor) Execute(
 				// Add request ID header and track it
 				requestID := generateRequestID()
 				req.Header.Set("X-Hadrian-Request-Id", requestID)
+				e.mu.Lock()
 				e.requestIDs = append(e.requestIDs, requestID)
+				e.mu.Unlock()
 
 				// Execute HTTP request
 				resp, err = e.httpClient.Do(req)
@@ -338,7 +350,9 @@ func (e *Executor) Execute(
 	}
 
 	// Add tracked request IDs to result
+	e.mu.Lock()
 	result.RequestIDs = e.requestIDs
+	e.mu.Unlock()
 
 	return result, nil
 }
@@ -352,7 +366,9 @@ func (e *Executor) ExecuteGraphQL(
 	variables map[string]string,
 ) (*ExecutionResult, error) {
 	// Clear request IDs for this execution
+	e.mu.Lock()
 	e.requestIDs = make([]string, 0)
+	e.mu.Unlock()
 
 	result := &ExecutionResult{
 		TemplateID: tmpl.ID,
@@ -445,7 +461,9 @@ func (e *Executor) ExecuteGraphQL(
 		// Add request ID header and track it
 		requestID := generateRequestID()
 		req.Header.Set("X-Hadrian-Request-Id", requestID)
+		e.mu.Lock()
 		e.requestIDs = append(e.requestIDs, requestID)
+		e.mu.Unlock()
 
 		// Determine which auth to use
 		var authInfo *AuthInfo
@@ -459,7 +477,7 @@ func (e *Executor) ExecuteGraphQL(
 		}
 
 		// Apply authentication
-		if authInfo != nil && authInfo.Value != "" {
+		if authInfo != nil {
 			switch authInfo.Method {
 			case "bearer", "basic":
 				req.Header.Set("Authorization", authInfo.Value)
@@ -471,6 +489,8 @@ func (e *Executor) ExecuteGraphQL(
 					q.Set(authInfo.KeyName, authInfo.Value)
 					req.URL.RawQuery = q.Encode()
 				}
+			case "cookie":
+				req.Header.Set("Cookie", authInfo.Value)
 			}
 		}
 
@@ -541,7 +561,9 @@ func (e *Executor) ExecuteGraphQL(
 	}
 
 	// Add tracked request IDs to result
+	e.mu.Lock()
 	result.RequestIDs = e.requestIDs
+	e.mu.Unlock()
 
 	return result, nil
 }
@@ -604,31 +626,37 @@ func buildRequest(
 		req.Header.Set(key, value)
 	}
 
-	// Add headers
+	// Add template-defined headers (skip auth placeholders).
+	// Auth is applied below from authInfo, so template headers containing
+	// auth placeholder values are skipped to avoid sending literal unsubstituted
+	// strings. Recognized placeholder values:
+	//   - "Bearer {{attacker_token}}" (legacy bearer auth placeholder)
+	//   - "{{attacker_token}}" (legacy generic auth placeholder)
+	// If new auth placeholder patterns are needed, add them here.
 	for key, value := range test.Headers {
-		if value == "Bearer {{attacker_token}}" && authInfo != nil && authInfo.Value != "" {
-			// Handle authentication based on method
-			switch authInfo.Method {
-			case "bearer", "basic":
-				// Bearer and Basic both use Authorization header
-				req.Header.Set("Authorization", authInfo.Value)
-			case "api_key":
-				// API key auth: check location
-				if authInfo.Location == "header" {
-					// Set custom header (e.g., X-API-Key)
-					req.Header.Set(authInfo.KeyName, authInfo.Value)
-				} else if authInfo.Location == "query" {
-					// Add as query parameter
-					q := req.URL.Query()
-					q.Set(authInfo.KeyName, authInfo.Value)
-					req.URL.RawQuery = q.Encode()
-				}
-			}
-		} else {
-			req.Header.Set(key, value)
+		if value == "Bearer {{attacker_token}}" || value == "{{attacker_token}}" {
+			continue
 		}
+		req.Header.Set(key, value)
 	}
 
+	// Apply authentication from auth config (independent of template headers)
+	if authInfo != nil {
+		switch authInfo.Method {
+		case "bearer", "basic":
+			req.Header.Set("Authorization", authInfo.Value)
+		case "api_key":
+			if authInfo.Location == "header" {
+				req.Header.Set(authInfo.KeyName, authInfo.Value)
+			} else if authInfo.Location == "query" {
+				q := req.URL.Query()
+				q.Set(authInfo.KeyName, authInfo.Value)
+				req.URL.RawQuery = q.Encode()
+			}
+		case "cookie":
+			req.Header.Set("Cookie", authInfo.Value)
+		}
+	}
 	return req, nil
 }
 

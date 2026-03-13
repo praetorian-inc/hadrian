@@ -30,6 +30,9 @@ func NewRedactor() *Redactor {
 			"basic":    regexp.MustCompile(`(?i)basic\s+[A-Za-z0-9+/=]+`),
 			"api_key":  regexp.MustCompile(`(?i)(api[_-]?(key|token)|apikey)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
 			"password": regexp.MustCompile(`(?i)(password|passwd|pwd)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
+
+			// Session cookie patterns (CR-1)
+			"cookie": regexp.MustCompile(`(?i)(cookie|set-cookie)\s*:\s*[^\r\n]+`),
 		},
 	}
 }
@@ -51,7 +54,7 @@ func (r *Redactor) Redact(content string) string {
 	}
 
 	// Pass 2: Field:value pairs
-	pass2Order := []string{"api_key", "password"}
+	pass2Order := []string{"api_key", "password", "cookie"}
 	for _, name := range pass2Order {
 		if pattern, ok := r.patterns[name]; ok {
 			content = pattern.ReplaceAllStringFunc(content, func(match string) string {
@@ -87,7 +90,7 @@ func (r *Redactor) RedactWithHash(content string) string {
 	}
 
 	// Pass 2: Field:value pairs
-	pass2Order := []string{"api_key", "password"}
+	pass2Order := []string{"api_key", "password", "cookie"}
 	for _, name := range pass2Order {
 		if pattern, ok := r.patterns[name]; ok {
 			content = pattern.ReplaceAllStringFunc(content, func(match string) string {

@@ -10,7 +10,7 @@ info:
     name: Hadrian Security Testing
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8889
     description: Local development server
 
 tags:
@@ -26,6 +26,8 @@ tags:
     description: Order management (BOLA vulnerable)
   - name: documents
     description: Document management (BOLA vulnerable)
+  - name: internal
+    description: Internal endpoints (broken auth - accessible without credentials!)
   - name: admin
     description: Admin-only endpoints (properly protected)
 
@@ -520,6 +522,102 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/internal/metrics:
+    get:
+      summary: Internal metrics (broken auth - accessible without credentials!)
+      operationId: getInternalMetrics
+      tags: [internal]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: Internal metrics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests_total:
+                    type: integer
+                  errors_total:
+                    type: integer
+                  active_sessions:
+                    type: integer
+                  uptime_seconds:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/internal/config:
+    get:
+      summary: Internal configuration (broken auth - exposes secrets without credentials!)
+      operationId: getInternalConfig
+      tags: [internal]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: Internal configuration (sensitive!)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  database_host:
+                    type: string
+                  cache_host:
+                    type: string
+                  debug_mode:
+                    type: boolean
+                  api_version:
+                    type: string
+                  secret_key_ref:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/internal/logs/{id}:
+    get:
+      summary: Internal logs (broken auth - accessible without credentials!)
+      operationId: getInternalLogs
+      tags: [internal]
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+        - basicAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Log entry ID
+          schema:
+            type: integer
+            example: 1
+      responses:
+        '200':
+          description: Log entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                    level:
+                      type: string
+                    message:
+                      type: string
+                    timestamp:
+                      type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /api/admin/users:
     get:

@@ -4,7 +4,6 @@ package runner
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -132,7 +131,8 @@ func reportAuthConfigsLoaded(authPath string, rolesPath string, authConfig *Auth
 	}
 }
 
-// buildAuthConfigs converts AuthConfig to the format needed by the GraphQL scanner
+// buildAuthConfigs converts AuthConfig to the format needed by the GraphQL scanner.
+// Delegates to authConfig.GetAuthInfo() for each role to avoid duplicating auth logic.
 func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, error) {
 	// Return nil if no auth config or no roles
 	if authConfig == nil || authConfig.Roles == nil || len(authConfig.Roles) == 0 {
@@ -141,38 +141,23 @@ func buildAuthConfigs(authConfig *AuthConfig) (map[string]*graphql.AuthInfo, err
 
 	authConfigs := make(map[string]*graphql.AuthInfo)
 
-	for role, roleAuth := range authConfig.Roles {
-		// Determine auth value based on method and validate required fields
-		var authValue string
-		switch authConfig.Method {
-		case "bearer":
-			if roleAuth.Token == "" {
-				return nil, fmt.Errorf("role %s: bearer auth requires 'token' field", role)
-			}
-			authValue = "Bearer " + roleAuth.Token
+	for role := range authConfig.Roles {
+		info, err := authConfig.GetAuthInfo(role)
+		if err != nil {
+			return nil, fmt.Errorf("role %s: %w", role, err)
+		}
 
-		case "api_key":
-			if roleAuth.APIKey == "" {
-				return nil, fmt.Errorf("role %s: api_key auth requires 'api_key' field", role)
-			}
-			authValue = roleAuth.APIKey
-
-		case "basic":
-			if roleAuth.Username == "" || roleAuth.Password == "" {
-				return nil, fmt.Errorf("role %s: basic auth requires 'username' and 'password' fields", role)
-			}
-			// Encode username:password for Basic auth
-			authValue = base64.StdEncoding.EncodeToString([]byte(roleAuth.Username + ":" + roleAuth.Password))
-
-		default:
-			return nil, fmt.Errorf("role %s: unsupported auth method: %s", role, authConfig.Method)
+		// nil info means no_auth — send requests without authentication
+		if info == nil {
+			authConfigs[role] = nil
+			continue
 		}
 
 		authConfigs[role] = &graphql.AuthInfo{
-			Method:   authConfig.Method,
-			Value:    authValue,
-			Location: authConfig.Location,
-			KeyName:  authConfig.KeyName,
+			Method:   info.Method,
+			Value:    info.Value,
+			Location: info.Location,
+			KeyName:  info.KeyName,
 		}
 	}
 
@@ -310,6 +295,10 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 		if authConfigs != nil {
 			tmplAuthInfos = make(map[string]*templates.AuthInfo)
 			for role, info := range authConfigs {
+				if info == nil {
+					tmplAuthInfos[role] = nil
+					continue
+				}
 				tmplAuthInfos[role] = &templates.AuthInfo{
 					Method:   info.Method,
 					Value:    info.Value,

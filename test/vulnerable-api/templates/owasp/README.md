@@ -47,7 +47,7 @@ After running destructive tests, reset the API data:
 
 ```bash
 # Option 1: Call the reset endpoint
-curl -X POST http://localhost:8080/api/reset
+curl -X POST http://localhost:8889/api/reset
 
 # Option 2: Restart the API
 # Stop the API (Ctrl+C) and restart it
@@ -72,7 +72,7 @@ HADRIAN_TEMPLATES=./templates/owasp hadrian test \
   --template "0[1-9]-*" --template "1[0-3]-*"
 
 # Run and then reset
-hadrian test ... && curl -X POST http://localhost:8080/api/reset
+hadrian test ... && curl -X POST http://localhost:8889/api/reset
 ```
 
 ## Template Categories

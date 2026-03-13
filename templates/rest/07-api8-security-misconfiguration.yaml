@@ -24,11 +24,10 @@ info:
   requires_llm_triage: true
   test_pattern: "simple"
 
-# Select all endpoints to test for error disclosure:
-# - Both authenticated and unauthenticated endpoints
+# Select authenticated endpoints to test for error disclosure
 # - Any HTTP method
 endpoint_selector:
-  requires_auth: false
+  requires_auth: true
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
 
 # Role configuration:
@@ -42,7 +41,6 @@ http:
   - method: "{{operation.method}}"
     path: "{{operation.path}}"
     headers:
-      Authorization: "Bearer {{attacker_token}}"
       Content-Type: "application/json"
     body: |
       {

@@ -64,6 +64,48 @@ func TestExecutor_WithAuth(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestExecutor_WithBasicAuth(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Basic dXNlcjpwYXNz", r.Header.Get("Authorization"))
+
+		response := GraphQLResponse{Data: json.RawMessage(`{}`)}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	executor := NewExecutor(http.DefaultClient, server.URL, nil)
+	_, err := executor.Execute(
+		context.Background(),
+		"{ hello }",
+		nil,
+		"",
+		&AuthInfo{Method: "basic", Value: "Basic dXNlcjpwYXNz"},
+	)
+
+	require.NoError(t, err)
+}
+
+func TestExecutor_WithAPIKeyQuery(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "test-key-123", r.URL.Query().Get("api_key"))
+
+		response := GraphQLResponse{Data: json.RawMessage(`{}`)}
+		_ = json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	executor := NewExecutor(http.DefaultClient, server.URL, nil)
+	_, err := executor.Execute(
+		context.Background(),
+		"{ hello }",
+		nil,
+		"",
+		&AuthInfo{Method: "api_key", Location: "query", KeyName: "api_key", Value: "test-key-123"},
+	)
+
+	require.NoError(t, err)
+}
+
 func TestExecutor_ErrorHandling(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := GraphQLResponse{

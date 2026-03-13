@@ -32,8 +32,6 @@ role_selector:
 http:
   - method: "{{operation.method}}"
     path: "{{operation.path}}"
-    headers:
-      Authorization: "Bearer {{attacker_token}}"
     matchers:
       - type: status
         status: [200]
