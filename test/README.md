@@ -190,3 +190,19 @@ test/
   grpc-server/             # gRPC server source + templates
   crapi/                   # crAPI test config + templates
 ```
+
+## Expected result
+
+After running the e2e test shell script, you will see a table similar to the following.
+
+```
+TARGET                    STATUS     FINDINGS     DURATION
+------------------------- ---------- ------------ ----------
+vulnerable-api-bearer     PASS       61           21s
+vulnerable-api-apikey     PASS       61           20s
+vulnerable-api-basic      PASS       61           20s
+vulnerable-api-cookie     PASS       61           20s
+dvga                      PASS       6            3s
+grpc                      PASS       8            1s
+crapi                     PASS       26           37s
+```
