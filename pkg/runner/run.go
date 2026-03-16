@@ -16,6 +16,15 @@ func Run() error {
 		Long:  `Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that tests for OWASP vulnerabilities and custom security issues.`,
 	}
 
+	rootCmd.PersistentFlags().Bool("no-banner", false, "Suppress the startup banner")
+
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		noBanner, _ := cmd.Root().PersistentFlags().GetBool("no-banner")
+		if !noBanner {
+			printBanner()
+		}
+	}
+
 	rootCmd.AddCommand(newTestCmd())
 	rootCmd.AddCommand(newParseCmd())
 	rootCmd.AddCommand(newVersionCmd())
@@ -59,12 +68,15 @@ func newVersionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Show Hadrian version",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Hadrian v1.0.0")
-		},
+		RunE:  runVersion,
 	}
 
 	return cmd
+}
+
+func runVersion(cmd *cobra.Command, args []string) error {
+	fmt.Printf("Hadrian v%s\n", Version)
+	return nil
 }
 
 // parseCmdHandler parses and displays API specification details
