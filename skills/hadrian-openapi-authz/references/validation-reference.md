@@ -204,7 +204,7 @@ roles:
       - "read:products:public" # confirmed — security: [] on GET /products
 
   - name: user-attacker
-    level: 5
+    level: 3
     permissions:
       - "read:users:own"       # inferred — same as victim
       - "read:products:public" # confirmed — security: []
@@ -227,28 +227,36 @@ endpoints:
     object: products
 ```
 
-**Why this passes:**
-- auth.yaml: `method` first line, all roles have `token`, anonymous has empty token
-- roles.yaml: Three top-level keys, NO auth blocks in roles
-- Permissions: All `action:object:scope`, all annotated confirmed/inferred
-- Endpoints: Parameterized paths have `owner_field`
-- BOLA: Median of [0, 5, 30, 100] = sorted[3//2] = sorted[1] = 5. user-attacker(5) is NOT < 5...
+**Why this passes all checks:**
+- auth.yaml: `method` as first line, all roles have `token` field, anonymous has empty token
+- roles.yaml: Three top-level keys (`objects`, `roles`, `endpoints`), NO auth blocks in roles
+- Permissions: All use `action:object:scope` format, all annotated confirmed/inferred
+- Endpoints: Parameterized paths (`/users/{id}`, `/orders/{orderId}`) have `owner_field`
+- BOLA: sorted = [0, 3, 30, 100], median = sorted[(4-1)//2] = sorted[1] = 3. user-attacker(3) is NOT < 3 — **this is a 4-role edge case!**
 
-Wait — recalculate: sorted = [0, 5, 30, 100], len=4, median = sorted[(4-1)//2] = sorted[1] = 5. user-attacker at level 5 is NOT strictly below median 5. This would fail BOLA!
-
-**Fix**: Set user-attacker to level 4 (below median 5):
+**Important: With exactly 4 roles, add a 5th role to ensure BOLA works:**
 
 ```yaml
-  - name: user-attacker
-    level: 4    # Below median (5) for BOLA attacker role
+  # Add a dedicated low-privilege role to fix BOLA:
+  - name: user-bola
+    level: 1    # Below median for BOLA attacker role
+    permissions:
+      - "read:products:public"
 ```
 
-New check: sorted = [0, 4, 30, 100], median = sorted[1] = 4. user-attacker(4) NOT < 4. Still fails!
+New sorted = [0, 1, 3, 30, 100], median = sorted[2] = 3. user-bola(1) < 3 AND has real token. PASSES!
 
-**Correct fix**: With 4 roles, ensure spread. Set levels [0, 5, 20, 100]:
-- median = sorted[1] = 5. user-attacker(5) NOT < 5. Fails!
+---
 
-**Working configuration**: [0, 5, 30, 100] with dedicated attacker at level 3:
-- median = sorted[1] = 5. attacker(3) < 5. PASSES!
+## Common BOLA Level Pitfalls
 
-This demonstrates why BOLA verification is mandatory — level assignment is non-obvious.
+The BOLA median formula `sorted_levels[(len-1)//2]` selects the **lower-middle** value. With few roles, the median can equal your lowest authenticated role, making `level < median` impossible.
+
+| Levels | Median | Lowest Auth | Works? |
+|--------|--------|-------------|--------|
+| [0, 5, 30, 100] | 5 | 5 | NO — 5 is not < 5 |
+| [0, 3, 5, 30, 100] | 5 | 3 | YES — 3 < 5 |
+| [0, 1, 20, 50, 100] | 20 | 1 | YES — 1 < 20 |
+| [0, 10, 20, 100] | 10 | 10 | NO — 10 is not < 10 |
+
+**Rule of thumb**: With 4 or fewer roles, always add a dedicated BOLA attacker role with a level well below your regular users.

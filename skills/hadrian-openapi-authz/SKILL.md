@@ -1,6 +1,6 @@
 ---
 name: hadrian-openapi-authz
-description: "Use when preparing for automated authorization testing with Hadrian and only an OpenAPI specification is available (no Burp traffic or source code). Generates Hadrian-compatible auth.yaml and roles.yaml files from an OpenAPI spec and engagement context documents."
+description: "Use when preparing for automated authorization testing with Hadrian and only an OpenAPI/Swagger specification is available (no Burp traffic or source code). Generates Hadrian-compatible auth.yaml and roles.yaml files from an OpenAPI spec and engagement context documents."
 allowed-tools: Read, Write, Bash, Glob, Grep, TaskCreate, TaskUpdate, TaskList, AskUserQuestion
 ---
 
@@ -97,7 +97,7 @@ Read and parse the OpenAPI specification to extract security schemes, endpoints,
 #### 1a — Security Schemes
 
 **Load OpenAPI parsing reference:**
-Read("skills/hadrian-openapi-authz/references/openapi-parsing.md")
+Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/openapi-parsing.md")
 
 Parse security scheme definitions and map to Hadrian auth methods:
 
@@ -130,7 +130,7 @@ Infer roles from multiple signals:
 4. **x-roles or x-permissions extensions** — custom OpenAPI extensions listing roles
 5. **Description keywords** — "admin only", "requires manager role", "public endpoint"
 
-**Phase 1 Exit Criteria:** Auth method identified, 5-50 endpoints extracted with methods, initial role hypotheses (minimum: admin + user + anonymous).
+**Phase 1 Exit Criteria:** Auth method identified, endpoints extracted with methods (at least 1), initial role hypotheses (minimum: admin + user + anonymous).
 </step>
 
 ### Phase 2 — Define Roles
@@ -231,7 +231,7 @@ Generate both files. **Auth goes ONLY in auth.yaml. Roles go ONLY in roles.yaml.
 #### 4a — Generate auth.yaml
 
 **Load auth examples:**
-Read("skills/hadrian-openapi-authz/references/auth-examples.md")
+Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/auth-examples.md")
 
 **CRITICAL: Top-Level Fields (MUST be first)**
 
@@ -314,7 +314,7 @@ endpoints:
 
 <step>
 **Load validation checklist:**
-Read("skills/hadrian-openapi-authz/references/validation-reference.md")
+Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/validation-reference.md")
 
 Run all checks before presenting output.
 
@@ -361,63 +361,18 @@ hadrian test rest \
 ```
 </step>
 
-## Hadrian Schema Reference (from Go source)
+## Hadrian Schema Reference
 
-### auth.yaml (`auth.AuthConfig` — pkg/auth/auth.go)
-
-Uses `KnownFields(true)` — **extra fields cause parse errors**.
-
-```yaml
-method: bearer|basic|api_key|cookie    # REQUIRED first line
-location: header|query                  # REQUIRED for api_key
-key_name: X-API-Key                    # REQUIRED for api_key
-cookie_name: session_id                # REQUIRED for cookie
-
-roles:                                 # REQUIRED map
-  role-name:
-    token: "..."         # bearer
-    api_key: "..."       # api_key
-    username: "..."      # basic
-    password: "..."      # basic
-    credentials: "..."   # basic (alternative)
-    cookie: "..."        # cookie
-    no_auth: true        # omit auth header
-```
-
-### roles.yaml (`roles.RoleConfig` — pkg/roles/roles.go)
-
-```yaml
-objects:               # REQUIRED list of resource types
-  - resource-name
-
-roles:                 # REQUIRED array
-  - name: role-name    # REQUIRED string
-    level: 100         # REQUIRED integer
-    id: "user-uuid"    # OPTIONAL for BOLA
-    username: "user"   # OPTIONAL
-    description: "..."  # OPTIONAL
-    permissions:       # REQUIRED list
-      - "action:object:scope"
-
-endpoints:             # REQUIRED array
-  - path: "/api/v1/resource/{id}"
-    object: resource-name     # REQUIRED — must be in objects
-    owner_field: id           # REQUIRED on parameterized paths
-```
-
-**Valid permission values:**
-
-| Component | Values |
-|-----------|--------|
-| Action | `read`, `write`, `delete`, `execute`, `*` |
-| Scope | `public`, `own`, `org`, `all`, `*` |
+**Load full schema reference:**
+Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/schema-reference.md")
 
 ## Integration
 
 **Related Skills:**
-- `hadrian-authz-template` — broader skill supporting Burp traffic and source code analysis
+- `hadrian-authz-template` (in praetorian-offsec repo) — broader skill that also supports Burp traffic and source code analysis
 
 **Reference Files:**
 - `references/auth-examples.md` — auth.yaml examples for all 4 methods
 - `references/validation-reference.md` — validation checklist and common errors
 - `references/openapi-parsing.md` — OpenAPI security scheme mapping patterns
+- `references/schema-reference.md` — Hadrian Go struct schemas for auth.yaml and roles.yaml
