@@ -155,9 +155,10 @@ roles:
 
 ### BOLA Compliance
 
-- [ ] Calculate: `sorted_levels = sorted([level for each role])`
-- [ ] Calculate: `median = sorted_levels[(len - 1) // 2]`
-- [ ] Verify: at least one non-anonymous role with real credentials has `level < median`
+Hadrian's execution loop pairs roles using `attacker.Level < victim.Level` (skips level 0 and same-name).
+
+- [ ] At least 2 authenticated roles (level > 0) with **different** levels exist
+- [ ] The lower-level role has real credentials (not empty token)
 - [ ] **If fails: HALT and return to Phase 2 with error**
 
 ---
@@ -232,31 +233,34 @@ endpoints:
 - roles.yaml: Three top-level keys (`objects`, `roles`, `endpoints`), NO auth blocks in roles
 - Permissions: All use `action:object:scope` format, all annotated confirmed/inferred
 - Endpoints: Parameterized paths (`/users/{id}`, `/orders/{orderId}`) have `owner_field`
-- BOLA: sorted = [0, 3, 30, 100], median = sorted[(4-1)//2] = sorted[1] = 3. user-attacker(3) is NOT < 3 — **this is a 4-role edge case!**
-
-**Important: With exactly 4 roles, add a 5th role to ensure BOLA works:**
-
-```yaml
-  # Add a dedicated low-privilege role to fix BOLA:
-  - name: user-bola
-    level: 1    # Below median for BOLA attacker role
-    permissions:
-      - "read:products:public"
-```
-
-New sorted = [0, 1, 3, 30, 100], median = sorted[2] = 3. user-bola(1) < 3 AND has real token. PASSES!
+- BOLA: user-attacker(3) < user-victim(30) — valid pairing. user-attacker(3) < admin(100) — also valid. Two authenticated roles with different levels exist.
 
 ---
 
-## Common BOLA Level Pitfalls
+## BOLA Role Pairing — How It Works
 
-The BOLA median formula `sorted_levels[(len-1)//2]` selects the **lower-middle** value. With few roles, the median can equal your lowest authenticated role, making `level < median` impossible.
+Hadrian's execution loop (`pkg/runner/execution.go`) uses **pairwise level comparison**, NOT a median:
 
-| Levels | Median | Lowest Auth | Works? |
-|--------|--------|-------------|--------|
-| [0, 5, 30, 100] | 5 | 5 | NO — 5 is not < 5 |
-| [0, 3, 5, 30, 100] | 5 | 3 | YES — 3 < 5 |
-| [0, 1, 20, 50, 100] | 20 | 1 | YES — 1 < 20 |
-| [0, 10, 20, 100] | 10 | 10 | NO — 10 is not < 10 |
+```
+for each attackerRole:
+    skip if attackerRole.Level == 0          (anonymous never attacks for BOLA)
+    for each victimRole:
+        skip if attackerRole.Name == victimRole.Name   (no self-attack)
+        skip if attackerRole.Level >= victimRole.Level  (attacker must be lower)
+        → execute BOLA test: attacker accesses victim's resource
+```
 
-**Rule of thumb**: With 4 or fewer roles, always add a dedicated BOLA attacker role with a level well below your regular users.
+**What works:**
+
+| Roles (levels) | Valid Pairings | BOLA Tests? |
+|---------------|----------------|-------------|
+| [0, 5, 20, 100] | 5→20, 5→100, 20→100 | YES — 3 pairings |
+| [0, 10, 10, 100] | 10→100, 10→100 | YES — but no horizontal (same-level) test |
+| [0, 20, 100] | 20→100 | YES — 1 pairing |
+| [0, 0] | none | NO — only anonymous roles |
+| [0, 50, 50] | none | NO — both auth roles at same level |
+
+**Key rules:**
+- At least 2 authenticated roles (level > 0) with **different** levels
+- Lower-level role must have real credentials
+- For **horizontal** BOLA testing (same privilege, different accounts), create 2 roles at the same level — Hadrian tests these as same-level cross-account access

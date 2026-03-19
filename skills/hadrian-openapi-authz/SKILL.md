@@ -35,7 +35,7 @@ Hadrian uses TWO separate files with DISTINCT schemas. Mixing them causes silent
 
 **ALWAYS include `owner_field`** on parameterized endpoints (e.g., `/users/{id}` needs `owner_field: id`). Without it, BOLA testing cannot identify resource-owner parameters.
 
-**ALWAYS perform BOLA median verification** after defining roles. Hadrian's median algorithm determines attacker/victim pairings — incorrect levels produce zero BOLA test requests.
+**ALWAYS verify BOLA role pairing** after defining roles. Hadrian pairs attackers with victims using `attacker.Level < victim.Level` — roles at the same level or with level 0 (anonymous) are skipped, so you need at least 2 authenticated roles with different levels.
 
 **ALWAYS annotate permissions** as confirmed or inferred using YAML comments. This distinguishes spec-verified access from assumptions.
 </EXTREMELY-IMPORTANT>
@@ -199,26 +199,28 @@ Always include an `anonymous` role with `level: 0` and permissions only for endp
 
 **BOLA/IDOR Testing — Per-Account Entries**: If the user has 2+ accounts at the same privilege level, create a **separate role entry for EACH account** with distinct names (e.g., `user-001`, `user-002`).
 
-**MANDATORY BOLA median verification:**
+**MANDATORY BOLA role pairing verification:**
 
-After defining all roles, you MUST calculate and verify:
+Hadrian's execution loop (pkg/runner/execution.go) pairs roles using:
+- Skip if `attackerRole.Level == 0` (anonymous is never an attacker for BOLA)
+- Skip if `attackerRole.Level >= victimRole.Level` (attacker must be lower)
+- Skip if `attackerRole.Name == victimRole.Name` (no self-attack)
 
-```
-1. sorted_levels = sorted([role.level for role in roles])
-2. median = sorted_levels[(len(sorted_levels) - 1) // 2]
-3. Verify: at least one non-anonymous role with real credentials has level < median
-```
+After defining all roles, verify:
+1. At least 2 authenticated roles (level > 0) with **different** levels exist
+2. The lower-level role has real credentials (not empty token)
 
-Example — roles [0, 5, 20, 50, 100]:
-- median = sorted[4//2] = sorted[2] = 20
-- user-attacker(5) < 20 AND has real token -> BOLA tests will execute
+Example — roles [0, 5, 20, 100]:
+- user-002(5) attacks user-001(20) — works (5 < 20)
+- user-002(5) attacks admin(100) — works (5 < 100)
+- user-001(20) attacks admin(100) — works (20 < 100)
 
-**If verification fails**, inform the user with options:
-1. Provide credentials for an additional user account
-2. Adjust role levels (designate one user as BOLA attacker with level 5)
+**If verification fails** (e.g., all authenticated roles at same level), inform the user:
+1. Assign different levels to distinguish attacker from victim
+2. Provide an additional user account at a different privilege level
 3. Proceed without BOLA testing
 
-**Phase 2 Exit Criteria:** All roles defined (minimum 2 + anonymous), BOLA median verified, permissions annotated with evidence.
+**Phase 2 Exit Criteria:** All roles defined (minimum 2 + anonymous), BOLA pairing verified, permissions annotated with evidence.
 </step>
 
 ### Phase 3 — Build Objects List and Map Endpoints
@@ -378,7 +380,7 @@ Run all checks before presenting output.
 9. Every endpoint maps to a listed object
 10. All permissions use `action:object:scope` (exactly two colons)
 11. Anonymous role present with `level: 0`
-12. **BOLA compliance**: non-anonymous role with credentials below median level
+12. **BOLA compliance**: at least 2 authenticated roles with different levels
 13. **All parameterized endpoints have `owner_field`**
 14. **All permissions annotated as confirmed/inferred**
 
