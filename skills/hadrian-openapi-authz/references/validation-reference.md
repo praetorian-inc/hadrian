@@ -263,4 +263,4 @@ for each attackerRole:
 **Key rules:**
 - At least 2 authenticated roles (level > 0) with **different** levels
 - Lower-level role must have real credentials
-- For **horizontal** BOLA testing (same privilege, different accounts), create 2 roles at the same level — Hadrian tests these as same-level cross-account access
+- Hadrian does NOT natively support horizontal BOLA (same-level cross-account). To test horizontal access, assign the attacker a slightly lower level than the victim (e.g., user-attacker=19, user-victim=20)

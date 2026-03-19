@@ -1,9 +1,18 @@
 # hadrian-openapi-authz Changelog
 
+## 2026-03-19 — GraphQL/gRPC Support + BOLA Fix
+
+- Extended skill to support 3 API types: OpenAPI/Swagger, GraphQL SDL, gRPC proto
+- Added references/graphql-grpc-parsing.md for GraphQL and gRPC parsing patterns
+- Added references/schema-reference.md (extracted from SKILL.md for line count)
+- Fixed BOLA verification: replaced incorrect median algorithm with correct pairwise level comparison matching pkg/runner/execution.go
+- Updated all phases to branch by API type (REST/GraphQL/gRPC)
+- Removed stale REST-only language throughout
+
 ## 2026-03-19 — Initial Creation
 
-- Created skill for generating Hadrian auth.yaml and roles.yaml from OpenAPI specs
-- Adapted from hadrian-authz-template (PR #8) with OpenAPI-only focus
+- Created skill for generating Hadrian auth.yaml and roles.yaml from API specs
+- Adapted from hadrian-authz-template (PR #8 in praetorian-offsec) with spec-only focus
 - No Burp traffic or source code required
 - 6-phase workflow: gather requirements, analyze spec, define roles, build objects, generate YAML, validate
 - Reference files: auth-examples.md, validation-reference.md, openapi-parsing.md
