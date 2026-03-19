@@ -1,0 +1,11 @@
+# hadrian-openapi-authz Changelog
+
+## 2026-03-19 — Initial Creation
+
+- Created skill for generating Hadrian auth.yaml and roles.yaml from OpenAPI specs
+- Adapted from hadrian-authz-template (PR #8) with OpenAPI-only focus
+- No Burp traffic or source code required
+- 6-phase workflow: gather requirements, analyze spec, define roles, build objects, generate YAML, validate
+- Reference files: auth-examples.md, validation-reference.md, openapi-parsing.md
+- Addresses 4 common agent errors: auth-in-roles, missing owner_field, no BOLA verification, no permission annotations
+- Linear ticket: LAB-1513
