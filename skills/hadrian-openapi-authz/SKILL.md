@@ -83,7 +83,7 @@ Ask these questions together in a single interaction:
 1. App walkthrough transcript or PFC notes
 2. Client-provided role/permission documentation (RBAC matrix, org chart)
 3. Existing Hadrian templates from prior engagements
-4. None — we'll infer roles from the OpenAPI spec alone"
+4. None — we'll infer roles from the API specification alone"
 
 **Question 3: User Account Credentials**
 "For BOLA/IDOR testing, Hadrian requires multiple user accounts at the same privilege level.
@@ -97,9 +97,9 @@ Note: Effective BOLA testing needs at least 2 accounts at the same level."
 2. API key (header or query parameter) — if so, what header/param name?
 3. Basic authentication (username/password)
 4. Cookie-based session — if so, what cookie name?
-5. Unknown — we'll infer from the OpenAPI security schemes"
+5. Unknown — we'll infer from the API specification if possible (note: GraphQL/gRPC specs typically don't define auth)"
 
-**Minimum requirements to proceed:** ONE OpenAPI spec file + authentication method identified.
+**Minimum requirements to proceed:** ONE API specification file (OpenAPI, GraphQL SDL, or proto) + authentication method identified.
 </step>
 
 ### Phase 1 — Analyze API Specification
@@ -226,14 +226,30 @@ Example — roles [0, 5, 20, 50, 100]:
 <step>
 Build the `objects` list from resource types and map endpoints to objects.
 
-Derive resource names from:
+Derive resource names based on API type:
+
+**REST (OpenAPI/Swagger):**
 1. **OpenAPI tags** — each tag typically represents a resource
 2. **Path segments** — extract resource nouns (e.g., `/api/v1/orders/{id}` -> `orders`)
 3. **Operation groupings** — cluster by shared path prefix
 
+**GraphQL:**
+1. **Return types** — query/mutation return types map to objects (e.g., `getUser` returns `User` -> object `users`)
+2. **Operation name prefixes** — group by resource noun (e.g., `getOrder`, `createOrder`, `deleteOrder` -> object `orders`)
+3. **Endpoint paths** use `query.operationName` or `mutation.operationName` format
+
+**gRPC:**
+1. **Service names** — each service maps to an object (e.g., `UserService` -> object `users`)
+2. **Method groupings** — cluster by service
+3. **Endpoint paths** use fully qualified format: `/package.ServiceName/MethodName`
+
 **CRITICAL: `owner_field` is REQUIRED on parameterized endpoints.**
 
-For every endpoint with path parameters (`{id}`, `{orderId}`, etc.), you MUST set `owner_field` to the parameter name. This is how Hadrian identifies which parameter ties the resource to a specific user for BOLA testing.
+For every endpoint with ID parameters, you MUST set `owner_field` to the parameter name. This is how Hadrian identifies which parameter ties the resource to a specific user for BOLA testing.
+
+- **REST**: path parameters like `{id}`, `{orderId}`
+- **GraphQL**: `ID!` arguments on queries/mutations (e.g., `getUser(id: ID!)` -> `owner_field: id`)
+- **gRPC**: ID fields in request messages (e.g., `GetUserRequest.user_id` -> `owner_field: user_id`)
 
 ```yaml
 endpoints:
