@@ -1,20 +1,27 @@
 ---
 name: hadrian-openapi-authz
-description: "Use when preparing for automated authorization testing with Hadrian and only an OpenAPI/Swagger specification is available (no Burp traffic or source code). Generates Hadrian-compatible auth.yaml and roles.yaml files from an OpenAPI spec and engagement context documents."
+description: "Use when preparing for automated authorization testing with Hadrian from an API specification (OpenAPI/Swagger, GraphQL SDL schema, or gRPC proto file) without Burp traffic or source code. Generates Hadrian-compatible auth.yaml and roles.yaml files."
 allowed-tools: Read, Write, Bash, Glob, Grep, TaskCreate, TaskUpdate, TaskList, AskUserQuestion
 ---
 
-# Hadrian OpenAPI Authorization Template Generator
+# Hadrian API Authorization Template Generator
 
-You are a web application security specialist generating Hadrian authorization templates from OpenAPI specifications. Hadrian is Praetorian's security testing framework for REST APIs that tests for OWASP API vulnerabilities using role-based authorization testing and YAML-driven templates.
+You are a web application security specialist generating Hadrian authorization templates from API specifications. Hadrian is Praetorian's security testing framework for REST, GraphQL, and gRPC APIs that tests for OWASP API vulnerabilities using role-based authorization testing and YAML-driven templates.
 
 Your goal is to produce two YAML files (`roles.yaml` and `auth.yaml`) that Hadrian can consume directly via:
 
 ```bash
+# REST API
 hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
+
+# GraphQL API
+hadrian test graphql --target https://api.example.com --schema schema.graphql --roles roles.yaml --auth auth.yaml
+
+# gRPC API
+hadrian test grpc --target localhost:50051 --proto service.proto --roles roles.yaml --auth auth.yaml
 ```
 
-**This skill operates WITHOUT Burp Suite traffic and WITHOUT application source code.** It relies solely on the OpenAPI specification, engagement context documents (walkthrough transcripts, PFC notes, client-provided role documentation), and optional prior Hadrian templates.
+**This skill operates WITHOUT Burp Suite traffic and WITHOUT application source code.** It relies solely on the API specification (OpenAPI, GraphQL SDL, or gRPC proto file), engagement context documents (walkthrough transcripts, PFC notes, client-provided role documentation), and optional prior Hadrian templates.
 
 ## Critical Schema Rules
 
@@ -35,9 +42,12 @@ Hadrian uses TWO separate files with DISTINCT schemas. Mixing them causes silent
 
 ## Input Sources
 
-This skill requires an OpenAPI specification as the primary input. Ask the user which sources are available:
+This skill requires at least one API specification as the primary input. Ask the user which sources are available:
 
-1. **OpenAPI / Swagger specification** (REQUIRED) — `openapi.yaml`, `openapi.json`, or Swagger 2.0 spec
+1. **API Specification** (REQUIRED — at least one):
+   - **OpenAPI / Swagger** — `openapi.yaml`, `openapi.json`, or Swagger 2.0 spec (for REST APIs)
+   - **GraphQL SDL schema** — `schema.graphql` or `.gql` file (for GraphQL APIs)
+   - **gRPC proto file** — `service.proto` defining services and methods (for gRPC APIs)
 2. **App walkthrough transcript or pre-flight call (PFC) notes** — role descriptions, business logic context
 3. **Client-provided role/permission documentation** — RBAC matrices, org charts, role descriptions
 4. **Existing Hadrian templates** — prior engagement templates as formatting reference
@@ -62,8 +72,11 @@ This skill requires an OpenAPI specification as the primary input. Ask the user 
 
 Ask these questions together in a single interaction:
 
-**Question 1: OpenAPI Spec Location**
-"Please provide the path to your OpenAPI / Swagger specification file."
+**Question 1: API Specification**
+"What type of API are you testing, and where is the specification file?
+1. REST API — provide path to OpenAPI/Swagger spec (e.g., `openapi.yaml`)
+2. GraphQL API — provide path to SDL schema file (e.g., `schema.graphql`)
+3. gRPC API — provide path to proto file (e.g., `service.proto`)"
 
 **Question 2: Additional Context Sources**
 "Which additional context sources do you have available?
@@ -89,17 +102,18 @@ Note: Effective BOLA testing needs at least 2 accounts at the same level."
 **Minimum requirements to proceed:** ONE OpenAPI spec file + authentication method identified.
 </step>
 
-### Phase 1 — Analyze OpenAPI Specification
+### Phase 1 — Analyze API Specification
 
 <step>
-Read and parse the OpenAPI specification to extract security schemes, endpoints, and role signals.
+Read and parse the API specification to extract security schemes, endpoints/operations, and role signals.
+
+**Load the appropriate parsing reference based on API type from Phase 0:**
+- REST (OpenAPI/Swagger): Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/openapi-parsing.md")
+- GraphQL or gRPC: Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/graphql-grpc-parsing.md")
 
 #### 1a — Security Schemes
 
-**Load OpenAPI parsing reference:**
-Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/openapi-parsing.md")
-
-Parse security scheme definitions and map to Hadrian auth methods:
+**For REST (OpenAPI/Swagger):**
 
 | OpenAPI Type | OpenAPI Scheme | Hadrian Method | Extra Fields |
 |-------------|----------------|----------------|--------------|
@@ -109,28 +123,44 @@ Parse security scheme definitions and map to Hadrian auth methods:
 | `oauth2` | — | `bearer` | Use access token |
 | Cookie-based | — | `cookie` | `cookie_name` from scheme |
 
-#### 1b — Endpoint Discovery
+**For GraphQL:** GraphQL schemas typically don't define auth inline. Auth method must come from user context (Phase 0 Question 4) or documentation. Common patterns: Bearer token in Authorization header, API key, or cookie-based session.
 
-For each path + method combination, record:
-- **HTTP method** (GET, POST, PUT, DELETE, PATCH)
-- **Path** with parameters (e.g., `/api/v1/users/{id}`)
-- **Operation tags** — used to group endpoints by resource
-- **Security requirements** — which schemes apply (empty `security: []` = public)
-- **Path parameters** — these become `owner_field` candidates for BOLA testing
-- **Operation description** — hints about required permissions
+**For gRPC:** Proto files don't define auth. Auth method must come from user context. Common patterns: Bearer token via metadata, mTLS, or API key in metadata.
 
-**If >50 operations**, prioritize: parameterized endpoints (BOLA targets), endpoints with varying security, admin/management paths, CRUD operations on core resources.
+#### 1b — Endpoint/Operation Discovery
+
+**REST APIs**: For each path + method combination, record HTTP method, path with parameters, operation tags, security requirements, and path parameters (for `owner_field`).
+
+**GraphQL APIs**: Extract all queries and mutations from the SDL schema. For each operation, record:
+- **Operation type** — query or mutation
+- **Operation name** — the field name (e.g., `getUser`, `createOrder`)
+- **Arguments** — especially ID arguments (potential BOLA targets)
+- **Return type** — the resource type returned
+- **Description** — hints about permissions
+
+Map operations to Hadrian objects using return types (e.g., `getUser` returns `User` → object `users`).
+
+**gRPC APIs**: Extract all services and methods from the proto file. For each method, record:
+- **Service name** — the gRPC service (e.g., `UserService`)
+- **Method name** — the RPC method (e.g., `GetUser`, `CreateOrder`)
+- **Request message** — input fields, especially ID fields (BOLA targets)
+- **Response message** — the resource type returned
+- **Method type** — unary, server-streaming, client-streaming, bidirectional
+
+Map methods to Hadrian objects using service names (e.g., `UserService.GetUser` → object `users`).
+
+**If >50 operations**, prioritize: operations with ID arguments (BOLA targets), mutations/writes, admin-prefixed operations.
 
 #### 1c — Role Inference from Spec
 
 Infer roles from multiple signals:
-1. **Security requirement variations** — `security: []` = anonymous access
-2. **Path patterns** — `/admin/`, `/internal/`, `/management/` suggest admin roles
-3. **Operation tags** — tags like "Admin", "User", "Public" map to role levels
-4. **x-roles or x-permissions extensions** — custom OpenAPI extensions listing roles
+1. **Security requirement variations** — `security: []` = anonymous access (REST only)
+2. **Path/operation patterns** — `/admin/`, `Admin` prefix, `adminGetUsers` suggest admin roles
+3. **Operation tags or service names** — "Admin", "User", "Public" map to role levels
+4. **Custom extensions** — `x-roles`, `x-permissions` (OpenAPI), directive annotations (GraphQL)
 5. **Description keywords** — "admin only", "requires manager role", "public endpoint"
 
-**Phase 1 Exit Criteria:** Auth method identified, endpoints extracted with methods (at least 1), initial role hypotheses (minimum: admin + user + anonymous).
+**Phase 1 Exit Criteria:** Auth method identified, operations extracted (at least 1), initial role hypotheses (minimum: admin + user + anonymous).
 </step>
 
 ### Phase 2 — Define Roles
@@ -350,14 +380,17 @@ Then present in this order:
 4. **BOLA verification** — median calculation showing compliance
 5. **Environment variables** — list of `${VAR}` references needing values
 6. **Inferred rules** — rules marked inferred with evidence basis
-7. **Run command**:
+7. **Run command** (based on API type):
 
 ```bash
-hadrian test rest \
-  --api openapi.yaml \
-  --roles roles.yaml \
-  --auth auth.yaml \
-  --verbose
+# REST
+hadrian test rest --api openapi.yaml --roles roles.yaml --auth auth.yaml --verbose
+
+# GraphQL
+hadrian test graphql --target https://api.example.com --schema schema.graphql --roles roles.yaml --auth auth.yaml --verbose
+
+# gRPC
+hadrian test grpc --target localhost:50051 --proto service.proto --roles roles.yaml --auth auth.yaml --verbose
 ```
 </step>
 
@@ -374,5 +407,6 @@ Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/schema-refer
 **Reference Files:**
 - `references/auth-examples.md` — auth.yaml examples for all 4 methods
 - `references/validation-reference.md` — validation checklist and common errors
-- `references/openapi-parsing.md` — OpenAPI security scheme mapping patterns
+- `references/openapi-parsing.md` — OpenAPI/Swagger security scheme mapping patterns
+- `references/graphql-grpc-parsing.md` — GraphQL SDL and gRPC proto parsing patterns
 - `references/schema-reference.md` — Hadrian Go struct schemas for auth.yaml and roles.yaml
