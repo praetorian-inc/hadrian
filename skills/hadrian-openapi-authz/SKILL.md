@@ -338,7 +338,7 @@ roles:
       - "write:orders:own"     # inferred — POST /orders in spec
 
   - name: user-002
-    level: 5                    # Below median for BOLA attacker role
+    level: 5                    # Lower level — enables attacker role in BOLA pairings
     permissions:
       - "read:users:own"
       - "read:orders:own"
@@ -395,7 +395,7 @@ Then present in this order:
 1. **`auth.yaml`** — complete YAML code block
 2. **`roles.yaml`** — complete YAML code block
 3. **Summary table** — roles, levels, permission counts
-4. **BOLA verification** — median calculation showing compliance
+4. **BOLA verification** — pairwise pairing check showing compliance
 5. **Environment variables** — list of `${VAR}` references needing values
 6. **Inferred rules** — rules marked inferred with evidence basis
 7. **Run command** (based on API type):
