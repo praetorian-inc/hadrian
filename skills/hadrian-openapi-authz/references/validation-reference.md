@@ -159,6 +159,10 @@ Hadrian's execution loop pairs roles using `attacker.Level < victim.Level` (skip
 
 - [ ] At least 2 authenticated roles (level > 0) with **different** levels exist
 - [ ] The lower-level role has real credentials (not empty token)
+- [ ] **Role naming matches API type requirements:**
+  - GraphQL: MUST have roles named `attacker` and `victim` (templates use `auth: "attacker"`)
+  - gRPC: SHOULD have roles named `user1` and `user2` (runner looks for these by name)
+  - REST: Any names work
 - [ ] **If fails: HALT and return to Phase 2 with error**
 
 ---

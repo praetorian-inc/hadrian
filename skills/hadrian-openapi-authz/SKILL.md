@@ -33,6 +33,11 @@ Hadrian uses TWO separate files with DISTINCT schemas. Mixing them causes silent
 
 **NEVER put `auth:` blocks inside roles.yaml role definitions.** The `Role` struct has NO auth field. Auth belongs EXCLUSIVELY in auth.yaml.
 
+**ALWAYS use the required role names for each API type.** Hadrian's runners expect specific role names:
+- **GraphQL**: Templates use `auth: "attacker"` — you MUST have roles named `attacker` and `victim` in both auth.yaml and roles.yaml
+- **gRPC**: The runner looks for roles named `user1` and `user2` (falls back to level-based selection if not found)
+- **REST**: Any role names work — the runner uses pairwise level comparison only
+
 **ALWAYS include `owner_field`** on parameterized endpoints (e.g., `/users/{id}` needs `owner_field: id`). Without it, BOLA testing cannot identify resource-owner parameters.
 
 **ALWAYS verify BOLA role pairing** after defining roles. Hadrian pairs attackers with victims using `attacker.Level < victim.Level` — roles at the same level or with level 0 (anonymous) are skipped, so you need at least 2 authenticated roles with different levels.
@@ -171,7 +176,10 @@ Infer roles from multiple signals:
 Combine OpenAPI analysis with engagement context to define roles. **Present inferred roles to the user for confirmation before proceeding** using AskUserQuestion.
 
 For each role define:
-- **Name**: kebab-case identifier (e.g., `admin`, `org-manager`, `regular-user`, `anonymous`)
+- **Name**: kebab-case identifier, but **API type determines required names for BOLA roles**:
+  - **REST**: Any names (e.g., `admin`, `user-001`, `user-002`, `anonymous`)
+  - **GraphQL**: MUST include roles named `attacker` and `victim` — GraphQL templates reference `auth: "attacker"` by name
+  - **gRPC**: SHOULD include roles named `user1` and `user2` — the gRPC runner looks for these by name (falls back to level-based if not found)
 - **Level**: Numeric privilege ranking (higher = more privileged). Scale: Anonymous: 0, User: 10-30, Manager: 40-60, Admin: 80-100
 - **Permissions**: List of `<action>:<object>:<scope>` strings
 
@@ -296,10 +304,10 @@ Read("${CLAUDE_PLUGIN_ROOT}/skills/hadrian-openapi-authz/references/auth-example
 - `${ADMIN_USERNAME}`, `${ADMIN_PASSWORD}` for basic auth
 - `${ADMIN_SESSION}` for cookies
 
+**REST example:**
 ```yaml
-# auth.yaml — ONLY authentication credentials
+# auth.yaml — REST (any role names)
 method: bearer
-
 roles:
   admin:
     token: "${ADMIN_TOKEN}"
@@ -307,6 +315,36 @@ roles:
     token: "${USER_001_TOKEN}"
   user-002:
     token: "${USER_002_TOKEN}"
+  anonymous:
+    token: ""
+```
+
+**GraphQL example** (roles MUST be named `attacker` and `victim`):
+```yaml
+# auth.yaml — GraphQL (required role names)
+method: bearer
+roles:
+  admin:
+    token: "${ADMIN_TOKEN}"
+  attacker:
+    token: "${ATTACKER_TOKEN}"
+  victim:
+    token: "${VICTIM_TOKEN}"
+  anonymous:
+    token: ""
+```
+
+**gRPC example** (roles SHOULD be named `user1` and `user2`):
+```yaml
+# auth.yaml — gRPC (expected role names)
+method: bearer
+roles:
+  admin:
+    token: "${ADMIN_TOKEN}"
+  user1:
+    token: "${USER1_TOKEN}"
+  user2:
+    token: "${USER2_TOKEN}"
   anonymous:
     token: ""
 ```
