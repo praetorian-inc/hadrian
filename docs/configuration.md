@@ -13,6 +13,20 @@ This document covers cross-cutting configuration that applies to all Hadrian tes
 - [Output Formats](#output-formats)
 - [Environment Variables](#environment-variables)
 
+## Generating Configuration with Claude Code
+
+Instead of writing `auth.yaml` and `roles.yaml` by hand, you can use the included [Claude Code skill](../skills/hadrian-openapi-authz/SKILL.md) to generate them automatically from your API specification.
+
+```bash
+# Launch Claude Code with Hadrian as a plugin
+claude --plugin-dir /path/to/hadrian
+
+# Then provide your API spec:
+# "Generate Hadrian auth.yaml and roles.yaml from openapi.yaml"
+```
+
+The skill supports **OpenAPI/Swagger** (REST), **GraphQL SDL schemas**, and **gRPC proto files**. It analyzes security schemes, infers roles and permissions, maps endpoints to objects, and validates the output against Hadrian's schema before writing files. See the [skill documentation](../skills/hadrian-openapi-authz/SKILL.md) for details.
+
 ## Authentication (auth.yaml)
 
 Configure how to authenticate as each role. The same format is used across REST, GraphQL, and gRPC.
