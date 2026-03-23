@@ -12,26 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// captureStdout redirects os.Stdout to a buffer, calls f, then restores stdout
-// and returns whatever was written.
-func captureStdout(f func()) string {
-	r, w, err := os.Pipe()
-	if err != nil {
-		panic(err)
-	}
-	old := os.Stdout
-	os.Stdout = w
-
-	f()
-
-	_ = w.Close()
-	os.Stdout = old
-
-	var buf bytes.Buffer
-	io.Copy(&buf, r) //nolint:errcheck
-	return buf.String()
-}
-
 func captureStderr(f func()) string {
 	r, w, err := os.Pipe()
 	if err != nil {
