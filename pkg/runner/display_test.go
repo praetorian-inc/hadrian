@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -33,8 +32,26 @@ func captureStdout(f func()) string {
 	return buf.String()
 }
 
+func captureStderr(f func()) string {
+	r, w, err := os.Pipe()
+	if err != nil {
+		panic(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+
+	f()
+
+	_ = w.Close()
+	os.Stderr = old
+
+	var buf bytes.Buffer
+	io.Copy(&buf, r) //nolint:errcheck
+	return buf.String()
+}
+
 func TestPrintBanner(t *testing.T) {
-	output := captureStdout(func() {
+	output := captureStderr(func() {
 		printBanner()
 	})
 
@@ -55,31 +72,20 @@ func TestNoBannerFlag(t *testing.T) {
 }
 
 func TestBannerSuppression(t *testing.T) {
+	// Replicate the Run() banner logic: parse flags before Execute() and
+	// conditionally call printBanner(). The banner is written to stderr.
 	rootCmd := &cobra.Command{
 		Use: "hadrian",
 	}
 	rootCmd.PersistentFlags().Bool("no-banner", false, "Suppress the startup banner")
 
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		noBanner, _ := cmd.Root().PersistentFlags().GetBool("no-banner")
+	output := captureStderr(func() {
+		rootCmd.ParseFlags([]string{"--no-banner"}) //nolint:errcheck
+		noBanner, _ := rootCmd.Flags().GetBool("no-banner")
 		if !noBanner {
 			printBanner()
 		}
-	}
-
-	noopCmd := &cobra.Command{
-		Use:  "noop",
-		RunE: func(cmd *cobra.Command, args []string) error { return nil },
-	}
-	rootCmd.AddCommand(noopCmd)
-
-	output := captureStdout(func() {
-		rootCmd.SetArgs([]string{"--no-banner", "noop"})
-		err := rootCmd.Execute()
-		assert.NoError(t, err)
 	})
 
 	assert.NotContains(t, output, "Praetorian Security", "banner should be suppressed with --no-banner")
-	assert.True(t, strings.TrimSpace(output) == "" || !strings.Contains(output, "Praetorian Security"),
-		"no banner output expected when --no-banner is set")
 }

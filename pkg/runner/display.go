@@ -1,6 +1,9 @@
 package runner
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 const (
 	bannerColorRed   = "\033[31m"
@@ -23,6 +26,6 @@ const banner = `
 `
 
 func printBanner() {
-	fmt.Printf("%s%s%s%s\n", bannerColorBold, bannerColorRed, banner, bannerColorReset)
-	fmt.Printf("%s  v%s%s\n\n", bannerColorGray, Version, bannerColorReset)
+	fmt.Fprintf(os.Stderr, "%s%s%s%s\n", bannerColorBold, bannerColorRed, banner, bannerColorReset)
+	fmt.Fprintf(os.Stderr, "%s  v%s%s\n\n", bannerColorGray, Version, bannerColorReset)
 }

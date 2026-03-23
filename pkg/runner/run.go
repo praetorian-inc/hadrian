@@ -18,16 +18,18 @@ func Run() error {
 
 	rootCmd.PersistentFlags().Bool("no-banner", false, "Suppress the startup banner")
 
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		noBanner, _ := cmd.Root().PersistentFlags().GetBool("no-banner")
-		if !noBanner {
-			printBanner()
-		}
-	}
-
 	rootCmd.AddCommand(newTestCmd())
 	rootCmd.AddCommand(newParseCmd())
 	rootCmd.AddCommand(newVersionCmd())
+
+	// Parse flags early so --no-banner is available before Execute().
+	// Cobra's PersistentPreRun doesn't chain, so calling printBanner here
+	// avoids being silently overridden by subcommand PersistentPreRun hooks.
+	rootCmd.ParseFlags(os.Args[1:]) //nolint:errcheck
+	noBanner, _ := rootCmd.Flags().GetBool("no-banner")
+	if !noBanner {
+		printBanner()
+	}
 
 	return rootCmd.Execute()
 }
