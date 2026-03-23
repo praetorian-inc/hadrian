@@ -16,9 +16,20 @@ func Run() error {
 		Long:  `Hadrian is a security testing framework for REST, GraphQL, and gRPC APIs that tests for OWASP vulnerabilities and custom security issues.`,
 	}
 
+	rootCmd.PersistentFlags().Bool("no-banner", false, "Suppress the startup banner")
+
 	rootCmd.AddCommand(newTestCmd())
 	rootCmd.AddCommand(newParseCmd())
 	rootCmd.AddCommand(newVersionCmd())
+
+	// Parse flags early so --no-banner is available before Execute().
+	// Cobra's PersistentPreRun doesn't chain, so calling printBanner here
+	// avoids being silently overridden by subcommand PersistentPreRun hooks.
+	rootCmd.ParseFlags(os.Args[1:]) //nolint:errcheck
+	noBanner, _ := rootCmd.Flags().GetBool("no-banner")
+	if !noBanner {
+		printBanner()
+	}
 
 	return rootCmd.Execute()
 }
@@ -59,12 +70,15 @@ func newVersionCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Show Hadrian version",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println("Hadrian v1.0.0")
-		},
+		RunE:  runVersion,
 	}
 
 	return cmd
+}
+
+func runVersion(cmd *cobra.Command, args []string) error {
+	fmt.Printf("Hadrian v%s\n", Version)
+	return nil
 }
 
 // parseCmdHandler parses and displays API specification details
