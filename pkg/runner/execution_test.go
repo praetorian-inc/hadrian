@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"testing"
 
@@ -420,6 +421,7 @@ func TestTemplateApplies_AuthRequired_NoAuth(t *testing.T) {
 func TestTemplateApplies_PathPattern_Match(t *testing.T) {
 	tmpl := makeCompiledTemplate("test", false, []string{}, "lower", "", "simple")
 	tmpl.EndpointSelector.PathPattern = `/api/users/.*`
+	tmpl.CompiledPathPattern = regexp.MustCompile(`/api/users/.*`)
 	op := &model.Operation{
 		Method: "GET",
 		Path:   "/api/users/123",
@@ -431,6 +433,7 @@ func TestTemplateApplies_PathPattern_Match(t *testing.T) {
 func TestTemplateApplies_PathPattern_NoMatch(t *testing.T) {
 	tmpl := makeCompiledTemplate("test", false, []string{}, "lower", "", "simple")
 	tmpl.EndpointSelector.PathPattern = `/api/admin/.*`
+	tmpl.CompiledPathPattern = regexp.MustCompile(`/api/admin/.*`)
 	op := &model.Operation{
 		Method: "GET",
 		Path:   "/api/users/123",
@@ -443,6 +446,7 @@ func TestTemplateApplies_AllFiltersMatch(t *testing.T) {
 	tmpl := makeCompiledTemplate("test", true, []string{"GET"}, "lower", "", "simple")
 	tmpl.EndpointSelector.HasPathParameter = true
 	tmpl.EndpointSelector.PathPattern = `/api/users/.*`
+	tmpl.CompiledPathPattern = regexp.MustCompile(`/api/users/.*`)
 	op := &model.Operation{
 		Method:       "GET",
 		Path:         "/api/users/{id}",

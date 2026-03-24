@@ -36,7 +36,7 @@ func init() {
 		orders:   make(map[string]*pb.OrderResponse),
 		config: &pb.SystemConfigResponse{
 			DatabaseUrl:     "postgresql://admin:secret@localhost:5432/prod",
-			ApiSecret:       "sk_live_51HxJKLMNOP123456789ABCDEFGH",
+			ApiSecret:       "sk_test_EXAMPLE_51HxJKLMNOP123456789",
 			DebugMode:       true,
 			MaintenanceMode: false,
 			AllowedOrigins:  []string{"*"},
@@ -141,7 +141,8 @@ func init() {
 	}
 }
 
-// Token-based authentication (hardcoded tokens for testing)
+// Token-based authentication — INTENTIONALLY INSECURE: hardcoded tokens for this vulnerable test server.
+// These are NOT real credentials. This server exists solely to be a test target for Hadrian.
 var tokens = map[string]string{
 	"admin-token-12345": "1", // admin user
 	"user1-token-67890": "2", // user1

@@ -59,7 +59,7 @@ func (r *Runner) RunCategory(
 
 		// Match templates to this operation
 		for _, tmpl := range categoryTemplates {
-			if !MatchesEndpointSelector(operation, tmpl.EndpointSelector) {
+			if !MatchesEndpointSelector(operation, tmpl.EndpointSelector, tmpl.CompiledPathPattern) {
 				continue
 			}
 

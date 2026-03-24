@@ -8,8 +8,9 @@ import (
 // CompiledTemplate has pre-compiled regex patterns for performance
 type CompiledTemplate struct {
 	*Template
-	CompiledMatchers []*CompiledMatcher
-	FilePath         string // Path to the template file (for --template filtering)
+	CompiledMatchers    []*CompiledMatcher
+	CompiledPathPattern *regexp.Regexp // Pre-compiled EndpointSelector.PathPattern
+	FilePath            string         // Path to the template file (for --template filtering)
 }
 
 // CompiledMatcher holds pre-compiled regex patterns
@@ -27,6 +28,15 @@ func Compile(tmpl *Template) (*CompiledTemplate, error) {
 	compiled := &CompiledTemplate{
 		Template:         tmpl,
 		CompiledMatchers: make([]*CompiledMatcher, 0, len(tmpl.HTTP)),
+	}
+
+	// Pre-compile EndpointSelector.PathPattern to prevent ReDoS from malicious templates
+	if tmpl.EndpointSelector.PathPattern != "" {
+		re, err := regexp.Compile(tmpl.EndpointSelector.PathPattern)
+		if err != nil {
+			return nil, fmt.Errorf("endpoint_selector.path_pattern: invalid regex %q: %w", tmpl.EndpointSelector.PathPattern, err)
+		}
+		compiled.CompiledPathPattern = re
 	}
 
 	// Compile matchers from HTTP tests

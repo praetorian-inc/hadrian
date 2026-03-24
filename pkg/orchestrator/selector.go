@@ -9,7 +9,8 @@ import (
 
 // MatchesEndpointSelector checks if an operation matches the template's endpoint criteria.
 // Evaluates: HasPathParameter, RequiresAuth, Methods, PathPattern, and Tags.
-func MatchesEndpointSelector(operation *model.Operation, selector templates.EndpointSelector) bool {
+// If compiledPathPattern is provided, it is used instead of re-compiling PathPattern each call.
+func MatchesEndpointSelector(operation *model.Operation, selector templates.EndpointSelector, compiledPathPattern ...*regexp.Regexp) bool {
 	// Check HasPathParameter requirement
 	if selector.HasPathParameter {
 		if len(operation.PathParams) == 0 {
@@ -33,9 +34,15 @@ func MatchesEndpointSelector(operation *model.Operation, selector templates.Endp
 
 	// Check PathPattern (optional regex match)
 	if selector.PathPattern != "" {
-		matched, err := regexp.MatchString(selector.PathPattern, operation.Path)
-		if err != nil || !matched {
-			return false
+		if len(compiledPathPattern) > 0 && compiledPathPattern[0] != nil {
+			if !compiledPathPattern[0].MatchString(operation.Path) {
+				return false
+			}
+		} else {
+			matched, err := regexp.MatchString(selector.PathPattern, operation.Path)
+			if err != nil || !matched {
+				return false
+			}
 		}
 	}
 

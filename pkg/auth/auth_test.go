@@ -9,9 +9,13 @@ import (
 )
 
 func TestLoad_Success(t *testing.T) {
-	// Set environment variable for test
+	// Set environment variables for test
 	_ = os.Setenv("ADMIN_TOKEN", "test-admin-token-123")
-	defer func() { _ = os.Unsetenv("ADMIN_TOKEN") }()
+	_ = os.Setenv("USER_TOKEN", "test-user-token-456")
+	defer func() {
+		_ = os.Unsetenv("ADMIN_TOKEN")
+		_ = os.Unsetenv("USER_TOKEN")
+	}()
 
 	config, err := Load("testdata/auth.yaml")
 	if err != nil {
@@ -35,13 +39,13 @@ func TestLoad_Success(t *testing.T) {
 		t.Errorf("Expected expanded token, got '%s'", admin.Token)
 	}
 
-	// Verify user role with hardcoded token
+	// Verify user role with expanded env var
 	user, ok := config.Roles["user"]
 	if !ok {
 		t.Fatal("user role not found")
 	}
-	if user.Token == "" {
-		t.Error("user token should not be empty")
+	if user.Token != "test-user-token-456" {
+		t.Errorf("Expected expanded user token, got '%s'", user.Token)
 	}
 }
 

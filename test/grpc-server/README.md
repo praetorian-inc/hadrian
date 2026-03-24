@@ -142,7 +142,7 @@ service OrderService {
 ### System Config
 
 - **Database URL**: `postgresql://admin:secret@localhost:5432/prod` (exposed!)
-- **API Secret**: `sk_live_51HxJKLMNOP123456789ABCDEFGH` (exposed!)
+- **API Secret**: `sk_test_EXAMPLE_51HxJKLMNOP123456789` (exposed!)
 - **Debug Mode**: true
 - **Allowed Origins**: `*`
 
@@ -206,7 +206,7 @@ grpcurl -plaintext \
 # Response exposes database credentials and API secret!
 {
   "databaseUrl": "postgresql://admin:secret@localhost:5432/prod",
-  "apiSecret": "sk_live_51HxJKLMNOP123456789ABCDEFGH",
+  "apiSecret": "sk_test_EXAMPLE_51HxJKLMNOP123456789",
   "debugMode": true,
   "maintenanceMode": false,
   "allowedOrigins": ["*"]

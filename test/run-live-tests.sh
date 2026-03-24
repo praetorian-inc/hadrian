@@ -666,7 +666,7 @@ if echo "$TARGETS" | grep -q "crapi"; then
         CRAPI_USER_EMAIL="hadrian-user1@test.com"
         CRAPI_USER2_EMAIL="hadrian-user2@test.com"
         CRAPI_MECHANIC_EMAIL="hadrian-mechanic@test.com"
-        CRAPI_PASSWORD="HadrianTest123!"
+        CRAPI_PASSWORD="${CRAPI_PASSWORD:-HadrianTest123!}"
 
         crapi_signup "$CRAPI_ADMIN_EMAIL" "Hadrian Admin" "1111111111" "$CRAPI_PASSWORD" >/dev/null
         crapi_signup "$CRAPI_USER_EMAIL" "Hadrian User1" "2222222222" "$CRAPI_PASSWORD" >/dev/null

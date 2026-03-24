@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -296,10 +295,9 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 		return false
 	}
 
-	// Check path pattern (regex match)
-	if sel.PathPattern != "" {
-		matched, err := regexp.MatchString(sel.PathPattern, op.Path)
-		if err != nil || !matched {
+	// Check path pattern (use pre-compiled regex from CompiledTemplate)
+	if tmpl.CompiledPathPattern != nil {
+		if !tmpl.CompiledPathPattern.MatchString(op.Path) {
 			return false
 		}
 	}

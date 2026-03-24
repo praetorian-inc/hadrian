@@ -68,7 +68,7 @@ var (
 	orders    []Order
 	documents []Document
 
-	// JWT secret
+	// JWT secret — INTENTIONALLY INSECURE: this is an intentionally vulnerable test server
 	jwtSecret = []byte("vulnerable-secret-key-do-not-use-in-production")
 
 	// Auth method (configurable via env)
@@ -77,7 +77,8 @@ var (
 
 // Initialize seed data
 func initData() {
-	// Seed users
+	// Seed users — INTENTIONALLY INSECURE: hardcoded credentials for this vulnerable test server.
+	// These are NOT real credentials. This server exists solely to be a test target for Hadrian.
 	users = []User{
 		{ID: 1, Username: "admin", Email: "admin@example.com", Role: "admin", Password: "admin123", APIKey: "admin-api-key-12345", SessionID: "admin-session-xyz789"},
 		{ID: 2, Username: "user1", Email: "user1@example.com", Role: "user", Password: "user1pass", APIKey: "user1-api-key-67890", SessionID: "user1-session-abc123"},

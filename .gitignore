@@ -6,11 +6,13 @@
 *.env
 
 # Claude Code
-.claude/settings.local.json
-.claude/memory/
+.claude/
 
 # Git worktrees
 .worktrees/
+
+# Hadrian runtime artifacts
+.hadrian/
 
 # Go build artifacts
 *.exe
@@ -29,8 +31,11 @@ coverage.html
 *.coverprofile
 
 # Test output artifacts
+test_output.txt
 hadrian-*.log
 results-*.json
+test/.results/
+test/crapi/crapi-results.json
 
 # IDE/Editor
 .idea/
