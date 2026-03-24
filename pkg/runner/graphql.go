@@ -179,81 +179,48 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 	return tmplList, nil
 }
 
-// runGraphQLTest executes GraphQL security tests
+// runGraphQLTest executes GraphQL security tests via CLI.
+// Core logic is delegated to RunGraphQLTest; this function adds reporter
+// output and optional LLM triage on top.
 func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	startTime := time.Now()
 
-	// Enable verbose logging if requested
 	log.SetVerbose(config.Verbose)
 
-	graphqlVerboseLog(config.Verbose, "Starting GraphQL security test")
-	graphqlVerboseLog(config.Verbose, "Target: %s%s", config.Target, config.Endpoint)
-
-	// Load configs
-	authConfig, rolesConfig, err := loadConfigs(config.Auth, config.Roles)
+	// Load roles config for LLM triage (RunGraphQLTest doesn't need it)
+	_, rolesConfig, err := loadConfigs(config.Auth, config.Roles)
 	if err != nil {
 		return err
 	}
 
-	// Parse custom headers
-	customHeaders, err := ParseCustomHeaders(config.Headers)
-	if err != nil {
-		return fmt.Errorf("invalid custom header: %w", err)
-	}
-
-	// Create HTTP client with proxy, TLS, timeout (shared infrastructure)
-	httpClient, err := createGraphQLHTTPClient(config)
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-
-	// Wrap HTTP client with rate limiting
-	rateLimitedClient := wrapWithRateLimiting(httpClient, config)
-
-	// Get schema
-	schema, err := fetchSchema(ctx, config, rateLimitedClient, customHeaders)
-	if err != nil {
-		return err
-	}
-
-	reportSchemaInfo(schema, config.Verbose)
-
-	graphqlDryRunLog(config.DryRun, "Would run security checks against %d queries, %d mutations",
-		len(schema.Queries), len(schema.Mutations))
-
-	if config.DryRun {
-		graphqlDryRunLog(config.DryRun, "Dry run - skipping test execution")
-		return nil
-	}
-
-	// Build auth configs for scanner
-	authConfigs, err := buildAuthConfigs(authConfig)
-	if err != nil {
-		return err
-	}
-
-	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs, config.Verbose)
-
-	// Create reporter based on output format (using REST reporter pattern)
+	// Create reporter based on output format
 	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
 	defer func() { _ = reporter.Close() }()
 
-	// Run security checks with rate-limited client
-	endpoint := config.Target + config.Endpoint
-	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders)
+	// Delegate core logic to library function
+	modelFindings, err := RunGraphQLTest(ctx, config)
+	if err != nil {
+		return err
+	}
 
-	// Only report findings if not already reported via callback (non-verbose mode)
-	if config.Output == "terminal" && config.LLMHost == "" && !config.Verbose {
+	if modelFindings == nil {
+		// dry-run mode returns nil findings
+		return nil
+	}
+
+	// Report findings
+	llmEnabled := config.LLMHost != "" || config.LLMModel != ""
+	if !llmEnabled {
 		for _, finding := range modelFindings {
 			reporter.ReportFinding(finding)
 		}
 	}
 
 	// LLM triage if configured
-	if config.LLMHost != "" || config.LLMModel != "" {
+	if llmEnabled {
 		if rolesConfig != nil {
 			graphqlVerboseLog(config.Verbose, "Running LLM triage on %d findings", len(modelFindings))
 			modelFindings, err = triageWithLLM(ctx, modelFindings, rolesConfig,
@@ -267,11 +234,9 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 		}
 	}
 
-	// Calculate stats using shared function
+	// Calculate stats
 	stats := calculateStats(modelFindings, startTime)
-	stats.OperationCount = len(schema.Queries) + len(schema.Mutations)
-	stats.RoleCount = len(authConfigs)
-	stats.TemplatesLoaded = templatesLoaded
+	stats.TemplatesLoaded = 0 // template count not available from library API
 
 	// Generate final report
 	if err := reporter.GenerateReport(modelFindings, stats); err != nil {
