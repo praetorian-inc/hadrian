@@ -156,6 +156,74 @@ func TestCompile_InvalidRegex(t *testing.T) {
 	}
 }
 
+// TestCompile_PathPattern_Valid tests that a valid PathPattern is pre-compiled
+func TestCompile_PathPattern_Valid(t *testing.T) {
+	tmpl := &Template{
+		ID: "path-pattern-template",
+		EndpointSelector: EndpointSelector{
+			PathPattern: `/api/users/\d+`,
+		},
+		HTTP: []HTTPTest{
+			{Method: "GET", Path: "/api/users/{id}"},
+		},
+	}
+
+	compiled, err := Compile(tmpl)
+	if err != nil {
+		t.Fatalf("Compile() failed: %v", err)
+	}
+
+	if compiled.CompiledPathPattern == nil {
+		t.Fatal("CompiledPathPattern should not be nil for valid PathPattern")
+	}
+
+	// Verify it matches expected paths
+	if !compiled.CompiledPathPattern.MatchString("/api/users/123") {
+		t.Error("CompiledPathPattern should match /api/users/123")
+	}
+	if compiled.CompiledPathPattern.MatchString("/api/admin/settings") {
+		t.Error("CompiledPathPattern should not match /api/admin/settings")
+	}
+}
+
+// TestCompile_PathPattern_Empty tests that empty PathPattern leaves CompiledPathPattern nil
+func TestCompile_PathPattern_Empty(t *testing.T) {
+	tmpl := &Template{
+		ID:   "no-path-pattern",
+		HTTP: []HTTPTest{{Method: "GET", Path: "/api/test"}},
+	}
+
+	compiled, err := Compile(tmpl)
+	if err != nil {
+		t.Fatalf("Compile() failed: %v", err)
+	}
+
+	if compiled.CompiledPathPattern != nil {
+		t.Error("CompiledPathPattern should be nil when PathPattern is empty")
+	}
+}
+
+// TestCompile_PathPattern_Invalid tests that invalid PathPattern regex returns an error
+func TestCompile_PathPattern_Invalid(t *testing.T) {
+	tmpl := &Template{
+		ID: "invalid-path-pattern",
+		EndpointSelector: EndpointSelector{
+			PathPattern: `[invalid(`,
+		},
+		HTTP: []HTTPTest{{Method: "GET", Path: "/test"}},
+	}
+
+	_, err := Compile(tmpl)
+	if err == nil {
+		t.Fatal("Compile() should fail with invalid PathPattern regex")
+	}
+
+	if !testing.Verbose() {
+		return
+	}
+	t.Logf("Expected error: %v", err)
+}
+
 // TestCompile_NoMatchers tests template with no matchers
 func TestCompile_NoMatchers(t *testing.T) {
 	tmpl := &Template{

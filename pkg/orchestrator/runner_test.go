@@ -279,6 +279,27 @@ func TestRunCategory(t *testing.T) {
 	})
 }
 
+func TestSanitizePath(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"/api/users/{id}", "-api-users--id-"},
+		{"/api/orders/{order_id}/items", "-api-orders--order_id--items"},
+		{"", ""},
+		{"/simple", "-simple"},
+		{"no-special-chars", "no-special-chars"},
+		{"/path with spaces/{id}", "-path-with-spaces--id-"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			result := sanitizePath(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestCreateFinding(t *testing.T) {
 	t.Run("creates finding with all required fields", func(t *testing.T) {
 		// Arrange
