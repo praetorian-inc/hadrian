@@ -6,16 +6,16 @@ Hadrian provides comprehensive REST API security testing with 8 built-in templat
 
 ```bash
 # Basic security test
-hadrian test rest --api api.yaml --roles roles.yaml
+hadrian test rest --api api.yaml --roles roles.yaml --category all
 
 # With authentication
-hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --category all
 
 # Dry run (show what would be tested)
-hadrian test rest --api api.yaml --roles roles.yaml --dry-run
+hadrian test rest --api api.yaml --roles roles.yaml --category all --dry-run
 
 # Verbose output with JSON report
-hadrian test rest --api api.yaml --roles roles.yaml --verbose --output json --output-file report.json
+hadrian test rest --api api.yaml --roles roles.yaml --category all --verbose --output json --output-file report.json
 ```
 
 ## Command Options

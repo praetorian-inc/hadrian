@@ -6,16 +6,16 @@ Hadrian supports security testing of GraphQL APIs, including introspection detec
 
 ```bash
 # Basic GraphQL security scan (uses introspection)
-hadrian test graphql --target https://api.example.com
+hadrian test graphql --target https://api.example.com --template-dir templates/graphql
 
 # With custom endpoint path
-hadrian test graphql --target https://api.example.com --endpoint /api/graphql
+hadrian test graphql --target https://api.example.com --endpoint /api/graphql --template-dir templates/graphql
 
 # With SDL schema file (when introspection is disabled)
-hadrian test graphql --target https://api.example.com --schema schema.graphql
+hadrian test graphql --target https://api.example.com --schema schema.graphql --template-dir templates/graphql
 
 # With authentication for authorization testing
-hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml
+hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml --template-dir templates/graphql
 ```
 
 ## Command Options

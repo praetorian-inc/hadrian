@@ -51,13 +51,13 @@ Download the latest binary from the [Releases](https://github.com/praetorian-inc
 ### REST API Testing
 
 ```bash
-hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --category all
 ```
 
 ### GraphQL API Testing
 
 ```bash
-hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml
+hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml --template-dir templates/graphql
 ```
 
 ### gRPC API Testing
@@ -70,17 +70,17 @@ hadrian test grpc --target localhost:50051 --proto service.proto --auth auth.yam
 
 ```bash
 # Dry run (show what would be tested)
-hadrian test rest --api api.yaml --roles roles.yaml --dry-run
+hadrian test rest --api api.yaml --roles roles.yaml --category all --dry-run
 
 # Output to JSON file
-hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file report.json
+hadrian test rest --api api.yaml --roles roles.yaml --category all --output json --output-file report.json
 
 # With LLM-powered triage
-hadrian test rest --api api.yaml --roles roles.yaml \
+hadrian test rest --api api.yaml --roles roles.yaml --category all \
   --llm-host http://localhost:11434 --llm-model llama3.2:latest
 
 # Route through Burp Suite proxy
-hadrian test rest --api api.yaml --roles roles.yaml --proxy http://localhost:8080 --insecure
+hadrian test rest --api api.yaml --roles roles.yaml --category all --proxy http://localhost:8080 --insecure
 ```
 
 ## Documentation
