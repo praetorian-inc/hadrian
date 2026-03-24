@@ -73,7 +73,7 @@ func (o *OllamaClient) Name() string {
 }
 
 func (o *OllamaClient) Triage(ctx context.Context, req *TriageRequest) (*TriageResult, error) {
-	// Build prompt with PII redaction (CR-1: MANDATORY)
+	// Build prompt with PII redaction (PII redaction - mandatory)
 	prompt := o.buildPrompt(req)
 
 	// Prepare Ollama API request
@@ -118,7 +118,7 @@ func (o *OllamaClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 }
 
 func (o *OllamaClient) buildPrompt(req *TriageRequest) string {
-	// CRITICAL: Redact PII from response before LLM (CR-1)
+	// CRITICAL: Redact PII from response before LLM (PII protection)
 	redactedResponse := o.redactor.RedactForLLM(req.Finding.Evidence.Response.Body)
 
 	// Add custom context section if provided

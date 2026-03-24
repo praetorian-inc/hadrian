@@ -252,43 +252,6 @@ func TestValidateTemplate_MissingCategory(t *testing.T) {
 	assert.Contains(t, err.Error(), "template missing required field: info.category")
 }
 
-func TestContainsDangerousFunction_Detected(t *testing.T) {
-	dangerousCases := []string{
-		"system('rm -rf /')",
-		"exec('malicious')",
-		"eval(userInput)",
-		"os.system('bad')",
-		"cmd.run('evil')",
-		"shell('danger')",
-		"import os",
-		"require('fs')",
-		"load('file')",
-		"__import__('module')",
-	}
-
-	for _, expr := range dangerousCases {
-		t.Run(expr, func(t *testing.T) {
-			assert.True(t, containsDangerousFunction(expr), "Should detect dangerous function in: %s", expr)
-		})
-	}
-}
-
-func TestContainsDangerousFunction_Safe(t *testing.T) {
-	safeCases := []string{
-		"status_code == 200",
-		"len(body) > 0",
-		"contains(response, 'success')",
-		"regex('pattern', text)",
-		"md5(data)",
-	}
-
-	for _, expr := range safeCases {
-		t.Run(expr, func(t *testing.T) {
-			assert.False(t, containsDangerousFunction(expr), "Should NOT detect dangerous function in: %s", expr)
-		})
-	}
-}
-
 func TestSetupPhases_UnmarshalYAML_SinglePhase(t *testing.T) {
 	// Test backwards compatibility: single setup phase (object syntax)
 	yamlData := `

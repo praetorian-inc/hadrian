@@ -64,7 +64,7 @@ func TestNewVersionCmd(t *testing.T) {
 }
 
 func TestNewTestCmd_ConcurrencyHardcoded(t *testing.T) {
-	// Verify concurrency max is hardcoded in help text (HR-1: DoS prevention)
+	// Verify concurrency max is hardcoded in help text (DoS prevention)
 	// After CLI refactoring, test flags are on "test rest" subcommand
 	cmd := newTestRestCmd()
 

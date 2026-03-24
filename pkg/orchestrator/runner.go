@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -195,23 +196,9 @@ func generateFindingID(templateID string, operation *model.Operation, attackerRo
 
 // sanitizePath converts a path to a safe string for use in IDs.
 func sanitizePath(path string) string {
-	// Simple sanitization - replace / and { } with -
 	result := path
 	for _, char := range []string{"/", "{", "}", " "} {
-		result = replaceAll(result, char, "-")
-	}
-	return result
-}
-
-// replaceAll is a simple string replacement helper.
-func replaceAll(s, old, new string) string {
-	result := ""
-	for i := 0; i < len(s); i++ {
-		if string(s[i]) == old {
-			result += new
-		} else {
-			result += string(s[i])
-		}
+		result = strings.ReplaceAll(result, char, "-")
 	}
 	return result
 }

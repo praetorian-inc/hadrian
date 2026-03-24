@@ -62,9 +62,9 @@ type RoleAuth struct {
 	Cookie string `yaml:"cookie,omitempty"`
 }
 
-// Load parses auth.yaml file (CR-3: Credential Security)
+// Load parses auth.yaml file (credential security)
 func Load(filePath string) (*AuthConfig, error) {
-	// Check file permissions (CR-3)
+	// Check file permissions (credential security)
 	if info, err := os.Stat(filePath); err == nil {
 		mode := info.Mode().Perm()
 		if mode&0077 != 0 {
@@ -90,12 +90,12 @@ func Load(filePath string) (*AuthConfig, error) {
 		return nil, fmt.Errorf("unsupported auth method %q (valid: bearer, basic, api_key, cookie)", config.Method)
 	}
 
-	// Validate cookie_name against RFC 6265 (M-1: prevent header injection)
+	// Validate cookie_name against RFC 6265 (prevent header injection)
 	if config.CookieName != "" && !validCookieNameRE.MatchString(config.CookieName) {
 		return nil, fmt.Errorf("invalid cookie_name %q: must be a valid RFC 6265 token (no spaces, separators, or control characters)", config.CookieName)
 	}
 
-	// Expand environment variables (CR-3)
+	// Expand environment variables (credential security)
 	// Only expand values that look like env var references (contain ${...})
 	// to avoid corrupting values that contain literal $ characters
 	for roleName, roleAuth := range config.Roles {
@@ -114,7 +114,7 @@ func Load(filePath string) (*AuthConfig, error) {
 			return nil, fmt.Errorf("role '%s': cookie value contains invalid characters (CR, LF, or NUL)", roleName)
 		}
 
-		// Detect hardcoded secrets (CR-3)
+		// Detect hardcoded secrets (credential security)
 		if detectHardcodedSecret(roleAuth.Token) {
 			log.Warn("SECURITY: Role '%s' has hardcoded token. Use environment variables: ${TOKEN_VAR}", roleName)
 		}
@@ -160,14 +160,14 @@ func expandEnvSafe(value string) string {
 	})
 }
 
-// Pre-compiled patterns for hardcoded secret detection (CR-3)
+// Pre-compiled patterns for hardcoded secret detection (credential security)
 var hardcodedSecretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`^eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*$`), // JWT
 	regexp.MustCompile(`^sk-[A-Za-z0-9]{32,}$`),                                  // OpenAI API key
 	regexp.MustCompile(`^[A-Za-z0-9]{40,}$`),                                     // Generic long key
 }
 
-// detectHardcodedSecret identifies JWT, API keys, etc. (CR-3)
+// detectHardcodedSecret identifies JWT, API keys, etc. (credential security)
 func detectHardcodedSecret(value string) bool {
 	if strings.HasPrefix(value, "${") {
 		return false // Environment variable reference

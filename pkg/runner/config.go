@@ -22,7 +22,7 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("roles file not found: %s", c.Roles)
 	}
 
-	// Validate concurrency limits (HR-1: DoS prevention)
+	// Validate concurrency limits (DoS prevention)
 	if c.Concurrency < 1 {
 		return fmt.Errorf("concurrency must be ≥1")
 	}

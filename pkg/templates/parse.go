@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -14,9 +13,9 @@ const (
 	MaxYAMLSize  = 1024 * 1024 // 1MB limit
 )
 
-// Parse loads and parses a YAML template file (CR-2: YAML Security)
+// Parse loads and parses a YAML template file (YAML security)
 func Parse(filePath string) (*Template, error) {
-	// Check file size (CR-2: DoS prevention)
+	// Check file size (DoS prevention)
 	info, err := os.Stat(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat template file: %w", err)
@@ -34,7 +33,7 @@ func Parse(filePath string) (*Template, error) {
 	return ParseYAML(data)
 }
 
-// ParseYAML parses YAML bytes with security controls (CR-2)
+// ParseYAML parses YAML bytes with security controls (YAML security)
 func ParseYAML(data []byte) (*Template, error) {
 	// Use safe YAML decoder
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
@@ -46,7 +45,7 @@ func ParseYAML(data []byte) (*Template, error) {
 		return nil, fmt.Errorf("YAML parse error: %w", err)
 	}
 
-	// Validate DSL expressions (CR-2: Injection prevention)
+	// Validate DSL expressions (injection prevention)
 	if err := validateTemplate(&template); err != nil {
 		return nil, err
 	}
@@ -54,7 +53,7 @@ func ParseYAML(data []byte) (*Template, error) {
 	return &template, nil
 }
 
-// validateTemplate checks for security issues (CR-2)
+// validateTemplate checks for security issues (YAML security)
 func validateTemplate(tmpl *Template) error {
 	// Validate required fields
 	if tmpl.ID == "" {
@@ -67,7 +66,7 @@ func validateTemplate(tmpl *Template) error {
 		return fmt.Errorf("template missing required field: info.category")
 	}
 
-	// Reject DSL matchers - feature is incomplete and poses injection risk (CR-2)
+	// Reject DSL matchers - feature is incomplete and poses injection risk (YAML security)
 	for i, test := range tmpl.HTTP {
 		for j, matcher := range test.Matchers {
 			if matcher.Type == "dsl" {
@@ -79,19 +78,3 @@ func validateTemplate(tmpl *Template) error {
 	return nil
 }
 
-// containsDangerousFunction detects code execution attempts (CR-2)
-func containsDangerousFunction(expr string) bool {
-	dangerousFuncs := []string{
-		"system", "exec", "eval", "os.", "cmd.", "shell",
-		"import", "require", "load", "__import__",
-	}
-
-	exprLower := strings.ToLower(expr)
-	for _, fn := range dangerousFuncs {
-		if strings.Contains(exprLower, fn) {
-			return true
-		}
-	}
-
-	return false
-}

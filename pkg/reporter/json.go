@@ -99,7 +99,7 @@ func (r *JSONReporter) redactFinding(f *model.Finding) *model.Finding {
 		return f // Return original if copy fails
 	}
 
-	// Redact sensitive fields using the Redactor (CR-1)
+	// Redact sensitive fields using the Redactor (PII protection)
 	copy.Evidence.Request.Body = r.redactor.Redact(copy.Evidence.Request.Body)
 	copy.Evidence.Response.Body = r.redactor.Redact(copy.Evidence.Response.Body)
 

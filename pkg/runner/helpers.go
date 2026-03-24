@@ -134,7 +134,7 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 			}
 		}
 
-		// Redact sensitive data before sending to LLM (CR-1)
+		// Redact sensitive data before sending to LLM (PII protection)
 		redactedFinding := *finding
 		redactedFinding.Evidence.Request.Body = redactor.RedactForLLM(finding.Evidence.Request.Body)
 		redactedFinding.Evidence.Response.Body = redactor.RedactForLLM(finding.Evidence.Response.Body)

@@ -25,6 +25,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/util"
 )
 
 // MaxGRPCResponseBodySize limits gRPC response body size to prevent memory exhaustion (10MB)
@@ -229,7 +230,7 @@ func (e *GRPCExecutor) executeGRPCTest(
 	}
 
 	// Generate request ID
-	requestID := generateRequestID()
+	requestID := util.GenerateRequestID()
 	md.Set("x-hadrian-request-id", requestID)
 
 	// Attach metadata to context

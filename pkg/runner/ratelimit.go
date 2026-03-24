@@ -34,7 +34,7 @@ func DefaultRateLimitConfig() *RateLimitConfig {
 	}
 }
 
-// RateLimiter controls request rate to prevent DoS (HR-1)
+// RateLimiter controls request rate to prevent DoS (DoS prevention)
 // Provides both global rate limiting and per-endpoint rate limiting
 // Thread-safe for concurrent use
 type RateLimiter struct {

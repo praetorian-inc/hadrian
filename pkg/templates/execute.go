@@ -3,9 +3,7 @@ package templates
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,21 +25,6 @@ const MaxResponseBodySize = 10 * 1024 * 1024
 // MaxLLMResponseBodySize is the maximum size for LLM API responses (1MB)
 // LLM responses should be smaller than general HTTP responses
 const MaxLLMResponseBodySize = 1 * 1024 * 1024
-
-// generateRequestID creates a random UUID-style request ID
-func generateRequestID() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("failed to generate request ID: %v", err))
-	}
-
-	// Format as UUID (8-4-4-4-12)
-	return hex.EncodeToString(b[0:4]) + "-" +
-		hex.EncodeToString(b[4:6]) + "-" +
-		hex.EncodeToString(b[6:8]) + "-" +
-		hex.EncodeToString(b[8:10]) + "-" +
-		hex.EncodeToString(b[10:16])
-}
 
 // HTTPClient interface for dependency injection
 type HTTPClient interface {
@@ -173,7 +156,7 @@ func (e *Executor) Execute(
 				}
 
 				// Add request ID header and track it
-				requestID := generateRequestID()
+				requestID := util.GenerateRequestID()
 				req.Header.Set("X-Hadrian-Request-Id", requestID)
 				e.mu.Lock()
 				e.requestIDs = append(e.requestIDs, requestID)
@@ -459,7 +442,7 @@ func (e *Executor) ExecuteGraphQL(
 		req.Header.Set("Content-Type", "application/json")
 
 		// Add request ID header and track it
-		requestID := generateRequestID()
+		requestID := util.GenerateRequestID()
 		req.Header.Set("X-Hadrian-Request-Id", requestID)
 		e.mu.Lock()
 		e.requestIDs = append(e.requestIDs, requestID)

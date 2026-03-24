@@ -1,10 +1,10 @@
 package orchestrator
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"net/http"
 	"sync"
+
+	"github.com/praetorian-inc/hadrian/pkg/util"
 )
 
 // TrackedHTTPClient wraps an HTTPClient to add request ID tracking
@@ -24,7 +24,7 @@ func NewTrackedHTTPClient(client HTTPClient) *TrackedHTTPClient {
 
 // Do executes the request with a unique request ID header
 func (t *TrackedHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	requestID := generateRequestID()
+	requestID := util.GenerateRequestID()
 	req.Header.Set("X-Hadrian-Request-Id", requestID)
 	t.mu.Lock()
 	t.requestIDs = append(t.requestIDs, requestID)
@@ -48,19 +48,3 @@ func (t *TrackedHTTPClient) ClearRequestIDs() {
 	t.requestIDs = make([]string, 0)
 }
 
-// generateRequestID creates a random UUID-style request ID
-func generateRequestID() string {
-	b := make([]byte, 16)
-	_, err := rand.Read(b)
-	if err != nil {
-		// Fallback to a simple hex string if crypto/rand fails
-		return hex.EncodeToString(b)
-	}
-
-	// Format as UUID (8-4-4-4-12)
-	return hex.EncodeToString(b[0:4]) + "-" +
-		hex.EncodeToString(b[4:6]) + "-" +
-		hex.EncodeToString(b[6:8]) + "-" +
-		hex.EncodeToString(b[8:10]) + "-" +
-		hex.EncodeToString(b[10:16])
-}

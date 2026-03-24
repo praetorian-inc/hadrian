@@ -3,13 +3,13 @@ package graphql
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"sync"
+
+	"github.com/praetorian-inc/hadrian/pkg/util"
 )
 
 // MaxResponseBodySize is the maximum size of HTTP response bodies (10MB)
@@ -133,7 +133,7 @@ func (e *Executor) Execute(
 	}
 
 	// Generate request ID
-	requestID := generateRequestID()
+	requestID := util.GenerateRequestID()
 	req.Header.Set("X-Hadrian-Request-Id", requestID)
 
 	// Track request ID
@@ -187,10 +187,3 @@ func (r *ExecuteResult) IsSuccess() bool {
 	return r.StatusCode >= 200 && r.StatusCode < 300 && !r.HasErrors()
 }
 
-func generateRequestID() string {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("failed to generate request ID: %v", err))
-	}
-	return hex.EncodeToString(b)
-}

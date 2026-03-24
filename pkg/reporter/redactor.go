@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// Redactor sanitizes sensitive data from output (CR-1: PII Protection)
+// Redactor sanitizes sensitive data from output (PII protection)
 type Redactor struct {
 	patterns map[string]*regexp.Regexp
 }
@@ -16,13 +16,13 @@ type Redactor struct {
 func NewRedactor() *Redactor {
 	return &Redactor{
 		patterns: map[string]*regexp.Regexp{
-			// PII patterns (CR-1)
+			// PII patterns (PII protection)
 			"ssn":         regexp.MustCompile(`\b\d{3}-\d{2}-\d{4}\b`),
 			"credit_card": regexp.MustCompile(`\b(?:\d{4}[-\s]?){3}\d{4}\b`),
 			"email":       regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b`),
 			"phone":       regexp.MustCompile(`\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}`),
 
-			// Credential patterns (CR-1)
+			// Credential patterns (PII protection)
 			// Order matters: JWT first (most specific), then sk_key, then bearer/basic, then api_key/password
 			"jwt":      regexp.MustCompile(`eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*`),
 			"sk_key":   regexp.MustCompile(`[sp]k[-_][A-Za-z0-9_]{10,}`),
@@ -31,13 +31,13 @@ func NewRedactor() *Redactor {
 			"api_key":  regexp.MustCompile(`(?i)(api[_-]?(key|token)|apikey)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
 			"password": regexp.MustCompile(`(?i)(password|passwd|pwd)["']?\s*[:=]\s*["']?[^"'\s]+["']?`),
 
-			// Session cookie patterns (CR-1)
+			// Session cookie patterns (PII protection)
 			"cookie": regexp.MustCompile(`(?i)(cookie|set-cookie)\s*:\s*[^\r\n]+`),
 		},
 	}
 }
 
-// Redact replaces sensitive data with [REDACTED] markers (CR-1)
+// Redact replaces sensitive data with [REDACTED] markers (PII protection)
 // Patterns are applied in two passes:
 // Pass 1: Standalone values (JWT, sk_key, bearer, basic) - these don't need field names
 // Pass 2: Field:value pairs (api_key, password) - these match "key: value" patterns
@@ -76,7 +76,7 @@ func (r *Redactor) Redact(content string) string {
 	return content
 }
 
-// RedactWithHash replaces with hash for comparison (CR-1)
+// RedactWithHash replaces with hash for comparison (PII protection)
 func (r *Redactor) RedactWithHash(content string) string {
 	// Pass 1: Standalone credential values
 	pass1Order := []string{"jwt", "sk_key", "bearer", "basic"}
@@ -114,7 +114,7 @@ func (r *Redactor) RedactWithHash(content string) string {
 	return content
 }
 
-// TruncateForLLM limits response size before LLM (CR-1: Data Minimization)
+// TruncateForLLM limits response size before LLM (data minimization)
 func TruncateForLLM(response string) string {
 	const MaxLLMResponseSize = 8192 // 8KB
 
@@ -125,7 +125,7 @@ func TruncateForLLM(response string) string {
 	return response
 }
 
-// RedactForLLM combines redaction + truncation (CR-1: MANDATORY before LLM)
+// RedactForLLM combines redaction + truncation (mandatory before LLM)
 func (r *Redactor) RedactForLLM(response string) string {
 	redacted := r.Redact(response)
 	truncated := TruncateForLLM(redacted)

@@ -50,7 +50,7 @@ func New(config *Config) (*Client, error) {
 			return nil, fmt.Errorf("failed to parse CA cert")
 		}
 
-		// Log CA cert fingerprint for audit (HR-3)
+		// Log CA cert fingerprint for audit (TLS audit)
 		fingerprint := sha256.Sum256(caCert)
 		log.Debug("CA cert fingerprint (SHA-256): %x", fingerprint[:16])
 	}

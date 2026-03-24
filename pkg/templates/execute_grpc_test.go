@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,8 +94,8 @@ func TestSubstituteVariables(t *testing.T) {
 
 // TestGenerateRequestID tests request ID generation
 func TestGenerateRequestID(t *testing.T) {
-	id1 := generateRequestID()
-	id2 := generateRequestID()
+	id1 := util.GenerateRequestID()
+	id2 := util.GenerateRequestID()
 
 	// IDs should not be empty
 	assert.NotEmpty(t, id1)

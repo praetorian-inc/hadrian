@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/praetorian-inc/hadrian/pkg/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -99,7 +100,7 @@ func TestGenerateRequestID_Format(t *testing.T) {
 	// Generate multiple IDs
 	ids := make(map[string]bool)
 	for i := 0; i < 100; i++ {
-		id := generateRequestID()
+		id := util.GenerateRequestID()
 
 		// Verify format
 		parts := strings.Split(id, "-")
