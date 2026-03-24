@@ -783,7 +783,6 @@ func TestRunTest_MissingAPIFile(t *testing.T) {
 		RateLimitMaxRetries:  5,
 		RateLimitStatusCodes: []int{429, 503},
 		Output:               "terminal",
-		Concurrency:          1,
 	}
 
 	err := runTest(ctx, config)
@@ -811,7 +810,6 @@ func TestRunTest_InvalidAPISpec(t *testing.T) {
 		RateLimitMaxRetries:  5,
 		RateLimitStatusCodes: []int{429, 503},
 		Output:               "terminal",
-		Concurrency:          1,
 	}
 
 	err := runTest(ctx, config)
@@ -882,7 +880,6 @@ detection:
 		RateLimitMaxRetries:  5,
 		RateLimitStatusCodes: []int{429, 503},
 		Output:               "terminal",
-		Concurrency:          1,
 		Timeout:              10,
 	}
 
@@ -925,7 +922,6 @@ paths:
 		RateLimitMaxRetries:  5,
 		RateLimitStatusCodes: []int{429, 503},
 		Output:               "terminal",
-		Concurrency:          1,
 	}
 
 	err := runTest(ctx, config)

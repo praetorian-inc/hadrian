@@ -14,7 +14,6 @@ func TestNewTestCmd_FlagDefaults(t *testing.T) {
 	cmd := newTestRestCmd()
 
 	// Verify default values (Cobra stores defaults as strings)
-	assert.Equal(t, "1", cmd.Flags().Lookup("concurrency").DefValue)
 	assert.Equal(t, "5", cmd.Flags().Lookup("rate-limit").DefValue)
 	assert.Equal(t, "30", cmd.Flags().Lookup("timeout").DefValue)
 	assert.Equal(t, "terminal", cmd.Flags().Lookup("output").DefValue)
@@ -61,19 +60,6 @@ func TestNewVersionCmd(t *testing.T) {
 
 	assert.Equal(t, "version", cmd.Use)
 	assert.Contains(t, cmd.Short, "version")
-}
-
-func TestNewTestCmd_ConcurrencyHardcoded(t *testing.T) {
-	// Verify concurrency max is hardcoded in help text (DoS prevention)
-	// After CLI refactoring, test flags are on "test rest" subcommand
-	cmd := newTestRestCmd()
-
-	concurrencyFlag := cmd.Flags().Lookup("concurrency")
-	assert.NotNil(t, concurrencyFlag)
-	assert.Contains(t, concurrencyFlag.Usage, "max: 10")
-
-	// Note: Actual enforcement will be in Batch 18 (runTest implementation)
-	// This test verifies the documentation is present
 }
 
 func TestRun_NoError(t *testing.T) {

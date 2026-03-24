@@ -22,14 +22,6 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("roles file not found: %s", c.Roles)
 	}
 
-	// Validate concurrency limits (DoS prevention)
-	if c.Concurrency < 1 {
-		return fmt.Errorf("concurrency must be ≥1")
-	}
-	if c.Concurrency > 10 {
-		return fmt.Errorf("concurrency limited to 10 (DoS prevention)")
-	}
-
 	// Validate proxy URL if provided
 	if c.Proxy != "" {
 		proxyURL, err := url.Parse(c.Proxy)
@@ -100,9 +92,6 @@ func (c *Config) setDefaults() {
 	}
 	if len(c.RateLimitStatusCodes) == 0 {
 		c.RateLimitStatusCodes = []int{429, 503}
-	}
-	if c.Concurrency == 0 {
-		c.Concurrency = 1
 	}
 	if c.Timeout <= 0 {
 		c.Timeout = 30

@@ -136,7 +136,6 @@ func TestIntegration_FullWorkflow(t *testing.T) {
 		API:         apiSpecPath,
 		Roles:       rolesPath,
 		Auth:        authPath,
-		Concurrency: 1,
 		RateLimit:   10.0,
 		Timeout:     30,
 		Output:      "terminal",
@@ -193,7 +192,6 @@ func TestIntegration_DryRunMode(t *testing.T) {
 	config := Config{
 		API:         apiSpecPath,
 		Roles:       rolesPath,
-		Concurrency: 1,
 		RateLimit:   10.0,
 		Timeout:     30,
 		Output:      "terminal",
@@ -254,7 +252,6 @@ func TestIntegration_VerboseOutput(t *testing.T) {
 	config := Config{
 		API:         apiSpecPath,
 		Roles:       rolesPath,
-		Concurrency: 1,
 		RateLimit:   10.0,
 		Timeout:     30,
 		Output:      "terminal",
@@ -318,7 +315,6 @@ func TestIntegration_JSONOutput(t *testing.T) {
 	config := Config{
 		API:         apiSpecPath,
 		Roles:       rolesPath,
-		Concurrency: 1,
 		RateLimit:   10.0,
 		Timeout:     30,
 		Output:      "json",
@@ -381,7 +377,6 @@ func TestIntegration_MarkdownOutput(t *testing.T) {
 	config := Config{
 		API:         apiSpecPath,
 		Roles:       rolesPath,
-		Concurrency: 1,
 		RateLimit:   10.0,
 		Timeout:     30,
 		Output:      "markdown",

@@ -24,8 +24,7 @@ type Config struct {
 	Proxy                string
 	CACert               string
 	Insecure             bool
-	Concurrency          int
-	RateLimit            float64
+	RateLimit float64
 	RateLimitBackoff     string        // Backoff type: exponential or fixed
 	RateLimitMaxWait     time.Duration // Maximum backoff wait time
 	RateLimitMaxRetries  int           // Maximum retry attempts on rate limit
@@ -71,7 +70,6 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.Proxy, "proxy", "", "HTTP/HTTPS proxy URL (e.g., http://localhost:8080)")
 	cmd.Flags().StringVar(&config.CACert, "ca-cert", "", "CA certificate for proxy (Burp Suite)")
 	cmd.Flags().BoolVar(&config.Insecure, "insecure", false, "Skip TLS verification (use with proxies)")
-	cmd.Flags().IntVar(&config.Concurrency, "concurrency", 1, "Concurrent requests (max: 10)")
 	cmd.Flags().Float64Var(&config.RateLimit, "rate-limit", 5.0, "Global rate limit (req/s)")
 	cmd.Flags().StringVar(&config.RateLimitBackoff, "rate-limit-backoff", "exponential", "Backoff type for rate limit retries: exponential, fixed")
 	cmd.Flags().DurationVar(&config.RateLimitMaxWait, "rate-limit-max-wait", 60*time.Second, "Maximum backoff wait time on rate limit")

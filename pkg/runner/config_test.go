@@ -28,7 +28,6 @@ func TestValidate_Success(t *testing.T) {
 	config := &Config{
 		API:                  apiSpec,
 		Roles:                rolesFile,
-		Concurrency:          5,
 		Output:               "terminal",
 		RateLimit:            5.0,
 		RateLimitBackoff:     "exponential",
@@ -47,7 +46,6 @@ func TestValidate_MissingAPISpec(t *testing.T) {
 	config := &Config{
 		API:         "/nonexistent/api.yaml",
 		Roles:       "/tmp/roles.yaml",
-		Concurrency: 5,
 		Output:      "terminal",
 	}
 
@@ -68,77 +66,12 @@ func TestValidate_MissingRolesFile(t *testing.T) {
 	config := &Config{
 		API:         apiSpec,
 		Roles:       "/nonexistent/roles.yaml",
-		Concurrency: 5,
 		Output:      "terminal",
 	}
 
 	err := config.Validate()
 	if err == nil {
 		t.Error("Validate() = nil; want error for missing roles file")
-	}
-}
-
-func TestValidate_ConcurrencyTooLow(t *testing.T) {
-	// Create temporary test files
-	tmpDir := t.TempDir()
-	apiSpec := filepath.Join(tmpDir, "api.yaml")
-	rolesFile := filepath.Join(tmpDir, "roles.yaml")
-
-	if err := os.WriteFile(apiSpec, []byte("openapi: 3.0.0"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(rolesFile, []byte("roles: []"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	rate, backoff, maxWait, maxRetries, statusCodes := validRateLimitDefaults()
-	config := &Config{
-		API:                  apiSpec,
-		Roles:                rolesFile,
-		Concurrency:          -1,
-		Output:               "terminal",
-		RateLimit:            rate,
-		RateLimitBackoff:     backoff,
-		RateLimitMaxWait:     maxWait,
-		RateLimitMaxRetries:  maxRetries,
-		RateLimitStatusCodes: statusCodes,
-	}
-
-	err := config.Validate()
-	if err == nil {
-		t.Error("Validate() = nil; want error for concurrency < 1")
-	}
-}
-
-func TestValidate_ConcurrencyTooHigh(t *testing.T) {
-	// Create temporary test files
-	tmpDir := t.TempDir()
-	apiSpec := filepath.Join(tmpDir, "api.yaml")
-	rolesFile := filepath.Join(tmpDir, "roles.yaml")
-
-	if err := os.WriteFile(apiSpec, []byte("openapi: 3.0.0"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(rolesFile, []byte("roles: []"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	rate, backoff, maxWait, maxRetries, statusCodes := validRateLimitDefaults()
-	config := &Config{
-		API:                  apiSpec,
-		Roles:                rolesFile,
-		Concurrency:          11, // DoS check: max is 10
-		Output:               "terminal",
-		RateLimit:            rate,
-		RateLimitBackoff:     backoff,
-		RateLimitMaxWait:     maxWait,
-		RateLimitMaxRetries:  maxRetries,
-		RateLimitStatusCodes: statusCodes,
-	}
-
-	err := config.Validate()
-	if err == nil {
-		t.Error("Validate() = nil; want error for concurrency > 10")
 	}
 }
 
@@ -160,7 +93,6 @@ func TestValidate_InvalidProxy(t *testing.T) {
 		API:                  apiSpec,
 		Roles:                rolesFile,
 		Proxy:                "not-a-valid-url",
-		Concurrency:          5,
 		Output:               "terminal",
 		RateLimit:            rate,
 		RateLimitBackoff:     backoff,
@@ -192,7 +124,6 @@ func TestValidate_InvalidOutputFormat(t *testing.T) {
 	config := &Config{
 		API:                  apiSpec,
 		Roles:                rolesFile,
-		Concurrency:          5,
 		Output:               "xml", // Invalid format
 		RateLimit:            rate,
 		RateLimitBackoff:     backoff,

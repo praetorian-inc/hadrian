@@ -445,7 +445,6 @@ EOF
             --template-dir "${SCRIPT_DIR}/vulnerable-api/templates/owasp" \
             --output json \
             --output-file "$RESULT_FILE" \
-            --concurrency 1 \
             $VERBOSE
 
         set_findings "$target_name" "$(extract_finding_count "$RESULT_FILE")"

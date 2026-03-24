@@ -143,7 +143,6 @@ http:
 		API:         apiSpecPath,
 		Roles:       rolesPath,
 		Auth:        authPath,
-		Concurrency: 1,
 		RateLimit:   10.0,
 		Timeout:     30,
 		Output:      "terminal",

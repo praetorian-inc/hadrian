@@ -271,7 +271,6 @@ Hadrian includes templates for OWASP API Top 10 vulnerabilities:
   - Fixed backoff: Constant wait between retries
   - Honors `Retry-After` header from server
   - Max retries: 5 (configurable)
-- **Concurrency Control**: Maximum 10 concurrent requests
 - **YAML Bomb Protection**: 1MB size limit, 20-depth limit
 - **TLS 1.3 Enforcement**: No legacy TLS
 - **Credential Validation**: Warns on insecure configurations

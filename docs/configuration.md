@@ -347,7 +347,6 @@ Hadrian includes built-in safeguards to prevent accidental testing against produ
 
 | Safeguard | Default | Override Flag |
 |-----------|---------|---------------|
-| Concurrency limit | 1 (max: 10) | `--concurrency <n>` |
 | YAML bomb protection | 1MB size, 20-depth | Not configurable |
 | TLS 1.3 enforcement | Enabled | Not configurable |
 | Credential validation | Warns on insecure config | Not configurable |

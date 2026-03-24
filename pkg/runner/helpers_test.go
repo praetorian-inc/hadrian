@@ -1047,7 +1047,6 @@ detection:
 	config := Config{
 		API:                  apiSpecPath,
 		Roles:                rolesPath,
-		Concurrency:          1,
 		RateLimit:            10.0,
 		RateLimitBackoff:     "exponential",
 		RateLimitMaxWait:     60 * time.Second,
