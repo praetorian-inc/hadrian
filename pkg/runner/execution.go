@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -42,16 +43,18 @@ func executeTemplate(
 		}
 
 		if result.Matched {
+			method, endpoint := observedEndpoint(op, result.Request)
 			finding := &model.Finding{
-				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", "no-victim"),
+				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, method, strings.ReplaceAll(endpoint, "/", "-"), "anonymous", "no-victim"),
 				Category:        tmpl.Info.Category,
 				Name:            tmpl.Info.Name,
 				Severity:        model.Severity(tmpl.Info.Severity),
-				Endpoint:        op.Path,
-				Method:          op.Method,
+				Endpoint:        endpoint,
+				Method:          method,
 				AttackerRole:    "anonymous",
 				IsVulnerability: true,
 				Evidence: model.Evidence{
+					Request:  result.Request,
 					Response: result.Response,
 				},
 				RequestIDs: result.RequestIDs,
@@ -79,21 +82,23 @@ func executeTemplate(
 		}
 
 		if result.Matched {
+			method, endpoint := observedEndpoint(op, result.Request)
 			// Warn if response body is empty — may indicate proxy interception or dropped request
 			if result.Response.Body == "" {
 				log.Warn("matched with empty response body for %s on %s %s — response may be from proxy, not target API",
-					tmpl.ID, op.Method, op.Path)
+					tmpl.ID, method, endpoint)
 			}
 			finding := &model.Finding{
-				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", "no-victim"),
+				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, method, strings.ReplaceAll(endpoint, "/", "-"), "anonymous", "no-victim"),
 				Category:        tmpl.Info.Category,
 				Name:            tmpl.Info.Name,
 				Severity:        model.Severity(tmpl.Info.Severity),
-				Endpoint:        op.Path,
-				Method:          op.Method,
+				Endpoint:        endpoint,
+				Method:          method,
 				AttackerRole:    "anonymous",
 				IsVulnerability: true,
 				Evidence: model.Evidence{
+					Request:  result.Request,
 					Response: result.Response,
 				},
 				RequestIDs: result.RequestIDs,
@@ -166,20 +171,22 @@ func executeTemplate(
 
 			// Check if vulnerability detected
 			if result.Matched {
+				method, endpoint := observedEndpoint(op, result.Request)
 				victimName := "no-victim"
 				if victimRole != nil {
 					victimName = victimRole.Name
 				}
 				finding := &model.Finding{
-					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), attackerRole.Name, victimName),
+					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, method, strings.ReplaceAll(endpoint, "/", "-"), attackerRole.Name, victimName),
 					Category:        tmpl.Info.Category,
 					Name:            tmpl.Info.Name,
 					Severity:        model.Severity(tmpl.Info.Severity),
-					Endpoint:        op.Path,
-					Method:          op.Method,
+					Endpoint:        endpoint,
+					Method:          method,
 					AttackerRole:    attackerRole.Name,
 					IsVulnerability: true,
 					Evidence: model.Evidence{
+						Request:  result.Request,
 						Response: result.Response,
 					},
 					RequestIDs: result.RequestIDs,
@@ -317,6 +324,23 @@ func executeMutationTemplate(
 	}
 
 	return findings, nil
+}
+
+func observedEndpoint(op *model.Operation, req model.HTTPRequest) (method, endpoint string) {
+	method = op.Method
+	endpoint = op.Path
+
+	if req.Method != "" {
+		method = req.Method
+	}
+
+	if req.URL != "" {
+		if parsed, err := url.Parse(req.URL); err == nil && parsed.Path != "" {
+			endpoint = parsed.Path
+		}
+	}
+
+	return method, endpoint
 }
 
 // buildVariables creates the template substitution variables map from an operation and base URL.

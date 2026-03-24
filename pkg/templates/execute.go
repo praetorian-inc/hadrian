@@ -115,6 +115,7 @@ func (e *Executor) Execute(
 		var lastBody string
 		var lastBodyHash string
 		var lastBodyBytes []byte
+		var lastRequest model.HTTPRequest
 
 		// Get backoff settings from new Backoff struct
 		backoffSecs := 5 // Default 5 second backoff
@@ -178,6 +179,12 @@ func (e *Executor) Execute(
 				e.mu.Lock()
 				e.requestIDs = append(e.requestIDs, requestID)
 				e.mu.Unlock()
+
+				lastRequest = model.HTTPRequest{
+					Method:  req.Method,
+					URL:     req.URL.String(),
+					Headers: flattenHeaders(req.Header),
+				}
 
 				// Execute HTTP request
 				resp, err = e.httpClient.Do(req)
@@ -317,6 +324,7 @@ func (e *Executor) Execute(
 			// Vulnerable if we didn't hit rate limiting after N requests
 			if rateLimitCount < rateLimitThreshold {
 				result.Matched = true
+				result.Request = lastRequest
 				result.Response = model.HTTPResponse{
 					StatusCode: lastResp.StatusCode,
 					Headers:    flattenHeaders(lastResp.Header),
@@ -337,6 +345,7 @@ func (e *Executor) Execute(
 
 			if matched {
 				result.Matched = true
+				result.Request = lastRequest
 				result.Response = model.HTTPResponse{
 					StatusCode: lastResp.StatusCode,
 					Headers:    flattenHeaders(lastResp.Header),
@@ -776,6 +785,7 @@ type ExecutionResult struct {
 	TemplateID    string
 	Operation     *model.Operation
 	Matched       bool
+	Request       model.HTTPRequest
 	Response      model.HTTPResponse
 	Findings      []model.Finding
 	RateLimitInfo *RateLimitInfo
