@@ -10,10 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
-	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -107,87 +105,42 @@ func newTestRestCmd() *cobra.Command {
 func runTest(ctx context.Context, config Config) error {
 	startTime := time.Now()
 
-	// Enable verbose logging if requested
 	log.SetVerbose(config.Verbose)
 
-	// 1. Validate configuration
 	if err := config.Validate(); err != nil {
 		return fmt.Errorf("configuration error: %w", err)
 	}
 
-	// Parse custom headers
-	customHeaders, err := ParseCustomHeaders(config.Headers)
-	if err != nil {
-		return fmt.Errorf("invalid custom header: %w", err)
-	}
-
-	// 2. Parse API specification
 	spec, err := parseAPISpec(config.API)
 	if err != nil {
 		return fmt.Errorf("failed to parse API spec: %w", err)
 	}
 
-	// 3. Load role configuration
 	rolesCfg, err := roles.Load(config.Roles)
 	if err != nil {
 		return fmt.Errorf("failed to load roles: %w", err)
 	}
 
-	// 4. Load auth configuration (optional)
-	var authCfg *auth.AuthConfig
-	if config.Auth != "" {
-		authCfg, err = auth.Load(config.Auth)
-		if err != nil {
-			return fmt.Errorf("failed to load auth config: %w", err)
-		}
-	}
-
-	// 5. Create HTTP client with proxy support
-	httpClient, err := createHTTPClient(config)
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP client: %w", err)
-	}
-
-	// 5a. Wrap HTTP client with rate limiting
-	rateLimitConfig := &RateLimitConfig{
-		Rate:           config.RateLimit,
-		Enabled:        true,
-		BackoffType:    config.RateLimitBackoff,
-		BackoffInitial: 1 * time.Second,
-		BackoffMax:     config.RateLimitMaxWait,
-		MaxRetries:     config.RateLimitMaxRetries,
-		StatusCodes:    config.RateLimitStatusCodes,
-		BodyPatterns:   []string{},
-	}
-	rateLimiter := NewRateLimiter(config.RateLimit, config.RateLimit)
-	rateLimitingClient := NewRateLimitingClient(httpClient, rateLimiter, rateLimitConfig)
-
-	// 6. Create reporter based on output format
 	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
 	defer func() { _ = rep.Close() }()
 
-	// 6a. Set LLM mode on terminal reporter if LLM is enabled
 	llmEnabled := hasLLMConfig() || config.LLMHost != ""
 	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
 		terminalReporter.SetLLMMode(true)
 		log.Debug("LLM mode enabled on terminal reporter")
 	}
 
-	// 7. Load templates
 	templateDir := config.TemplateDir
 	if templateDir == "" {
 		templateDir = getTemplateDir()
 	}
-
 	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
 	if err != nil {
 		return fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
 	}
-
-	// Apply template filters if specified
 	if len(config.Templates) > 0 {
 		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
 		if len(tmplFiles) == 0 {
@@ -221,46 +174,21 @@ func runTest(ctx context.Context, config Config) error {
 		return nil
 	}
 
-	// 9. Create template executor with rate-limiting client
-	executor := templates.NewExecutor(rateLimitingClient, customHeaders)
+	allFindings, err := RunTest(ctx, config)
+	if err != nil {
+		return err
+	}
 
-	// 10. Create mutation executor for mutation templates with rate-limiting client
-	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)
-
-	// 11. Run tests for each operation
-	var allFindings []*model.Finding
-	for _, op := range spec.Operations {
-		for _, tmpl := range tmplFiles {
-			// Check if template applies to this operation
-			if !templateApplies(tmpl, op) {
-				continue
-			}
-
-			// Execute template for each role combination
-			findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
-			if err != nil {
-				log.Warn("Template %s failed on %s %s: %v", tmpl.ID, op.Method, op.Path, err)
-				continue
-			}
-
-			// Real-time reporting (skip if LLM triage will run - show in final report instead)
-			llmEnabled := hasLLMConfig() || config.LLMHost != ""
-			if !llmEnabled {
-				for _, f := range findings {
-					rep.ReportFinding(f)
-				}
-			}
-
-			allFindings = append(allFindings, findings...)
+	if !llmEnabled {
+		for _, f := range allFindings {
+			rep.ReportFinding(f)
 		}
 	}
 
-	// 12. Optional LLM triage
-	if hasLLMConfig() || config.LLMHost != "" {
+	if llmEnabled {
 		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
 	}
 
-	// 13. Generate final report
 	log.Debug("Generating final report with %d findings", len(allFindings))
 	stats := calculateStats(allFindings, startTime)
 	stats.OperationCount = len(spec.Operations)
