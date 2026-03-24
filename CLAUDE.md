@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Hadrian is an API security testing framework for REST APIs that tests for OWASP API vulnerabilities using role-based authorization testing and YAML-driven templates.
+Hadrian is an API security testing framework for REST, GraphQL, and gRPC APIs that tests for OWASP API vulnerabilities using role-based authorization testing and YAML-driven templates.
+
+## Claude Code Skill
+
+This repo includes a Claude Code skill at `skills/hadrian-openapi-authz/` that generates `auth.yaml` and `roles.yaml` from API specifications (OpenAPI, GraphQL SDL, gRPC proto). When loaded as a plugin (`claude --plugin-dir .`), you can ask "Generate Hadrian config from my API spec" and it will produce valid configuration files.
 
 ## Build and Test Commands
 

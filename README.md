@@ -93,6 +93,22 @@ hadrian test rest --api api.yaml --roles roles.yaml --proxy http://localhost:808
 | [Configuration](docs/configuration.md) | Auth, roles, rate limiting, proxy, LLM triage, output formats |
 | [Architecture](docs/architecture.md) | Internal architecture, data flow, and component overview |
 
+### Claude Code Integration
+
+Hadrian includes a [Claude Code](https://claude.ai/code) skill that automatically generates `auth.yaml` and `roles.yaml` from your API specification. Instead of writing these files by hand, point the skill at your spec and it will analyze security schemes, infer roles, and produce valid Hadrian configuration.
+
+```bash
+# Launch Claude Code with Hadrian as a plugin
+claude --plugin-dir /path/to/hadrian
+
+# Then ask it to generate your config:
+# "Generate Hadrian auth.yaml and roles.yaml from my openapi.yaml"
+# "Create Hadrian authorization templates from schema.graphql"
+# "Build Hadrian config from service.proto"
+```
+
+**Supported inputs:** OpenAPI/Swagger specs, GraphQL SDL schemas, gRPC proto files. See the [skill documentation](skills/hadrian-openapi-authz/SKILL.md) for the full 6-phase workflow.
+
 ## Tutorials
 
 - **REST**: [crAPI Tutorial](test/crapi/README.md) - Test OWASP crAPI (intentionally vulnerable REST API)
