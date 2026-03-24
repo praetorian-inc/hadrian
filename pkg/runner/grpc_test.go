@@ -697,50 +697,9 @@ func TestGRPCConfigValidate(t *testing.T) {
 			wantError: true,
 			errorMsg:  "TLS CA certificate file not found",
 		},
-		{
-			name: "negative timeout",
-			config: GRPCConfig{
-				Target:    "localhost:50051",
-				Proto:     "test.proto",
-				Timeout:   -5,
-				RateLimit: 5.0,
-			},
-			wantError: true,
-			errorMsg:  "--timeout must be positive",
-		},
-		{
-			name: "zero timeout",
-			config: GRPCConfig{
-				Target:    "localhost:50051",
-				Proto:     "test.proto",
-				Timeout:   0,
-				RateLimit: 5.0,
-			},
-			wantError: true,
-			errorMsg:  "--timeout must be positive",
-		},
-		{
-			name: "negative rate limit",
-			config: GRPCConfig{
-				Target:    "localhost:50051",
-				Proto:     "test.proto",
-				Timeout:   30,
-				RateLimit: -1.0,
-			},
-			wantError: true,
-			errorMsg:  "--rate-limit must be positive",
-		},
-		{
-			name: "zero rate limit",
-			config: GRPCConfig{
-				Target:    "localhost:50051",
-				Proto:     "test.proto",
-				Timeout:   30,
-				RateLimit: 0,
-			},
-			wantError: true,
-			errorMsg:  "rate-limit must be positive",
-		},
+		// Note: zero/negative timeout and rate limit are now handled by setDefaults()
+		// which fills in sensible defaults (matching REST Config.setDefaults() pattern).
+		// This allows library callers to omit these fields.
 	}
 
 	for _, tt := range tests {
@@ -755,6 +714,35 @@ func TestGRPCConfigValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGRPCConfigSetDefaults verifies that setDefaults fills zero-valued fields
+// with sensible defaults and does not overwrite explicitly set values.
+func TestGRPCConfigSetDefaults(t *testing.T) {
+	t.Run("zero-valued config gets sensible defaults", func(t *testing.T) {
+		c := GRPCConfig{}
+		c.setDefaults()
+
+		assert.Equal(t, "json", c.Output)
+		assert.Equal(t, 5.0, c.RateLimit)
+		assert.Equal(t, 30, c.Timeout)
+		assert.Equal(t, "./templates/grpc", c.TemplateDir)
+	})
+
+	t.Run("explicitly set values are not overwritten by setDefaults", func(t *testing.T) {
+		c := GRPCConfig{
+			Output:      "terminal",
+			RateLimit:   10.0,
+			Timeout:     60,
+			TemplateDir: "/custom/templates",
+		}
+		c.setDefaults()
+
+		assert.Equal(t, "terminal", c.Output)
+		assert.Equal(t, 10.0, c.RateLimit)
+		assert.Equal(t, 60, c.Timeout)
+		assert.Equal(t, "/custom/templates", c.TemplateDir)
+	})
 }
 
 // TestCountServices tests service counting from operations
