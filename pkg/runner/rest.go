@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ type Config struct {
 	Proxy                string
 	CACert               string
 	Insecure             bool
-	RateLimit float64
+	RateLimit            float64
 	RateLimitBackoff     string        // Backoff type: exponential or fixed
 	RateLimitMaxWait     time.Duration // Maximum backoff wait time
 	RateLimitMaxRetries  int           // Maximum retry attempts on rate limit
@@ -293,10 +294,17 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 		return false
 	}
 
-	// Check path pattern (use pre-compiled regex from CompiledTemplate)
-	if tmpl.CompiledPathPattern != nil {
-		if !tmpl.CompiledPathPattern.MatchString(op.Path) {
-			return false
+	// Check path pattern (use pre-compiled regex from CompiledTemplate, fallback to re-compile)
+	if sel.PathPattern != "" {
+		if tmpl.CompiledPathPattern != nil {
+			if !tmpl.CompiledPathPattern.MatchString(op.Path) {
+				return false
+			}
+		} else {
+			matched, err := regexp.MatchString(sel.PathPattern, op.Path)
+			if err != nil || !matched {
+				return false
+			}
 		}
 	}
 
