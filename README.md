@@ -1,3 +1,5 @@
+<img width="1200" height="628" alt="Hadrian - Open source API security testing framework for REST, GraphQL, and gRPC. Test for OWASP API Top 10 authorization vulnerabilities using YAML-driven templates." src="https://github.com/user-attachments/assets/5703e1d4-7a1d-4c8f-a8e0-9ab45e9ed248" />
+
 # Hadrian
 
 [![CI](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml/badge.svg)](https://github.com/praetorian-inc/hadrian/actions/workflows/ci.yml)
