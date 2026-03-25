@@ -251,9 +251,6 @@ run_hadrian() {
 
     log_info "Running Hadrian with ${auth_method} authentication..."
 
-    # Use --concurrency 1 to ensure tests run in alphabetical order.
-    # This prevents DELETE tests from running before GET tests, which would
-    # delete resources before BOLA read tests can detect vulnerabilities.
     # Build proxy flags if set (--insecure needed for Burp Suite TLS interception)
     local proxy_flags=""
     if [[ -n "$PROXY" ]]; then
@@ -266,7 +263,6 @@ run_hadrian() {
             --api "${SCRIPT_DIR}/openapi.yaml" \
             --roles "${SCRIPT_DIR}/roles.yaml" \
             --auth "${SCRIPT_DIR}/${auth_config}" \
-            --concurrency 1 \
             ${proxy_flags} \
             ${VERBOSE}
     else
@@ -275,7 +271,6 @@ run_hadrian() {
             --api "${SCRIPT_DIR}/openapi.yaml" \
             --roles "${SCRIPT_DIR}/roles.yaml" \
             --auth "${SCRIPT_DIR}/${auth_config}" \
-            --concurrency 1 \
             --output json \
             --output-file "${output_file}" \
             ${proxy_flags} \

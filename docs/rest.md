@@ -34,7 +34,6 @@ Optional Flags:
       --category <list>         Test categories: owasp, custom (default: owasp)
       --owasp <list>            OWASP API categories to test (e.g., API1,API2,API5,API9)
       --header, -H <header>     Custom HTTP header (repeatable, format: "Key: Value")
-      --concurrency <n>         Concurrent requests (default: 1, max: 10)
       --timeout <n>             Request timeout in seconds (default: 30)
       --verbose, -v             Enable verbose logging output
       --dry-run                 Show what would be tested without making requests
