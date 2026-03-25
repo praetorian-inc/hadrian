@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
@@ -65,11 +66,14 @@ type RoleAuth struct {
 // Load parses auth.yaml file (credential security)
 func Load(filePath string) (*AuthConfig, error) {
 	// Check file permissions (credential security)
-	if info, err := os.Stat(filePath); err == nil {
-		mode := info.Mode().Perm()
-		if mode&0077 != 0 {
-			log.Warn("SECURITY: %s has insecure permissions %o (should be 0600)", filePath, mode)
-			log.Warn("Run: chmod 0600 %s", filePath)
+	// Skip on Windows where Unix permission bits are not meaningful
+	if runtime.GOOS != "windows" {
+		if info, err := os.Stat(filePath); err == nil {
+			mode := info.Mode().Perm()
+			if mode&0077 != 0 {
+				log.Warn("SECURITY: %s has insecure permissions %o (should be 0600)", filePath, mode)
+				log.Warn("Run: chmod 0600 %s", filePath)
+			}
 		}
 	}
 
