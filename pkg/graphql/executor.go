@@ -186,4 +186,3 @@ func (r *ExecuteResult) HasErrors() bool {
 func (r *ExecuteResult) IsSuccess() bool {
 	return r.StatusCode >= 200 && r.StatusCode < 300 && !r.HasErrors()
 }
-
