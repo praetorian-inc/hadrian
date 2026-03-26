@@ -47,4 +47,3 @@ func (t *TrackedHTTPClient) ClearRequestIDs() {
 	defer t.mu.Unlock()
 	t.requestIDs = make([]string, 0)
 }
-
