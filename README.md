@@ -103,7 +103,7 @@ hadrian test rest --api api.yaml --roles roles.yaml --category all --output json
 hadrian test rest --api api.yaml --roles roles.yaml --category all \
   --llm-host http://localhost:11434 --llm-model llama3.2:latest
 
-# Route through Burp Suite for manual inspection
+# Route through a proxy for manual inspection
 hadrian test rest --api api.yaml --roles roles.yaml --category all --proxy http://localhost:8080 --insecure
 ```
 
