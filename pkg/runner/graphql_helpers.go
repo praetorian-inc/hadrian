@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"time"
 
 	internalhttp "github.com/praetorian-inc/hadrian/internal/http"
@@ -225,8 +226,19 @@ func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient t
 	}
 
 	templateCount := 0
-	// Execute GraphQL templates if provided
-	if config.TemplateDir != "" {
+	// Execute GraphQL templates if template directory exists
+	templateDir := config.TemplateDir
+	if templateDir == "" {
+		templateDir = getTemplateDir("./templates/graphql")
+	}
+	if _, err := os.Stat(templateDir); err != nil {
+		if os.IsNotExist(err) {
+			graphqlVerboseLog(config.Verbose, "\n=== Skipping GraphQL Templates (directory not found: %s) ===", templateDir)
+		} else {
+			graphqlVerboseLog(config.Verbose, "\n=== Skipping GraphQL Templates (error accessing %s: %v) ===", templateDir, err)
+		}
+	} else {
+		config.TemplateDir = templateDir
 		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs, reporter, customHeaders)
 		findings = append(findings, templateFindings...)
 		templateCount = count
