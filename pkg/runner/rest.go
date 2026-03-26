@@ -133,7 +133,7 @@ func runTest(ctx context.Context, config Config) error {
 
 	templateDir := config.TemplateDir
 	if templateDir == "" {
-		templateDir = getTemplateDir()
+		templateDir = getTemplateDir("./templates/rest")
 	}
 	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
 	if err != nil {
@@ -200,15 +200,15 @@ func runTest(ctx context.Context, config Config) error {
 // HELPER FUNCTIONS
 // =============================================================================
 
-// getTemplateDir returns the template directory path
-func getTemplateDir() string {
+// getTemplateDir returns the template directory path, using defaultPath if no
+// environment variable override is set.
+func getTemplateDir(defaultPath string) string {
 	// Check for environment variable override
 	if dir := os.Getenv("HADRIAN_TEMPLATES"); dir != "" {
 		return dir
 	}
 
-	// Default to ./templates/rest/ relative to current directory
-	return "./templates/rest"
+	return defaultPath
 }
 
 // loadTemplateFiles loads and compiles templates from directory
