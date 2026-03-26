@@ -1,0 +1,37 @@
+id: grpc-bola-get-user
+info:
+  name: "gRPC BOLA - Unauthorized User Read"
+  category: "API1:2023 Broken Object Level Authorization"
+  severity: "HIGH"
+  author: "hadrian-test"
+  tags: ["grpc", "bola", "api1", "authorization", "user-service"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  service: "vulnerable.v1.UserService"
+  method: "GetUser"
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+grpc:
+  - method: "GetUser"
+    service: "vulnerable.v1.UserService"
+    message: '{"user_id": "2"}'
+    metadata:
+      authorization: "Bearer user1-token-67890"
+
+detection:
+  success_indicators:
+    - type: "grpc_status"
+      code: 0
+    - type: "body_field"
+      body_field: "username"
+      exists: true
+  failure_indicators:
+    - type: "grpc_status"
+      code: [7, 16]
+  vulnerability_pattern: "grpc_attacker_accessed_victim_data"

@@ -1,0 +1,40 @@
+# Template: BOLA Document Read Test
+# Tests GET /api/documents/{id} for unauthorized private document access
+# Detects if users can access private documents belonging to other users
+id: 10-api1-bola-document-read
+
+info:
+  name: "BOLA - Document Resource Access (Read)"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "document", "private"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select /api/documents/{id} endpoints specifically
+endpoint_selector:
+  path_pattern: "/api/documents/.*"
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+
+# Vertical escalation: lower user accessing higher user's documents
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to access victim's document (potentially private) using attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200, 201]
+
+# Detection: If we get 200, attacker accessed victim's document
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_accessed_victim_document"

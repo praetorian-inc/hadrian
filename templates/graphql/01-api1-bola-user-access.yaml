@@ -1,0 +1,52 @@
+id: graphql-bola-user-access
+info:
+  name: "GraphQL BOLA - Cross-User Data Access"
+  category: "API1:2023 Broken Object Level Authorization"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["graphql", "bola", "authorization"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+graphql:
+  - query: |
+      query GetVictimData {
+        user(id: "{{victim_id}}") {
+          id
+          email
+          name
+          profile {
+            address
+            phone
+            ssn
+          }
+        }
+      }
+    variables:
+      victim_id: "{{victim_user_id}}"
+    auth: "attacker"
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.user"
+      exists: true
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "graphql_attacker_accessed_victim_data"

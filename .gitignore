@@ -1,0 +1,49 @@
+# Binary
+/hadrian
+
+# Environment files with secrets
+.env
+*.env
+
+# Claude Code
+.claude/
+
+# Git worktrees
+.worktrees/
+
+# Hadrian runtime artifacts
+.hadrian/
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+__debug_bin*
+*.test
+*.prof
+*.pprof
+
+# Go coverage
+coverage.out
+coverage.html
+*.coverprofile
+
+# Test output artifacts
+test_output.txt
+hadrian-*.log
+results-*.json
+test/.results/
+test/crapi/crapi-results.json
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

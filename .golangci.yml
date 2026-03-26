@@ -1,0 +1,33 @@
+version: "2"
+linters:
+  enable:
+    - gocritic
+    - misspell
+    - revive
+  settings:
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+  exclusions:
+    generated: lax
+    rules:
+      - linters: [staticcheck]
+        text: "QF"
+      - linters: [staticcheck]
+        text: "S1031"
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

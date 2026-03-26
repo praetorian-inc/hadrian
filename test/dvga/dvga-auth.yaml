@@ -1,0 +1,26 @@
+# DVGA Authentication Configuration
+# DVGA uses session-based auth with username/password
+
+method: bearer
+location: header
+key_name: Authorization
+
+# Token acquisition:
+# 1. Login via mutation: mutation { login(username: "...", password: "...") { accessToken } }
+# 2. Use the returned accessToken as Bearer token
+
+roles:
+  admin:
+    # DVGA default admin: admin / password (or create via UI)
+    token: "${DVGA_ADMIN_TOKEN}"
+
+  operator:
+    # Create via UI or mutation
+    token: "${DVGA_OPERATOR_TOKEN}"
+
+  user:
+    # Create via signup mutation
+    token: "${DVGA_USER_TOKEN}"
+
+  anonymous:
+    token: ""

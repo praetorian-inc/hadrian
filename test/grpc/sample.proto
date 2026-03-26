@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package example;
+
+// Example service for testing
+service GreeterService {
+  // Simple greeting RPC
+  rpc SayHello (HelloRequest) returns (HelloResponse);
+
+  // Authentication required RPC
+  rpc GetProfile (ProfileRequest) returns (ProfileResponse);
+}
+
+message HelloRequest {
+  string name = 1;
+}
+
+message HelloResponse {
+  string message = 1;
+}
+
+message ProfileRequest {
+  string user_id = 1;
+}
+
+message ProfileResponse {
+  string user_id = 1;
+  string name = 2;
+  string email = 3;
+}

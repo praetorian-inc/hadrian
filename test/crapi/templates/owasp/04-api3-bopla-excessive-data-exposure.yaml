@@ -1,0 +1,48 @@
+# Template: BOPLA (Broken Object Property Level Authorization) - Excessive Data Exposure
+# Tests for sensitive properties exposed in API responses that should be filtered
+# Unlike BOLA (API1) which tests cross-user access, BOPLA (API3) tests excessive
+# data exposure within authorized responses - returning more fields than necessary
+id: api3_bopla_excessive_exposure
+
+info:
+  name: "BOPLA - Excessive Data Exposure in Dashboard"
+  category: "API3:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["bopla", "owasp-api-top10", "api3", "excessive-data-exposure", "sensitive-data"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Target dashboard endpoints that return user data
+# This test checks own-user data (not cross-user like BOLA)
+endpoint_selector:
+  has_path_parameter: false
+  requires_auth: true
+  methods: ["GET"]
+  path_pattern: ".*/user/dashboard.*"
+  returns_object: true
+
+# Use same permission level for both roles since we're testing
+# excessive data in the user's OWN dashboard response
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Make authenticated request to user's own dashboard
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200]
+
+# Detection: Check if sensitive fields are present in response
+# If these fields exist, the API is exposing excessive data
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "role"
+      exists: true
+  vulnerability_pattern: "excessive_data_exposure_sensitive_fields"

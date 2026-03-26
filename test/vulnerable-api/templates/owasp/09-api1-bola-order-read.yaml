@@ -1,0 +1,40 @@
+# Template: BOLA Order Read Test
+# Tests GET /api/orders/{id} for unauthorized cross-user order access
+# Detects if users can access orders belonging to other users
+id: 09-api1-bola-order-read
+
+info:
+  name: "BOLA - Order Resource Access (Read)"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "order"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select /api/orders/{id} endpoints specifically
+endpoint_selector:
+  path_pattern: "/api/orders/.*"
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+
+# Vertical escalation: lower user accessing higher user's orders
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to access victim's order data using attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200, 201]
+
+# Detection: If we get 200, attacker accessed victim's order
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_accessed_victim_order"

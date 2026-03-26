@@ -1,0 +1,24 @@
+# DVGA Authentication Configuration
+# Generated: 2026-02-03T04:59:48+00:00
+# Target: http://172.17.0.1:5013/graphql
+
+method: bearer
+location: header
+key_name: Authorization
+
+roles:
+  admin:
+    # High-privilege admin user
+    token: "${DVGA_ADMIN_TOKEN}"
+    
+  operator:
+    # Mid-privilege operator user
+    token: "${DVGA_OPERATOR_TOKEN}"
+    
+  attacker:
+    # Attacker role for BOLA/BFLA tests (uses operator)
+    token: "${DVGA_ATTACKER_TOKEN}"
+
+  victim:
+    # Victim role for BOLA/BFLA tests (uses admin data)
+    token: "${DVGA_VICTIM_TOKEN}"

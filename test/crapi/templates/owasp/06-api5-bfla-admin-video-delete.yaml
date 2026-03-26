@@ -1,0 +1,67 @@
+id: api5_bfla
+
+info:
+  name: "BFLA - Admin Video Deletion by Regular User"
+  category: "API5:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["bfla", "owasp-api-top10", "api5", "admin", "function-level-authz", "privilege-escalation"]
+  requires_llm_triage: true
+  test_pattern: "mutation"
+
+# Role configuration: Lower-privileged user attempts admin operations
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Target admin endpoints with path parameters (video_id)
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["DELETE"]
+  path_pattern: ".*/admin/.*"
+
+# Three-phase mutation test: setup -> attack -> verify
+test_phases:
+  # Phase 1: Setup - Get victim's video_id from their dashboard
+  setup:
+    path: "/identity/api/v2/user/dashboard"
+    operation: "read"
+    auth: "victim"
+    store_response_field: "video_id"
+    expected_status: 200
+
+  # Phase 2: Attack - Lower-privileged user attempts to delete video via admin endpoint
+  attack:
+    path: "/identity/api/v2/admin/videos/{video_id}"
+    operation: "delete"
+    auth: "attacker"
+    use_stored_field: "video_id"
+    expected_status: 200
+
+  # Phase 3: Verify - Confirm video was actually deleted
+  verify:
+    path: "/identity/api/v2/user/videos/{video_id}"
+    operation: "read"
+    auth: "victim"
+    use_stored_field: "video_id"
+    expected_status: 404
+
+# Vulnerability detection logic
+detection:
+  # Vulnerability is confirmed when:
+  # 1. Attack phase returns 200 (admin operation succeeded for regular user)
+  # 2. Verify phase returns 404 (video was actually deleted)
+  success_indicators:
+    - type: "status_code"
+      status_code: 200
+    - type: "status_code"
+      status_code: 404
+
+  vulnerability_pattern: "regular_user_performed_admin_delete_operation"
+
+  conditions:
+    - attack_phase_status:
+        - 200
+    - verify_phase_status:
+        - 404

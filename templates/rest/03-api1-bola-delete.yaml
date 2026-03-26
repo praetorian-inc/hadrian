@@ -1,0 +1,61 @@
+# Template: BOLA (Broken Object Level Authorization) Delete Test
+# Tests DELETE endpoints for unauthorized cross-user resource deletion
+# This test attempts to delete resources belonging to a victim user
+# using an attacker's credentials
+
+id: 03-api1-bola-delete
+
+info:
+  name: "BOLA - Cross-User Resource Deletion (Delete)"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  description: |
+    Tests for Broken Object Level Authorization (BOLA) vulnerabilities on DELETE endpoints.
+    Attempts to delete resources belonging to a victim user using an attacker's credentials.
+    A successful test indicates the API does not properly validate object-level permissions
+    for delete operations, which could lead to unauthorized data deletion and data loss.
+  tags: ["bola", "owasp-api-top10", "api1", "authorization", "delete"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select endpoints vulnerable to delete-based BOLA:
+# - Have path parameters (e.g., /users/{id}, /posts/{postId})
+# - Require authentication
+# - Use DELETE method (deletion operations)
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["DELETE"]
+
+# Role configuration:
+# - Attacker: lower permission level user attempting unauthorized deletion
+# - Victim: higher permission level user whose resource is targeted
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Simple test: Make a DELETE request with attacker's token
+# to an endpoint that should only be deletable by the victim
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200, 204]
+
+# Detection logic:
+# If we get a success status (200/204), the attacker successfully
+# deleted the victim's resource, indicating a BOLA vulnerability
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  failure_indicators:
+    - type: status_code
+      status_code: 403
+    - type: status_code
+      status_code: 401
+    - type: status_code
+      status_code: 404
+  vulnerability_pattern: "attacker_deleted_victim_resource"

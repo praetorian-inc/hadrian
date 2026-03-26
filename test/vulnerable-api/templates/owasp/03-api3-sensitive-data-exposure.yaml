@@ -1,0 +1,50 @@
+# Template: Sensitive Data Exposure via BOLA
+# Tests for exposure of sensitive data (like SSN) via profile endpoints
+# Combines BOLA with sensitive data exposure (API3:2023)
+id: 03-api3-sensitive-data-exposure
+
+info:
+  name: "Sensitive Data Exposure - SSN via Profile BOLA"
+  category: "API3:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api3", "pii", "ssn"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Target profile endpoints that might contain sensitive data
+# Look for endpoints with path parameters that return user profiles
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+  path_pattern: ".*/profiles/.*"
+  returns_object: true
+
+# Attacker tries to access victim's profile containing sensitive data
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to read victim's profile with attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200]
+      - type: regex
+        regex:
+          - '\d{3}-\d{2}-\d{4}'
+        part: body
+
+# Detection: Check if response contains SSN field and matches SSN format
+# This indicates both BOLA and sensitive data exposure
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "ssn"
+      exists: true
+  vulnerability_pattern: "attacker_accessed_victim_ssn"

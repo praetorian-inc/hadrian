@@ -1,0 +1,43 @@
+# Template: BOLA Document Write Test
+# Tests PUT /api/documents/{id} for unauthorized document modification
+# Detects if users can modify private documents belonging to other users
+id: 13-api1-bola-document-write
+
+info:
+  name: "BOLA - Document Resource Modification (Write)"
+  category: "API1:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "document", "write", "private"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select PUT /api/documents/{id} endpoints specifically
+endpoint_selector:
+  path_pattern: "/api/documents/.*"
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["PUT"]
+
+# Vertical escalation: lower user modifying higher user's documents
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to modify victim's document using attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    body: '{"title": "Attacker Modified Document", "content": "Tampered content", "is_private": false}'
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+
+# Detection: If PUT succeeds (200/201/204), attacker can modify victim's private documents
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_modified_victim_document"

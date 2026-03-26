@@ -1,0 +1,6 @@
+method: bearer
+roles:
+  admin:
+    token: "${ADMIN_TOKEN}"
+  user:
+    token: "${USER_TOKEN}"

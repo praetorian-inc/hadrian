@@ -1,0 +1,63 @@
+id: graphql-excessive-data-exposure
+info:
+  name: "GraphQL Excessive Data Exposure"
+  category: "API3:2023 Broken Object Property Level Authorization"
+  severity: "HIGH"
+  author: "hadrian"
+  description: "Tests for excessive data exposure where GraphQL APIs allow querying sensitive fields without proper authorization checks. Attackers can over-fetch data by requesting fields they should not have access to, such as internal IDs, emails, or sensitive user data."
+  tags: ["graphql", "authorization", "data-exposure", "over-fetching", "sensitive-data"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: false
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+graphql:
+  - query: |
+      query ExcessiveDataExposure {
+        users {
+          id
+          username
+          email
+          password
+          passwordHash
+          salt
+          apiKey
+          apiToken
+          secretKey
+          privateKey
+          ssn
+          creditCard
+          phoneNumber
+          address
+          salary
+          internalId
+          createdBy
+          modifiedBy
+          deletedAt
+          isAdmin
+          role
+          permissions
+        }
+      }
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["data"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.users"
+      exists: true
+    - type: sensitive_fields_exposed
+      fields: ["password", "passwordHash", "apiKey", "apiToken", "secretKey", "ssn", "creditCard"]
+  vulnerability_pattern: "graphql_excessive_data_exposure"

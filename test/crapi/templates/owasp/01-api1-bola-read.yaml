@@ -1,0 +1,29 @@
+id: api1-bola-read
+info:
+  name: "BOLA - Cross-User Resource Access"
+  category: "API1:2023"
+  severity: "HIGH"
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200, 201]
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "attacker_accessed_victim_resource"

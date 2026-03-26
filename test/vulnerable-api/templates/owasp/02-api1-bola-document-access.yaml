@@ -1,0 +1,46 @@
+# Template: BOLA Private Document Access Test
+# Tests access to private documents belonging to other users
+# Checks if attacker can access documents marked as private
+id: 02-api1-bola-document-access
+
+info:
+  name: "BOLA - Private Document Access"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["bola", "owasp-api-top10", "api1", "documents", "privacy"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Target document endpoints that might have private content
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+  path_pattern: ".*/documents/.*"
+  returns_object: true
+
+# Attacker tries to access victim's private documents
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Attempt to read victim's document with attacker's token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200]
+
+# Detection: Check if attacker can access private documents
+# Look for is_private field to confirm these are sensitive documents
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "is_private"
+      exists: true
+      value: true
+  vulnerability_pattern: "attacker_accessed_victim_private_document"

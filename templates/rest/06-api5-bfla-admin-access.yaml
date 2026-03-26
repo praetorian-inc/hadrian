@@ -1,0 +1,64 @@
+# Template: BFLA (Broken Function Level Authorization) Admin Access Test
+# Tests if regular users can access administrative endpoints
+# This test attempts to access admin-only functions using
+# a regular user's credentials
+
+id: 06-api5-bfla-admin-access
+
+info:
+  name: "BFLA - Unauthorized Admin Endpoint Access"
+  category: "API5:2023"
+  severity: "CRITICAL"
+  author: "hadrian"
+  description: |
+    Tests for Broken Function Level Authorization (BFLA) vulnerabilities
+    by attempting to access administrative endpoints with regular user credentials.
+    Checks for endpoints with admin-related path segments (e.g., /admin/, /manage/)
+    or operations that should require elevated privileges.
+    A successful test indicates the API does not properly enforce function-level
+    authorization, allowing privilege escalation attacks.
+  tags: ["bfla", "owasp-api-top10", "api5", "authorization", "privilege-escalation"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select endpoints that should be admin-only:
+# - Require authentication
+# - Any method (GET, POST, PUT, DELETE)
+# - Path contains admin-related segments
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+  # Note: Path matching would be done in endpoint_selector logic
+  # Looking for paths like /admin, /manage, /system, /config
+
+# Role configuration:
+# - Attacker: regular user with lower privileges
+# - Victim: admin user with higher privileges
+# Test if attacker can access admin-only functions
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Simple test: Make a request to admin endpoint with regular user token
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+
+# Detection logic:
+# If we get a success status when accessing admin endpoints
+# with regular user credentials, BFLA vulnerability exists
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  failure_indicators:
+    - type: status_code
+      status_code: 403
+    - type: status_code
+      status_code: 401
+  vulnerability_pattern: "user_accessed_admin_function"

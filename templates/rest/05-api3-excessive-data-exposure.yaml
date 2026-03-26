@@ -1,0 +1,67 @@
+# Template: Excessive Data Exposure Test
+# Tests GET endpoints for sensitive data leakage in API responses
+# This test checks if API responses contain more data than necessary,
+# potentially exposing sensitive information like passwords, tokens, or PII
+
+id: 05-api3-excessive-data-exposure
+
+info:
+  name: "Excessive Data Exposure - Sensitive Fields in Response"
+  category: "API3:2023"
+  severity: "MEDIUM"
+  author: "hadrian"
+  description: |
+    Tests for Excessive Data Exposure vulnerabilities by analyzing API responses
+    for sensitive fields that should not be exposed to clients.
+    Checks for common sensitive field names like password, token, ssn, credit_card, etc.
+    A successful test indicates the API returns more data than necessary,
+    potentially exposing PII or security-sensitive information.
+  tags: ["data-exposure", "owasp-api-top10", "api3", "pii", "sensitive-data"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select endpoints that return user or sensitive data:
+# - Typically GET endpoints (data retrieval)
+# - Require authentication (accessing user data)
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET"]
+
+# Role configuration:
+# - Attacker uses their own valid credentials
+# - Testing if response contains excessive sensitive data
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "all"
+
+# Simple test: Make a GET request with valid credentials
+# and check response for sensitive field names
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200]
+      - type: regex
+        regex:
+          # Check for common sensitive field patterns in JSON responses
+          - '"(password|passwd|pwd|secret|api_key|apikey|token|access_token|refresh_token)"'
+          - '"(ssn|social_security|credit_card|cvv|card_number)"'
+          - '"(private_key|secret_key|encryption_key)"'
+        part: body
+
+# Detection logic:
+# If response contains sensitive field names, the API may be
+# exposing excessive data that clients should not receive
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_contains
+      patterns:
+        - "password"
+        - "secret"
+        - "token"
+        - "ssn"
+        - "credit_card"
+  vulnerability_pattern: "excessive_data_exposure_detected"
