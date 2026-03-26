@@ -211,17 +211,15 @@ func getTemplateDir() string {
 	return "./templates/rest"
 }
 
-// loadTemplateFiles loads and compiles templates from directory
+// loadTemplateFiles loads and compiles templates from directory, then filters by metadata categories.
 func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTemplate, error) {
 	var result []*templates.CompiledTemplate
 
-	// Walk template directory
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Skip directories and non-YAML files
 		if info.IsDir() {
 			return nil
 		}
@@ -230,25 +228,22 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 			return nil
 		}
 
-		// Check if template matches requested categories
-		for _, cat := range categories {
-			if strings.Contains(path, cat) || cat == "all" {
-				tmpl, err := templates.Parse(path)
-				if err != nil {
-					log.Warn("Failed to parse template %s: %v", path, err)
-					return nil
-				}
+		tmpl, err := templates.Parse(path)
+		if err != nil {
+			log.Warn("Failed to parse template %s: %v", path, err)
+			return nil
+		}
 
-				compiled, err := templates.Compile(tmpl)
-				if err != nil {
-					log.Warn("Failed to compile template %s: %v", path, err)
-					return nil
-				}
+		compiled, err := templates.Compile(tmpl)
+		if err != nil {
+			log.Warn("Failed to compile template %s: %v", path, err)
+			return nil
+		}
 
-				compiled.FilePath = path
-				result = append(result, compiled)
-				break
-			}
+		compiled.FilePath = path
+
+		if matchesCategory(compiled, categories) {
+			result = append(result, compiled)
 		}
 
 		return nil
@@ -264,6 +259,32 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 	})
 
 	return result, nil
+}
+
+// matchesCategory checks if a compiled template matches any of the requested categories.
+// Matching is done against template metadata (info.category and info.tags), not file paths.
+func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool {
+	for _, cat := range categories {
+		cat = strings.ToLower(cat)
+
+		// "all" matches everything
+		if cat == "all" {
+			return true
+		}
+
+		// Match against info.category (e.g., "API1:2023" matches "api1")
+		if strings.Contains(strings.ToLower(tmpl.Info.Category), cat) {
+			return true
+		}
+
+		// Match against info.tags (e.g., "owasp-api-top10" matches "owasp")
+		for _, tag := range tmpl.Info.Tags {
+			if strings.Contains(strings.ToLower(tag), cat) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // templateApplies checks if template selector matches operation

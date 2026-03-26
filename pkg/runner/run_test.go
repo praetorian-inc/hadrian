@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewTestCmd_FlagDefaults(t *testing.T) {
@@ -154,7 +155,7 @@ detection:
 
 	// Load templates multiple times and verify order is always the same
 	for i := 0; i < 5; i++ {
-		loaded, err := loadTemplateFiles(tmpDir, []string{"rest"})
+		loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
 		assert.NoError(t, err)
 		assert.Len(t, loaded, 3)
 
@@ -163,4 +164,90 @@ detection:
 		assert.Equal(t, "02-b", loaded[1].ID)
 		assert.Equal(t, "03-c", loaded[2].ID)
 	}
+}
+
+func TestLoadTemplateFiles_CategoryFilterByMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Template with OWASP category and tags
+	owaspTemplate := `id: 01-owasp
+info:
+  name: "OWASP Test"
+  category: "API1:2023"
+  severity: "HIGH"
+  test_pattern: "simple"
+  tags: ["owasp-api-top10", "bola"]
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
+	// Template with custom category
+	customTemplate := `id: 02-custom
+info:
+  name: "Custom Test"
+  category: "custom-internal"
+  severity: "MEDIUM"
+  test_pattern: "simple"
+  tags: ["internal", "regression"]
+endpoint_selector:
+  methods: ["POST"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "01-owasp.yaml"), []byte(owaspTemplate), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tmpDir, "02-custom.yaml"), []byte(customTemplate), 0644)
+	require.NoError(t, err)
+
+	// "owasp" should match the OWASP template via tags
+	loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
+	assert.NoError(t, err)
+	assert.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// "api1" should match via category
+	loaded, err = loadTemplateFiles(tmpDir, []string{"api1"})
+	assert.NoError(t, err)
+	assert.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// "custom" should match the custom template via category
+	loaded, err = loadTemplateFiles(tmpDir, []string{"custom"})
+	assert.NoError(t, err)
+	assert.Len(t, loaded, 1)
+	assert.Equal(t, "02-custom", loaded[0].ID)
+
+	// "all" should match everything
+	loaded, err = loadTemplateFiles(tmpDir, []string{"all"})
+	assert.NoError(t, err)
+	assert.Len(t, loaded, 2)
+
+	// "regression" should match custom template via tags
+	loaded, err = loadTemplateFiles(tmpDir, []string{"regression"})
+	assert.NoError(t, err)
+	assert.Len(t, loaded, 1)
+	assert.Equal(t, "02-custom", loaded[0].ID)
+
+	// "nonexistent" should match nothing
+	loaded, err = loadTemplateFiles(tmpDir, []string{"nonexistent"})
+	assert.NoError(t, err)
+	assert.Len(t, loaded, 0)
+
+	// Multiple categories should match union
+	loaded, err = loadTemplateFiles(tmpDir, []string{"api1", "regression"})
+	assert.NoError(t, err)
+	assert.Len(t, loaded, 2)
 }
