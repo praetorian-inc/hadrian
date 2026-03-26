@@ -77,4 +77,3 @@ func validateTemplate(tmpl *Template) error {
 
 	return nil
 }
-

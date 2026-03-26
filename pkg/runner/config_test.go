@@ -44,9 +44,9 @@ func TestValidate_Success(t *testing.T) {
 
 func TestValidate_MissingAPISpec(t *testing.T) {
 	config := &Config{
-		API:         "/nonexistent/api.yaml",
-		Roles:       "/tmp/roles.yaml",
-		Output:      "terminal",
+		API:    "/nonexistent/api.yaml",
+		Roles:  "/tmp/roles.yaml",
+		Output: "terminal",
 	}
 
 	err := config.Validate()
@@ -64,9 +64,9 @@ func TestValidate_MissingRolesFile(t *testing.T) {
 	}
 
 	config := &Config{
-		API:         apiSpec,
-		Roles:       "/nonexistent/roles.yaml",
-		Output:      "terminal",
+		API:    apiSpec,
+		Roles:  "/nonexistent/roles.yaml",
+		Output: "terminal",
 	}
 
 	err := config.Validate()
