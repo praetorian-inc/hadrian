@@ -96,7 +96,7 @@ hadrian test grpc --target localhost:50051 --proto service.proto --auth auth.yam
 # Preview what would be tested (dry run)
 hadrian test rest --api api.yaml --roles roles.yaml --category all --dry-run
 
-# Export findings as JSON for CI/CD pipelines
+# Export findings as JSON
 hadrian test rest --api api.yaml --roles roles.yaml --category all --output json --output-file report.json
 
 # AI-powered triage to reduce false positives
