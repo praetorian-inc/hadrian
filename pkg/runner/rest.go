@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/praetorian-inc/hadrian/pkg/llm"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/planner"
@@ -39,19 +40,21 @@ type Config struct {
 	AuditLog             string
 	Verbose              bool
 	DryRun               bool
-	RequestIDsLimit      int               // Number of request IDs to display per finding (0 = all)
-	LLMHost              string            // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel             string            // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout           int               // LLM request timeout in seconds
-	LLMContext           string            // Additional context for LLM prompts
-	Headers              []string          // Custom HTTP headers (format: "Key: Value")
-	PlannerEnabled       bool              // Enable LLM-assisted attack planning (experimental)
-	PlannerOnly          bool              // Run ONLY the LLM-planned steps, skip brute-force
-	PlannerProvider      string            // LLM provider: openai, anthropic, ollama
-	PlannerModel         string            // LLM model for planner
-	PlannerTimeout       int               // Planner LLM timeout in seconds (default 120)
-	PlannerContext       string            // Additional context for planner prompt
-	PlannerLLMClient     planner.LLMClient // Optional: platform-injected LLM client (takes priority over provider flags)
+	RequestIDsLimit  int               // Number of request IDs to display per finding (0 = all)
+	LLMProvider      string            // LLM provider: ollama, openai, anthropic
+	LLMHost          string            // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel         string            // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout       int               // LLM request timeout in seconds
+	LLMContext       string            // Additional context for LLM prompts
+	LLMTriageClient  llm.Client        // Optional: platform-injected LLM client for triage
+	Headers          []string          // Custom HTTP headers (format: "Key: Value")
+	PlannerEnabled   bool              // Enable LLM-assisted attack planning (experimental)
+	PlannerOnly      bool              // Run ONLY the LLM-planned steps, skip brute-force
+	PlannerProvider  string            // LLM provider: openai, anthropic, ollama
+	PlannerModel     string            // LLM model for planner
+	PlannerTimeout   int               // Planner LLM timeout in seconds (default 120)
+	PlannerContext   string            // Additional context for planner prompt
+	PlannerLLMClient planner.LLMClient // Optional: platform-injected LLM client
 }
 
 // newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
@@ -95,6 +98,7 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids", 1, "Number of request IDs to display per finding (0 = all)")
 
 	// LLM configuration
+	cmd.Flags().StringVar(&config.LLMProvider, "llm-provider", "ollama", "LLM provider for triage: ollama, openai, anthropic")
 	cmd.Flags().StringVar(&config.LLMHost, "llm-host", "", "LLM provider host URL (e.g., http://localhost:11434 for Ollama)")
 	cmd.Flags().StringVar(&config.LLMModel, "llm-model", "", "LLM model name (e.g., llama3.2:latest)")
 	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 180, "LLM request timeout in seconds")
@@ -138,7 +142,7 @@ func runTest(ctx context.Context, config Config) error {
 	}
 	defer func() { _ = rep.Close() }()
 
-	llmEnabled := hasLLMConfig() || config.LLMHost != ""
+	llmEnabled := hasLLMConfig() || config.LLMHost != "" || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMTriageClient != nil
 	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
 		terminalReporter.SetLLMMode(true)
 		log.Debug("LLM mode enabled on terminal reporter")
@@ -183,7 +187,7 @@ func runTest(ctx context.Context, config Config) error {
 
 	if llmEnabled {
 		var triageErr error
-		allFindings, triageErr = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
+		allFindings, triageErr = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMProvider, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, config.LLMTriageClient, rep)
 		if triageErr != nil {
 			log.Warn("LLM triage failed, returning original findings: %v", triageErr)
 		}

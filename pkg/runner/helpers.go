@@ -92,20 +92,26 @@ func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, e
 }
 
 // triageWithLLM runs LLM triage on findings and reports each finding immediately after analysis
-func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig, llmHost, llmModel string, llmTimeout int, llmContext string, rep Reporter) ([]*model.Finding, error) {
+func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig, llmProvider, llmHost, llmModel string, llmTimeout int, llmContext string, injectedClient llm.Client, rep Reporter) ([]*model.Finding, error) {
 	log.Debug("Starting LLM triage for %d findings", len(findings))
 
 	var client llm.Client
 	var err error
 
-	// Convert timeout from seconds to time.Duration
-	timeout := time.Duration(llmTimeout) * time.Second
-
-	// Use explicit config if provided, otherwise fall back to env vars
-	if llmHost != "" || llmModel != "" {
-		client, err = llm.NewClientWithConfig(ctx, llmHost, llmModel, timeout, llmContext)
+	if injectedClient != nil {
+		client = injectedClient
 	} else {
-		client, err = llm.NewClient(ctx)
+		// Convert timeout from seconds to time.Duration
+		timeout := time.Duration(llmTimeout) * time.Second
+
+		// Use provider-based routing if specified
+		if llmProvider != "" && llmProvider != "ollama" {
+			client, err = llm.NewClientWithProvider(ctx, llmProvider, llmHost, llmModel, timeout, llmContext)
+		} else if llmHost != "" || llmModel != "" {
+			client, err = llm.NewClientWithConfig(ctx, llmHost, llmModel, timeout, llmContext)
+		} else {
+			client, err = llm.NewClient(ctx)
+		}
 	}
 
 	if err != nil {

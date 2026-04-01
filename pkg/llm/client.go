@@ -57,6 +57,20 @@ func NewClientWithConfig(ctx context.Context, host, model string, timeout time.D
 	return NewClient(ctx)
 }
 
+// NewClientWithProvider creates an LLM client for the specified provider.
+func NewClientWithProvider(ctx context.Context, provider, host, model string, timeout time.Duration, customContext string) (Client, error) {
+	switch provider {
+	case "openai":
+		return NewOpenAIClient("", model, timeout, customContext)
+	case "anthropic":
+		return NewAnthropicClient("", model, timeout, customContext)
+	case "ollama", "":
+		return NewClientWithConfig(ctx, host, model, timeout, customContext)
+	default:
+		return nil, fmt.Errorf("unknown LLM provider %q (use ollama, openai, or anthropic)", provider)
+	}
+}
+
 // IsOllamaRunningAt checks if Ollama is reachable at the given URL
 func IsOllamaRunningAt(ctx context.Context, baseURL string) bool {
 	client := &http.Client{Timeout: 2 * time.Second}

@@ -554,7 +554,7 @@ func TestTriageWithLLM_NoProvider(t *testing.T) {
 	rep := NewTerminalReporter(tmpFile, 1)
 
 	// Should return findings unchanged (no LLM available)
-	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, "", rep)
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", "", 180, "", nil, rep)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 	assert.Equal(t, "test-1", result[0].ID)
@@ -594,7 +594,7 @@ func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
 	rep := NewTerminalReporter(tmpFile, 1)
 
 	// Should not panic with reporter parameter
-	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, "", rep)
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", "", 180, "", nil, rep)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 
@@ -628,7 +628,7 @@ func TestTriageWithLLM_WithContext(t *testing.T) {
 
 	// Should return findings unchanged (no LLM available)
 	// This test verifies the signature accepts llmContext parameter
-	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, customContext, rep)
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", "", 180, customContext, nil, rep)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 	assert.Equal(t, "test-1", result[0].ID)

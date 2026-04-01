@@ -66,10 +66,11 @@ type GraphQLConfig struct {
 	SkipBuiltinChecks bool     // Skip built-in security checks (introspection, depth limit, batching)
 
 	// LLM triage (optional)
-	LLMHost    string   // LLM service host
-	LLMModel   string   // LLM model name
-	LLMTimeout int      // LLM request timeout (seconds)
-	LLMContext string   // Additional context for LLM
+	LLMProvider string // LLM provider: ollama, openai, anthropic
+	LLMHost     string // LLM service host
+	LLMModel    string // LLM model name
+	LLMTimeout  int    // LLM request timeout (seconds)
+	LLMContext  string // Additional context for LLM
 	Headers    []string // Custom HTTP headers (format: "Key: Value")
 }
 
@@ -131,6 +132,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().IntSliceVar(&config.RateLimitStatusCodes, "rate-limit-status-codes", []int{429, 503}, "HTTP status codes that trigger rate limiting")
 
 	// LLM triage (optional)
+	cmd.Flags().StringVar(&config.LLMProvider, "llm-provider", "ollama", "LLM provider for triage: ollama, openai, anthropic")
 	cmd.Flags().StringVar(&config.LLMHost, "llm-host", "", "LLM service host for finding triage")
 	cmd.Flags().StringVar(&config.LLMModel, "llm-model", "", "LLM model name for triage")
 	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 30, "LLM request timeout (seconds)")
@@ -253,11 +255,11 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	}
 
 	// LLM triage if configured
-	if config.LLMHost != "" || config.LLMModel != "" {
+	if config.LLMProvider != "" || config.LLMHost != "" || config.LLMModel != "" {
 		if rolesConfig != nil {
 			graphqlVerboseLog(config.Verbose, "Running LLM triage on %d findings", len(modelFindings))
 			modelFindings, err = triageWithLLM(ctx, modelFindings, rolesConfig,
-				config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, reporter)
+				config.LLMProvider, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, nil, reporter)
 			if err != nil {
 				// LLM is optional - continue without it
 				graphqlVerboseLog(config.Verbose, "LLM triage failed: %v", err)
