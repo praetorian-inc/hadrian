@@ -45,6 +45,11 @@ type Config struct {
 	LLMTimeout           int      // LLM request timeout in seconds
 	LLMContext           string   // Additional context for LLM prompts
 	Headers              []string // Custom HTTP headers (format: "Key: Value")
+	PlannerEnabled       bool     // Enable LLM-assisted attack planning (experimental)
+	PlannerOnly          bool     // Run ONLY the LLM-planned steps, skip brute-force
+	PlannerProvider      string   // LLM provider: openai or anthropic
+	PlannerModel         string   // LLM model for planner
+	PlannerContext       string   // Additional context for planner prompt
 }
 
 // newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
@@ -95,6 +100,13 @@ func newTestRestCmd() *cobra.Command {
 
 	// Custom headers
 	cmd.Flags().StringArrayVarP(&config.Headers, "header", "H", []string{}, "Custom HTTP header (format: 'Key: Value', can specify multiple)")
+
+	// Planner configuration (experimental)
+	cmd.Flags().BoolVar(&config.PlannerEnabled, "planner", false, "Enable LLM-assisted attack planning (experimental)")
+	cmd.Flags().BoolVar(&config.PlannerOnly, "planner-only", false, "Run ONLY the LLM-planned steps, skip brute-force (requires --planner)")
+	cmd.Flags().StringVar(&config.PlannerProvider, "planner-provider", "openai", "LLM provider for planner: openai, anthropic")
+	cmd.Flags().StringVar(&config.PlannerModel, "planner-model", "", "LLM model for planner (default: gpt-4o for openai, claude-sonnet-4-20250514 for anthropic)")
+	cmd.Flags().StringVar(&config.PlannerContext, "planner-context", "", "Additional context for the planner (e.g., 'Focus on payment endpoints, this is a fintech API')")
 
 	return cmd
 }
