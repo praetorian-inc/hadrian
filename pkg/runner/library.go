@@ -89,7 +89,13 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 	// LLM-assisted attack planning (experimental)
 	var attackPlan *planner.AttackPlan
 	if config.PlannerEnabled {
-		llmClient, planErr := newPlannerLLMClient(config.PlannerProvider, config.PlannerModel, time.Duration(config.LLMTimeout)*time.Second)
+		var llmClient planner.LLMClient
+		var planErr error
+		if config.PlannerLLMClient != nil {
+			llmClient = config.PlannerLLMClient
+		} else {
+			llmClient, planErr = newPlannerLLMClient(config.PlannerProvider, config.PlannerModel, time.Duration(config.LLMTimeout)*time.Second)
+		}
 		if planErr != nil {
 			log.Warn("Planner: %v — falling back to brute-force execution", planErr)
 		} else {
@@ -199,9 +205,11 @@ func newPlannerLLMClient(provider, model string, timeout time.Duration) (planner
 	switch provider {
 	case "anthropic":
 		return planner.NewAnthropicClient("", model, timeout)
+	case "ollama":
+		return planner.NewOllamaClient("", model, timeout), nil
 	case "openai", "":
 		return planner.NewOpenAIClient("", model, timeout)
 	default:
-		return nil, fmt.Errorf("unknown planner provider %q (use openai or anthropic)", provider)
+		return nil, fmt.Errorf("unknown planner provider %q (use openai, anthropic, or ollama)", provider)
 	}
 }

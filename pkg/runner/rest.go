@@ -12,6 +12,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/planner"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -45,11 +46,12 @@ type Config struct {
 	LLMTimeout           int      // LLM request timeout in seconds
 	LLMContext           string   // Additional context for LLM prompts
 	Headers              []string // Custom HTTP headers (format: "Key: Value")
-	PlannerEnabled       bool     // Enable LLM-assisted attack planning (experimental)
-	PlannerOnly          bool     // Run ONLY the LLM-planned steps, skip brute-force
-	PlannerProvider      string   // LLM provider: openai or anthropic
-	PlannerModel         string   // LLM model for planner
-	PlannerContext       string   // Additional context for planner prompt
+	PlannerEnabled       bool              // Enable LLM-assisted attack planning (experimental)
+	PlannerOnly          bool              // Run ONLY the LLM-planned steps, skip brute-force
+	PlannerProvider      string            // LLM provider: openai, anthropic, ollama
+	PlannerModel         string            // LLM model for planner
+	PlannerContext       string            // Additional context for planner prompt
+	PlannerLLMClient     planner.LLMClient // Optional: platform-injected LLM client (takes priority over provider flags)
 }
 
 // newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
@@ -104,7 +106,7 @@ func newTestRestCmd() *cobra.Command {
 	// Planner configuration (experimental)
 	cmd.Flags().BoolVar(&config.PlannerEnabled, "planner", false, "Enable LLM-assisted attack planning (experimental)")
 	cmd.Flags().BoolVar(&config.PlannerOnly, "planner-only", false, "Run ONLY the LLM-planned steps, skip brute-force (requires --planner)")
-	cmd.Flags().StringVar(&config.PlannerProvider, "planner-provider", "openai", "LLM provider for planner: openai, anthropic")
+	cmd.Flags().StringVar(&config.PlannerProvider, "planner-provider", "openai", "LLM provider for planner: openai, anthropic, ollama")
 	cmd.Flags().StringVar(&config.PlannerModel, "planner-model", "", "LLM model for planner (default: gpt-4o for openai, claude-sonnet-4-20250514 for anthropic)")
 	cmd.Flags().StringVar(&config.PlannerContext, "planner-context", "", "Additional context for the planner (e.g., 'Focus on payment endpoints, this is a fintech API')")
 

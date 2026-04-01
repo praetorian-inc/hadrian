@@ -132,7 +132,47 @@ HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
   --verbose
 ```
 
+## LLM-Assisted Planner
+
+The planner (`pkg/planner/`) uses an LLM to generate a prioritized attack plan before execution. Instead of brute-forcing every operation × template × role combination, the LLM analyzes the API spec and selects the most likely vulnerability targets.
+
+### Usage
+
+```bash
+# Plan + brute-force (recommended): LLM steps first, then remaining combos
+./hadrian test rest --api spec.json --roles roles.yaml --auth auth.yaml --planner
+
+# Plan only: run ONLY what the LLM chose
+./hadrian test rest --api spec.json --roles roles.yaml --auth auth.yaml --planner --planner-only
+
+# Steer the planner with custom context
+./hadrian test rest ... --planner --planner-context "Focus on BOLA attacks on payment endpoints"
+```
+
+### Providers
+
+Set the appropriate env var and use `--planner-provider`:
+
+| Provider | Flag | Env Var | Default Model |
+|----------|------|---------|---------------|
+| OpenAI | `--planner-provider openai` (default) | `OPENAI_API_KEY` | gpt-4o |
+| Anthropic | `--planner-provider anthropic` | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
+| Ollama | `--planner-provider ollama` | `OLLAMA_HOST` (optional) | llama3.2:latest |
+
+### Programmatic Usage
+
+For platform integration, inject an `LLMClient` via `Config.PlannerLLMClient`:
+
+```go
+config := runner.Config{
+    PlannerEnabled:   true,
+    PlannerLLMClient: myPlatformLLMClient, // implements planner.LLMClient
+}
+```
+
 ## Environment Variables
 
 - `HADRIAN_TEMPLATES`: Custom templates directory path
-- `OLLAMA_HOST`: Ollama host for LLM triage
+- `OLLAMA_HOST`: Ollama host for LLM triage and planner
+- `OPENAI_API_KEY`: OpenAI API key for planner
+- `ANTHROPIC_API_KEY`: Anthropic API key for planner
