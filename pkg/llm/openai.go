@@ -76,7 +76,7 @@ func (c *OpenAIClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
-		return nil, fmt.Errorf("OpenAI API call failed: %w", err)
+		return nil, fmt.Errorf("OpenAI API call failed: %w", err) //nolint:staticcheck // proper noun
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -86,7 +86,7 @@ func (c *OpenAIClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("OpenAI API returned status %d: %.500s", resp.StatusCode, string(respBody)) //nolint:staticcheck // proper noun
 	}
 
 	var result struct {
@@ -102,7 +102,7 @@ func (c *OpenAIClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 	}
 
 	if len(result.Choices) == 0 {
-		return nil, fmt.Errorf("OpenAI returned no choices")
+		return nil, fmt.Errorf("OpenAI returned no choices") //nolint:staticcheck // proper noun
 	}
 
 	return ParseTriageJSON(result.Choices[0].Message.Content, "openai")

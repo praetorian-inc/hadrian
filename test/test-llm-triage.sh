@@ -91,6 +91,7 @@ log_ok "Tokens acquired"
 # Write temp auth config
 mkdir -p "$OUTPUT_DIR"
 AUTH_FILE="${OUTPUT_DIR}/llm-triage-auth.yaml"
+trap 'rm -f "$AUTH_FILE"' EXIT
 (umask 077; cat > "$AUTH_FILE" <<EOF
 method: bearer
 location: header

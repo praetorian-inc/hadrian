@@ -66,12 +66,12 @@ type GraphQLConfig struct {
 	SkipBuiltinChecks bool     // Skip built-in security checks (introspection, depth limit, batching)
 
 	// LLM triage (optional)
-	LLMProvider string // LLM provider: ollama, openai, anthropic
-	LLMHost     string // LLM service host
-	LLMModel    string // LLM model name
-	LLMTimeout  int    // LLM request timeout (seconds)
-	LLMContext  string // Additional context for LLM
-	Headers    []string // Custom HTTP headers (format: "Key: Value")
+	LLMProvider string   // LLM provider: ollama, openai, anthropic
+	LLMHost     string   // LLM service host
+	LLMModel    string   // LLM model name
+	LLMTimeout  int      // LLM request timeout (seconds)
+	LLMContext  string   // Additional context for LLM
+	Headers     []string // Custom HTTP headers (format: "Key: Value")
 }
 
 // newTestGraphQLCmd creates the "test graphql" subcommand
@@ -135,7 +135,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.LLMProvider, "llm-provider", "ollama", "LLM provider for triage: ollama, openai, anthropic")
 	cmd.Flags().StringVar(&config.LLMHost, "llm-host", "", "LLM service host for finding triage")
 	cmd.Flags().StringVar(&config.LLMModel, "llm-model", "", "LLM model name for triage")
-	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 30, "LLM request timeout (seconds)")
+	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 180, "LLM request timeout (seconds)")
 	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM triage")
 
 	// Custom headers
@@ -254,8 +254,8 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 		}
 	}
 
-	// LLM triage if configured
-	if config.LLMProvider != "" || config.LLMHost != "" || config.LLMModel != "" {
+	// LLM triage if configured (exclude default "ollama" when no host is set)
+	if (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMHost != "" || config.LLMModel != "" {
 		if rolesConfig != nil {
 			graphqlVerboseLog(config.Verbose, "Running LLM triage on %d findings", len(modelFindings))
 			modelFindings, err = triageWithLLM(ctx, modelFindings, rolesConfig,

@@ -101,17 +101,8 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 	if injectedClient != nil {
 		client = injectedClient
 	} else {
-		// Convert timeout from seconds to time.Duration
 		timeout := time.Duration(llmTimeout) * time.Second
-
-		// Use provider-based routing if specified
-		if llmProvider != "" && llmProvider != "ollama" {
-			client, err = llm.NewClientWithProvider(ctx, llmProvider, llmHost, llmModel, timeout, llmContext)
-		} else if llmHost != "" || llmModel != "" {
-			client, err = llm.NewClientWithConfig(ctx, llmHost, llmModel, timeout, llmContext)
-		} else {
-			client, err = llm.NewClient(ctx)
-		}
+		client, err = llm.NewClientWithProvider(ctx, llmProvider, llmHost, llmModel, timeout, llmContext)
 	}
 
 	if err != nil {

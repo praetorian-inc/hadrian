@@ -10,6 +10,9 @@ import (
 )
 
 // BuildTriagePrompt constructs the triage prompt with PII redaction.
+// Note: Finding fields (category, endpoint, response body) are interpolated into the prompt.
+// A malicious target API could craft responses to influence triage results. Impact is limited
+// since triage is advisory and PII redaction is applied.
 func BuildTriagePrompt(req *TriageRequest, redactor *reporter.Redactor, customContext string) string {
 	redactedResponse := redactor.RedactForLLM(req.Finding.Evidence.Response.Body)
 
@@ -51,8 +54,8 @@ Respond with JSON only:
 		req.Finding.Category,
 		req.Finding.Method,
 		req.Finding.Endpoint,
-		req.AttackerRole.Name,
-		formatPermissions(req.AttackerRole.Permissions),
+		getAttackerRoleName(req.AttackerRole),
+		getAttackerRolePermissions(req.AttackerRole),
 		getVictimRoleName(req.VictimRole),
 		getVictimRolePermissions(req.VictimRole),
 		req.Finding.Method,

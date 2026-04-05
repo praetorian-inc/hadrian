@@ -105,6 +105,20 @@ func formatPermissions(perms []roles.Permission) string {
 	return strings.Join(strs, ", ")
 }
 
+func getAttackerRoleName(role *roles.Role) string {
+	if role == nil {
+		return "(none)"
+	}
+	return role.Name
+}
+
+func getAttackerRolePermissions(role *roles.Role) string {
+	if role == nil {
+		return "(none)"
+	}
+	return formatPermissions(role.Permissions)
+}
+
 func getVictimRoleName(role *roles.Role) string {
 	if role == nil {
 		return "(none)"
