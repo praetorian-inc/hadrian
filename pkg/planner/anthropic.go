@@ -71,7 +71,7 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("Anthropic API call failed: %w", err) //nolint:stylecheck // proper noun
+		return "", fmt.Errorf("Anthropic API call failed: %w", err) //nolint:staticcheck // proper noun
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -81,7 +81,7 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Anthropic API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:stylecheck // proper noun
+		return "", fmt.Errorf("Anthropic API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:staticcheck // proper noun
 	}
 
 	var result struct {
@@ -101,5 +101,5 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 		}
 	}
 
-	return "", fmt.Errorf("Anthropic returned no text content") //nolint:stylecheck // proper noun
+	return "", fmt.Errorf("Anthropic returned no text content") //nolint:staticcheck // proper noun
 }

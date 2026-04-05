@@ -71,7 +71,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("OpenAI API call failed: %w", err) //nolint:stylecheck // proper noun
+		return "", fmt.Errorf("OpenAI API call failed: %w", err) //nolint:staticcheck // proper noun
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -81,7 +81,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:stylecheck // proper noun
+		return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:staticcheck // proper noun
 	}
 
 	var result struct {
@@ -97,7 +97,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("OpenAI returned no choices") //nolint:stylecheck // proper noun
+		return "", fmt.Errorf("OpenAI returned no choices") //nolint:staticcheck // proper noun
 	}
 
 	return result.Choices[0].Message.Content, nil
