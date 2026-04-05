@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
 )
@@ -41,10 +42,7 @@ func (p *llmPlanner) Plan(ctx context.Context, input *PlannerInput) (*AttackPlan
 
 	plan, err := parsePlan(raw)
 	if err != nil {
-		preview := raw
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
+		preview := sanitizeForLog(raw, 200)
 		log.Debug("Raw LLM response: %s", preview)
 		return nil, fmt.Errorf("failed to parse LLM response into attack plan: %w", err)
 	}
@@ -56,6 +54,8 @@ func (p *llmPlanner) Plan(ctx context.Context, input *PlannerInput) (*AttackPlan
 
 // parsePlan extracts an AttackPlan from the LLM's raw JSON response.
 func parsePlan(raw string) (*AttackPlan, error) {
+	raw = stripCodeFences(raw)
+
 	// Try parsing as full AttackPlan first (includes empty steps arrays)
 	var plan AttackPlan
 	if err := json.Unmarshal([]byte(raw), &plan); err == nil {
@@ -69,6 +69,23 @@ func parsePlan(raw string) (*AttackPlan, error) {
 	}
 
 	return nil, fmt.Errorf("could not parse LLM response as AttackPlan or []AttackStep")
+}
+
+// stripCodeFences removes markdown code fences that LLMs sometimes wrap around JSON.
+func stripCodeFences(s string) string {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "```") {
+		// Remove opening fence (```json or ```)
+		if idx := strings.Index(s, "\n"); idx != -1 {
+			s = s[idx+1:]
+		}
+		// Remove closing fence
+		if idx := strings.LastIndex(s, "```"); idx != -1 {
+			s = s[:idx]
+		}
+		s = strings.TrimSpace(s)
+	}
+	return s
 }
 
 // validatePlan filters out steps that reference non-existent templates or roles.
@@ -106,4 +123,19 @@ func validatePlan(plan *AttackPlan, input *PlannerInput) *AttackPlan {
 		Steps:     valid,
 		Reasoning: plan.Reasoning,
 	}
+}
+
+// sanitizeForLog strips control/ANSI characters and truncates for safe logging.
+func sanitizeForLog(s string, maxLen int) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 32 && r != 127 {
+			b.WriteRune(r)
+		}
+	}
+	result := b.String()
+	if len(result) > maxLen {
+		result = result[:maxLen] + "..."
+	}
+	return result
 }

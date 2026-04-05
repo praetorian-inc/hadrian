@@ -62,6 +62,11 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("rate limit status codes must not be empty")
 	}
 
+	// Validate planner flags
+	if c.PlannerOnly && !c.PlannerEnabled {
+		return fmt.Errorf("--planner-only requires --planner to be set")
+	}
+
 	// Validate custom headers format
 	if len(c.Headers) > 0 {
 		if _, err := ParseCustomHeaders(c.Headers); err != nil {

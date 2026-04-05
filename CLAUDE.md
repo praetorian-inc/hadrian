@@ -142,7 +142,7 @@ The planner (`pkg/planner/`) uses an LLM to generate a prioritized attack plan b
 # Plan + brute-force (recommended): LLM steps first, then remaining combos
 ./hadrian test rest --api spec.json --roles roles.yaml --auth auth.yaml --planner
 
-# Plan only: run ONLY what the LLM chose
+# Plan only: run ONLY what the LLM chose (--planner-only requires --planner)
 ./hadrian test rest --api spec.json --roles roles.yaml --auth auth.yaml --planner --planner-only
 
 # Steer the planner with custom context

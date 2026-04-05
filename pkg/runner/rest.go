@@ -40,16 +40,17 @@ type Config struct {
 	AuditLog             string
 	Verbose              bool
 	DryRun               bool
-	RequestIDsLimit      int      // Number of request IDs to display per finding (0 = all)
-	LLMHost              string   // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel             string   // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout           int      // LLM request timeout in seconds
-	LLMContext           string   // Additional context for LLM prompts
-	Headers              []string // Custom HTTP headers (format: "Key: Value")
+	RequestIDsLimit      int               // Number of request IDs to display per finding (0 = all)
+	LLMHost              string            // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel             string            // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout           int               // LLM request timeout in seconds
+	LLMContext           string            // Additional context for LLM prompts
+	Headers              []string          // Custom HTTP headers (format: "Key: Value")
 	PlannerEnabled       bool              // Enable LLM-assisted attack planning (experimental)
 	PlannerOnly          bool              // Run ONLY the LLM-planned steps, skip brute-force
 	PlannerProvider      string            // LLM provider: openai, anthropic, ollama
 	PlannerModel         string            // LLM model for planner
+	PlannerTimeout       int               // Planner LLM timeout in seconds (default 120)
 	PlannerContext       string            // Additional context for planner prompt
 	PlannerLLMClient     planner.LLMClient // Optional: platform-injected LLM client (takes priority over provider flags)
 }
@@ -108,6 +109,7 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&config.PlannerOnly, "planner-only", false, "Run ONLY the LLM-planned steps, skip brute-force (requires --planner)")
 	cmd.Flags().StringVar(&config.PlannerProvider, "planner-provider", "openai", "LLM provider for planner: openai, anthropic, ollama")
 	cmd.Flags().StringVar(&config.PlannerModel, "planner-model", "", "LLM model for planner (default: gpt-4o for openai, claude-sonnet-4-20250514 for anthropic)")
+	cmd.Flags().IntVar(&config.PlannerTimeout, "planner-timeout", 120, "Planner LLM request timeout in seconds")
 	cmd.Flags().StringVar(&config.PlannerContext, "planner-context", "", "Additional context for the planner (e.g., 'Focus on payment endpoints, this is a fintech API')")
 
 	return cmd

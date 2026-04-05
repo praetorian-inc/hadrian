@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	openAIEndpoint          = "https://api.openai.com/v1/chat/completions"
-	defaultOpenAIModel      = "gpt-4o"
-	maxResponseSize   int64 = 1 * 1024 * 1024 // 1MB
+	openAIEndpoint           = "https://api.openai.com/v1/chat/completions"
+	defaultOpenAIModel       = "gpt-4o"
+	maxResponseSize    int64 = 1 * 1024 * 1024 // 1MB
 )
 
 // OpenAIClient implements LLMClient using the OpenAI chat completions API.
@@ -53,8 +53,8 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 			{"role": "system", "content": "You are a security expert. Respond with valid JSON only."},
 			{"role": "user", "content": prompt},
 		},
-		"temperature":      0.2,
-		"response_format":  map[string]string{"type": "json_object"},
+		"temperature":     0.2,
+		"response_format": map[string]string{"type": "json_object"},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -71,7 +71,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("OpenAI API call failed: %w", err)
+		return "", fmt.Errorf("OpenAI API call failed: %w", err) //nolint:stylecheck // proper noun
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -81,7 +81,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:stylecheck // proper noun
 	}
 
 	var result struct {
@@ -97,7 +97,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("OpenAI returned no choices")
+		return "", fmt.Errorf("OpenAI returned no choices") //nolint:stylecheck // proper noun
 	}
 
 	return result.Choices[0].Message.Content, nil

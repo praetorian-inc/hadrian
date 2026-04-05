@@ -94,7 +94,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		if config.PlannerLLMClient != nil {
 			llmClient = config.PlannerLLMClient
 		} else {
-			llmClient, planErr = newPlannerLLMClient(config.PlannerProvider, config.PlannerModel, time.Duration(config.LLMTimeout)*time.Second)
+			llmClient, planErr = newPlannerLLMClient(config.PlannerProvider, config.PlannerModel, time.Duration(config.PlannerTimeout)*time.Second)
 		}
 		if planErr != nil {
 			log.Warn("Planner: %v — falling back to brute-force execution", planErr)
@@ -114,24 +114,22 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 				attackPlan = nil
 			} else {
 				if len(attackPlan.Steps) == 0 {
-					fmt.Printf("\n🎯 LLM Attack Plan: 0 steps\n")
+					log.Warn("LLM Attack Plan: 0 steps")
 					if attackPlan.Reasoning != "" {
-						fmt.Printf("   Reason: %s\n", attackPlan.Reasoning)
+						log.Warn("Reason: %s", attackPlan.Reasoning)
 					}
-					fmt.Println()
 				} else {
-					fmt.Printf("\n🎯 LLM Attack Plan (%d steps)\n", len(attackPlan.Steps))
+					log.Warn("LLM Attack Plan (%d steps)", len(attackPlan.Steps))
 					if attackPlan.Reasoning != "" {
-						fmt.Printf("   Strategy: %s\n", attackPlan.Reasoning)
+						log.Warn("Strategy: %s", attackPlan.Reasoning)
 					}
 					for i, step := range attackPlan.Steps {
-						fmt.Printf("   [%d] %s %s → template=%s attacker=%s victim=%s\n",
+						log.Warn("[%d] %s %s -> template=%s attacker=%s victim=%s",
 							i+1, step.Method, step.Path, step.TemplateID, step.AttackerRole, step.VictimRole)
 						if step.Rationale != "" {
-							fmt.Printf("       %s\n", step.Rationale)
+							log.Debug("    %s", step.Rationale)
 						}
 					}
-					fmt.Println()
 				}
 			}
 		}
@@ -152,7 +150,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 			opMap[o.Method+" "+o.Path] = o
 		}
 
-		fmt.Printf("[INFO] Executing %d planned steps...\n", len(attackPlan.Steps))
+		log.Warn("Executing %d planned steps...", len(attackPlan.Steps))
 		for i, step := range attackPlan.Steps {
 			tmpl, ok := tmplMap[step.TemplateID]
 			if !ok {

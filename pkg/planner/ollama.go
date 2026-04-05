@@ -69,7 +69,7 @@ func (c *OllamaClient) Generate(ctx context.Context, prompt string) (string, err
 
 	resp, err := c.client.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("Ollama API call failed: %w", err)
+		return "", fmt.Errorf("Ollama API call failed: %w", err) //nolint:stylecheck // proper noun
 	}
 	defer func() { _ = resp.Body.Close() }()
 
@@ -79,7 +79,7 @@ func (c *OllamaClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Ollama API returned status %d: %s", resp.StatusCode, string(respBody))
+		return "", fmt.Errorf("Ollama API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:stylecheck // proper noun
 	}
 
 	var result struct {
