@@ -516,6 +516,9 @@ func TestGetTemplateDir_EnvOverride(t *testing.T) {
 
 	dir := getTemplateDir("./templates/rest")
 	assert.Equal(t, "/custom/templates", dir)
+
+	dir = getTemplateDir("./templates/graphql")
+	assert.Equal(t, "/custom/templates", dir)
 }
 
 func TestHasLLMConfig_NoConfig(t *testing.T) {

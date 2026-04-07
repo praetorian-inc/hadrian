@@ -246,7 +246,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	// 3. Load templates from template directory
 	templateDir := config.TemplateDir
 	if templateDir == "" {
-		templateDir = "./templates/grpc"
+		templateDir = getTemplateDir("./templates/grpc")
 	}
 
 	var templateFiles []*templates.CompiledTemplate

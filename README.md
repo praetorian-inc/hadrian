@@ -59,7 +59,7 @@ hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --category 
 ### GraphQL API Testing
 
 ```bash
-hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml --template-dir templates/graphql
+hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml
 ```
 
 ### gRPC API Testing
