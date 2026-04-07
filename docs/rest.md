@@ -5,17 +5,17 @@ Hadrian provides comprehensive REST API security testing with 8 built-in templat
 ## Quick Start
 
 ```bash
-# Basic security test
-hadrian test rest --api api.yaml --roles roles.yaml --category all
+# Basic security test (default --category owasp matches all 8 built-in templates)
+hadrian test rest --api api.yaml --roles roles.yaml
 
 # With authentication
-hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --category all
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 
 # Dry run (show what would be tested)
-hadrian test rest --api api.yaml --roles roles.yaml --category all --dry-run
+hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
 # Verbose output with JSON report
-hadrian test rest --api api.yaml --roles roles.yaml --category all --verbose --output json --output-file report.json
+hadrian test rest --api api.yaml --roles roles.yaml --verbose --output json --output-file report.json
 ```
 
 ## Command Options
@@ -31,7 +31,7 @@ Optional Flags:
       --auth <file>             Authentication configuration YAML file
       --template-dir <dir>      Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)
       --template <list>         Specific template files to run
-      --category <list>         Test categories: owasp, custom (default: owasp)
+      --category <list>         Filter by template metadata — matches against info.category and info.tags (case-insensitive substring, default: owasp)
       --owasp <list>            OWASP API categories to test (e.g., API1,API2,API5,API9)
       --header, -H <header>     Custom HTTP header (repeatable, format: "Key: Value")
       --timeout <n>             Request timeout in seconds (default: 30)
@@ -261,11 +261,7 @@ For complete crAPI setup including user registration and token generation, see [
 
 ### "Loaded 0 templates"
 
-The default category filter is `owasp`. If template filenames don't contain "owasp", use `--category all`:
-
-```bash
-hadrian test rest --api api.yaml --roles roles.yaml --category all
-```
+The `--category` flag filters templates by matching against `info.category` and `info.tags` metadata fields (case-insensitive substring match). The default category `owasp` matches all 8 built-in templates via their `owasp-api-top10` tag. If you have custom templates without OWASP tags, use `--category all` or add appropriate tags to your templates.
 
 ### "Role has no credentials configured"
 

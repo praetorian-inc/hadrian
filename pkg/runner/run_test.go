@@ -214,40 +214,40 @@ detection:
 
 	// "owasp" should match the OWASP template via tags
 	loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
-	assert.NoError(t, err)
-	assert.Len(t, loaded, 1)
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
 	assert.Equal(t, "01-owasp", loaded[0].ID)
 
 	// "api1" should match via category
 	loaded, err = loadTemplateFiles(tmpDir, []string{"api1"})
-	assert.NoError(t, err)
-	assert.Len(t, loaded, 1)
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
 	assert.Equal(t, "01-owasp", loaded[0].ID)
 
 	// "custom" should match the custom template via category
 	loaded, err = loadTemplateFiles(tmpDir, []string{"custom"})
-	assert.NoError(t, err)
-	assert.Len(t, loaded, 1)
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
 	assert.Equal(t, "02-custom", loaded[0].ID)
 
 	// "all" should match everything
 	loaded, err = loadTemplateFiles(tmpDir, []string{"all"})
-	assert.NoError(t, err)
-	assert.Len(t, loaded, 2)
+	require.NoError(t, err)
+	require.Len(t, loaded, 2)
 
 	// "regression" should match custom template via tags
 	loaded, err = loadTemplateFiles(tmpDir, []string{"regression"})
-	assert.NoError(t, err)
-	assert.Len(t, loaded, 1)
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
 	assert.Equal(t, "02-custom", loaded[0].ID)
 
 	// "nonexistent" should match nothing
 	loaded, err = loadTemplateFiles(tmpDir, []string{"nonexistent"})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Len(t, loaded, 0)
 
 	// Multiple categories should match union
 	loaded, err = loadTemplateFiles(tmpDir, []string{"api1", "regression"})
-	assert.NoError(t, err)
-	assert.Len(t, loaded, 2)
+	require.NoError(t, err)
+	require.Len(t, loaded, 2)
 }

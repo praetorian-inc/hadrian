@@ -75,7 +75,7 @@ make build
 ### REST API Security Testing
 
 ```bash
-hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --category all
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 ```
 
 ### GraphQL API Security Testing
@@ -94,17 +94,17 @@ hadrian test grpc --target localhost:50051 --proto service.proto --auth auth.yam
 
 ```bash
 # Preview what would be tested (dry run)
-hadrian test rest --api api.yaml --roles roles.yaml --category all --dry-run
+hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
 # Export findings as JSON
-hadrian test rest --api api.yaml --roles roles.yaml --category all --output json --output-file report.json
+hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file report.json
 
 # AI-powered triage to reduce false positives
-hadrian test rest --api api.yaml --roles roles.yaml --category all \
+hadrian test rest --api api.yaml --roles roles.yaml \
   --llm-host http://localhost:11434 --llm-model llama3.2:latest
 
 # Route through a proxy for manual inspection
-hadrian test rest --api api.yaml --roles roles.yaml --category all --proxy http://localhost:8080 --insecure
+hadrian test rest --api api.yaml --roles roles.yaml --proxy http://localhost:8080 --insecure
 ```
 
 ## How Does Hadrian's Mutation Testing Work?
