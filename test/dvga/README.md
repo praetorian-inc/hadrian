@@ -141,7 +141,7 @@ set -a && source test/dvga/.env && set +a && \
 **Option C: With Generic GraphQL Templates**
 
 ```bash
-# Run all GraphQL attack templates (--template-dir templates/graphql is now optional, this is the default)
+# Run all GraphQL attack templates (uses default template directory)
 ./hadrian test graphql \
   --target http://localhost:5013 \
   --verbose
