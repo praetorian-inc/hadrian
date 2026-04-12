@@ -149,8 +149,7 @@ func runTest(ctx context.Context, config Config) error {
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
 	fmt.Printf("[INFO] Testing %d operations against %d roles\n", len(spec.Operations), len(rolesCfg.Roles))
 
-	// Dry-run: print what would be tested and exit before any HTTP execution.
-	// Production safety check is intentionally skipped here — dry-run makes no requests.
+	// Dry-run: print what would be tested and exit before any HTTP execution
 	if config.DryRun {
 		testCount := 0
 		opCount := 0
