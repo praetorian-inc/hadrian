@@ -6,16 +6,16 @@ Hadrian supports security testing of GraphQL APIs, including introspection detec
 
 ```bash
 # Basic GraphQL security scan (uses introspection)
-hadrian test graphql --target https://api.example.com --template-dir templates/graphql
+hadrian test graphql --target https://api.example.com
 
 # With custom endpoint path
-hadrian test graphql --target https://api.example.com --endpoint /api/graphql --template-dir templates/graphql
+hadrian test graphql --target https://api.example.com --endpoint /api/graphql
 
 # With SDL schema file (when introspection is disabled)
-hadrian test graphql --target https://api.example.com --schema schema.graphql --template-dir templates/graphql
+hadrian test graphql --target https://api.example.com --schema schema.graphql
 
 # With authentication for authorization testing
-hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml --template-dir templates/graphql
+hadrian test graphql --target https://api.example.com --auth auth.yaml --roles roles.yaml
 ```
 
 ## Command Options
@@ -29,7 +29,7 @@ Flags:
       --schema string          GraphQL SDL schema file (optional, uses introspection if not provided)
       --roles string           Roles and permissions YAML file
       --auth string            Authentication configuration YAML file
-      --template-dir string    GraphQL templates directory
+      --template-dir string    GraphQL templates directory (default: $HADRIAN_TEMPLATES or ./templates/graphql)
       --depth-limit int        Maximum query depth for DoS testing (default 10)
       --complexity-limit int   Maximum complexity score for DoS testing (default 1000)
       --batch-size int         Number of queries in batch attack tests (default 100)

@@ -67,7 +67,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 
 	templateDir := config.TemplateDir
 	if templateDir == "" {
-		templateDir = getTemplateDir()
+		templateDir = getTemplateDir("./templates/rest")
 	}
 
 	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)

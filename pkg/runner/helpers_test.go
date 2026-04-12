@@ -498,15 +498,26 @@ func TestGetTemplateDir_Default(t *testing.T) {
 	// Unset env var
 	_ = os.Unsetenv("HADRIAN_TEMPLATES")
 
-	dir := getTemplateDir()
+	dir := getTemplateDir("./templates/rest")
 	assert.Equal(t, "./templates/rest", dir)
+}
+
+func TestGetTemplateDir_DefaultGraphQL(t *testing.T) {
+	// Unset env var
+	_ = os.Unsetenv("HADRIAN_TEMPLATES")
+
+	dir := getTemplateDir("./templates/graphql")
+	assert.Equal(t, "./templates/graphql", dir)
 }
 
 func TestGetTemplateDir_EnvOverride(t *testing.T) {
 	_ = os.Setenv("HADRIAN_TEMPLATES", "/custom/templates")
 	defer func() { _ = os.Unsetenv("HADRIAN_TEMPLATES") }()
 
-	dir := getTemplateDir()
+	dir := getTemplateDir("./templates/rest")
+	assert.Equal(t, "/custom/templates", dir)
+
+	dir = getTemplateDir("./templates/graphql")
 	assert.Equal(t, "/custom/templates", dir)
 }
 

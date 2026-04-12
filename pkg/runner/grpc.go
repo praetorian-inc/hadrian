@@ -108,7 +108,7 @@ func newTestGRPCCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.Auth, "auth", "", "Authentication configuration YAML file")
 
 	// Template configuration
-	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "gRPC templates directory (e.g., templates/grpc)")
+	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "gRPC templates directory (default: $HADRIAN_TEMPLATES or ./templates/grpc)")
 	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 
 	// TLS options
@@ -246,7 +246,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	// 3. Load templates from template directory
 	templateDir := config.TemplateDir
 	if templateDir == "" {
-		templateDir = "./templates/grpc"
+		templateDir = getTemplateDir("./templates/grpc")
 	}
 
 	var templateFiles []*templates.CompiledTemplate
