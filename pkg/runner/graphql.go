@@ -99,7 +99,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().StringVar(&config.Auth, "auth", "", "Authentication configuration YAML file")
 
 	// Template configuration
-	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "GraphQL templates directory (e.g., templates/graphql)")
+	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "GraphQL templates directory (default: $HADRIAN_TEMPLATES or ./templates/graphql)")
 	cmd.Flags().BoolVar(&config.SkipBuiltinChecks, "skip-builtin-checks", false, "Skip built-in security checks (introspection, depth limit, batching)")
 
 	// Security limits
