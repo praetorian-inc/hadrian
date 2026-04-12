@@ -267,6 +267,10 @@ func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool
 	for _, cat := range categories {
 		cat = strings.ToLower(cat)
 
+		if cat == "" {
+			continue
+		}
+
 		// "all" matches everything
 		if cat == "all" {
 			return true

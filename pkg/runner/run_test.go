@@ -246,6 +246,12 @@ detection:
 	require.NoError(t, err)
 	assert.Len(t, loaded, 0)
 
+	// Empty string in categories should be skipped, not match everything
+	loaded, err = loadTemplateFiles(tmpDir, []string{"owasp", "", "api1"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
 	// Multiple categories should match union
 	loaded, err = loadTemplateFiles(tmpDir, []string{"api1", "regression"})
 	require.NoError(t, err)
