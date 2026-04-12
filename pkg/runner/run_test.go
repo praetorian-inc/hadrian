@@ -246,6 +246,16 @@ detection:
 	require.NoError(t, err)
 	assert.Len(t, loaded, 0)
 
+	// Single character category should be skipped (too broad)
+	loaded, err = loadTemplateFiles(tmpDir, []string{"a"})
+	require.NoError(t, err)
+	assert.Len(t, loaded, 0)
+
+	// Two character category should work normally
+	loaded, err = loadTemplateFiles(tmpDir, []string{"pi"})
+	require.NoError(t, err)
+	assert.True(t, len(loaded) > 0)
+
 	// Empty string in categories should be skipped, not match everything
 	loaded, err = loadTemplateFiles(tmpDir, []string{"owasp", "", "api1"})
 	require.NoError(t, err)

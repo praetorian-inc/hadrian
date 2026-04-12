@@ -271,6 +271,10 @@ func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool
 			continue
 		}
 
+		if len(cat) < 2 {
+			continue
+		}
+
 		// "all" matches everything
 		if cat == "all" {
 			return true
