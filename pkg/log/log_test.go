@@ -198,6 +198,87 @@ func captureStderr(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+func TestError_ProducesRedErrorPrefix(t *testing.T) {
+	output := captureStderr(t, func() {
+		Error("error message")
+	})
+
+	// Verify [ERROR] prefix is present
+	assert.Contains(t, output, "[ERROR]")
+
+	// Verify red color code is applied to [ERROR]
+	assert.Contains(t, output, ColorRed+"[ERROR]"+ColorReset)
+
+	// Verify message content
+	assert.Contains(t, output, "error message")
+
+	// Verify ends with newline
+	assert.True(t, strings.HasSuffix(output, "\n"))
+}
+
+func TestError_FormatStringSubstitution(t *testing.T) {
+	tests := []struct {
+		name     string
+		format   string
+		args     []interface{}
+		expected string
+	}{
+		{
+			name:     "single string substitution",
+			format:   "Error: %s",
+			args:     []interface{}{"something broke"},
+			expected: "Error: something broke",
+		},
+		{
+			name:     "integer substitution",
+			format:   "Exit code: %d",
+			args:     []interface{}{1},
+			expected: "Exit code: 1",
+		},
+		{
+			name:     "multiple substitutions",
+			format:   "%s failed at line %d",
+			args:     []interface{}{"Parser", 42},
+			expected: "Parser failed at line 42",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output := captureStderr(t, func() {
+				Error(tt.format, tt.args...)
+			})
+
+			assert.Contains(t, output, tt.expected)
+		})
+	}
+}
+
+func TestError_AlwaysPrintsToStderr(t *testing.T) {
+	// Error should print to stderr regardless of verbose mode
+	SetVerbose(false)
+
+	output := captureStderr(t, func() {
+		Error("critical error")
+	})
+
+	assert.Contains(t, output, "[ERROR]")
+	assert.Contains(t, output, "critical error")
+}
+
+func TestError_PrintsToStderrNotStdout(t *testing.T) {
+	stdoutOutput := captureStdout(t, func() {
+		// Error goes to stderr, not stdout
+	})
+
+	stderrOutput := captureStderr(t, func() {
+		Error("error to stderr")
+	})
+
+	assert.Empty(t, stdoutOutput)
+	assert.Contains(t, stderrOutput, "error to stderr")
+}
+
 // Test Fix 1: Race condition on verbose flag
 func TestVerboseFlag_ThreadSafe(t *testing.T) {
 	// Test concurrent access to SetVerbose/IsVerbose

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/plugins"
 )
@@ -345,6 +346,9 @@ func parseStatus(statusStr string) int {
 		}
 		return 0
 	}
-	status, _ := strconv.Atoi(statusStr)
+	status, err := strconv.Atoi(statusStr)
+	if err != nil {
+		log.Warn("Unexpected status code parse failure for %q: %v", statusStr, err)
+	}
 	return status
 }

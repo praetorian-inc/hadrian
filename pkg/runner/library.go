@@ -34,6 +34,13 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		return nil, fmt.Errorf("failed to parse API spec: %w", err)
 	}
 
+	// Production safety check: warn user before testing production systems
+	if spec.BaseURL != "" {
+		if err := CheckProductionSafety(spec.BaseURL); err != nil {
+			return nil, err
+		}
+	}
+
 	rolesCfg, err := roles.Load(config.Roles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load roles: %w", err)

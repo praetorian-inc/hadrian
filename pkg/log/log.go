@@ -38,6 +38,11 @@ func Warn(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "%s[WARN]%s %s\n", ColorMagenta, ColorReset, fmt.Sprintf(format, args...))
 }
 
+// Error prints an error message with red [ERROR] prefix to stderr (always displayed)
+func Error(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "%s[ERROR]%s %s\n", ColorRed, ColorReset, fmt.Sprintf(format, args...))
+}
+
 // Debug prints a debug message with cyan [DEBUG] prefix (only if verbose mode is enabled)
 func Debug(format string, args ...interface{}) {
 	if !verboseFlag.Load() {
