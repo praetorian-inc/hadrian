@@ -6,6 +6,9 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
+// maxResponseSize caps LLM API response bodies (1MB) — shared by all provider clients.
+const maxResponseSize int64 = 1 * 1024 * 1024
+
 // PlannerInput is everything the planner needs to produce an attack plan.
 type PlannerInput struct {
 	Spec         *model.APISpec

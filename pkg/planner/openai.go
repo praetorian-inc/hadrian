@@ -12,9 +12,8 @@ import (
 )
 
 const (
-	openAIEndpoint           = "https://api.openai.com/v1/chat/completions"
-	defaultOpenAIModel       = "gpt-4o"
-	maxResponseSize    int64 = 1 * 1024 * 1024 // 1MB
+	openAIEndpoint     = "https://api.openai.com/v1/chat/completions"
+	defaultOpenAIModel = "gpt-4o"
 )
 
 // OpenAIClient implements LLMClient using the OpenAI chat completions API.

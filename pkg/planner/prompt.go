@@ -9,7 +9,11 @@ import (
 
 // maxOperationsInPrompt caps how many operations are included in the prompt
 // to keep it within typical LLM context windows. Larger specs get truncated.
-const maxOperationsInPrompt = 200
+const (
+	maxOperationsInPrompt = 200
+	maxTemplatesInPrompt  = 100
+	maxRolesInPrompt      = 50
+)
 
 // buildPrompt constructs a structured prompt for the LLM from the planner input.
 func buildPrompt(input *PlannerInput) string {
@@ -56,9 +60,14 @@ RULES:
 	}
 	b.WriteString("\n")
 
-	// Templates
+	// Templates (capped to keep prompt within LLM context limits)
 	b.WriteString("## AVAILABLE TEMPLATES\n\n")
-	for _, t := range input.Templates {
+	tmpls := input.Templates
+	if len(tmpls) > maxTemplatesInPrompt {
+		log.Warn("Planner: %d templates loaded — truncating to first %d to stay within LLM context", len(tmpls), maxTemplatesInPrompt)
+		tmpls = tmpls[:maxTemplatesInPrompt]
+	}
+	for _, t := range tmpls {
 		selector := ""
 		if t.EndpointSelector.HasPathParameter {
 			selector += " needs-path-param"
@@ -74,10 +83,15 @@ RULES:
 	}
 	b.WriteString("\n")
 
-	// Roles
+	// Roles (capped to keep prompt within LLM context limits)
 	b.WriteString("## ROLES\n\n")
 	if input.Roles != nil {
-		for _, r := range input.Roles.Roles {
+		rs := input.Roles.Roles
+		if len(rs) > maxRolesInPrompt {
+			log.Warn("Planner: %d roles defined — truncating to first %d to stay within LLM context", len(rs), maxRolesInPrompt)
+			rs = rs[:maxRolesInPrompt]
+		}
+		for _, r := range rs {
 			perms := make([]string, len(r.Permissions))
 			for i, p := range r.Permissions {
 				perms[i] = p.Raw

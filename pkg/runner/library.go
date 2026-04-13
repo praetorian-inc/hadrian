@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
@@ -155,7 +156,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		}
 		opMap := make(map[string]*model.Operation) // "METHOD /path" → operation
 		for _, o := range spec.Operations {
-			opMap[o.Method+" "+o.Path] = o
+			opMap[normalizeOpKey(o.Method, o.Path)] = o
 		}
 
 		log.Warn("Executing %d planned steps...", len(attackPlan.Steps))
@@ -165,7 +166,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 				log.Warn("Plan step %d: template %q not found, skipping", i+1, step.TemplateID)
 				continue
 			}
-			op, ok := opMap[step.Method+" "+step.Path]
+			op, ok := opMap[normalizeOpKey(step.Method, step.Path)]
 			if !ok {
 				log.Warn("Plan step %d: operation %s %s not found, skipping", i+1, step.Method, step.Path)
 				continue
@@ -213,6 +214,17 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 	}
 
 	return allFindings, nil
+}
+
+// normalizeOpKey produces a stable key for matching operations,
+// tolerant of LLM output variance (case, trailing slashes).
+func normalizeOpKey(method, path string) string {
+	method = strings.ToUpper(strings.TrimSpace(method))
+	path = strings.TrimSpace(path)
+	if len(path) > 1 && strings.HasSuffix(path, "/") {
+		path = strings.TrimRight(path, "/")
+	}
+	return method + " " + path
 }
 
 // newPlannerLLMClient creates the appropriate LLM client based on provider name.
