@@ -282,7 +282,9 @@ func (s *SecurityScanner) CheckBOLA(ctx context.Context, authConfigs map[string]
 	var gqlResp struct {
 		Data map[string]interface{} `json:"data"`
 	}
-	if err := json.Unmarshal([]byte(victimResult.Body), &gqlResp); err == nil {
+	if err := json.Unmarshal([]byte(victimResult.Body), &gqlResp); err != nil {
+		log.Debug("BOLA check skipped: failed to unmarshal victim response for %s: %v", targetQuery.Name, err)
+	} else {
 		if queryData, ok := gqlResp.Data[targetQuery.Name].(map[string]interface{}); ok {
 			if id, ok := queryData["id"].(string); ok {
 				victimID = id

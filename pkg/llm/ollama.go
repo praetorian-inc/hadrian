@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
 )
@@ -104,7 +105,10 @@ func (o *OllamaClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 
 	if resp.StatusCode != http.StatusOK {
 		// Read error body with size limit (1MB for LLM responses)
-		bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, MaxLLMResponseBodySize))
+		bodyBytes, readErr := io.ReadAll(io.LimitReader(resp.Body, MaxLLMResponseBodySize))
+		if readErr != nil {
+			log.Warn("Failed to read Ollama error response body: %v", readErr)
+		}
 		return nil, fmt.Errorf("ollama API returned status %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 

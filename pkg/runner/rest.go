@@ -184,7 +184,11 @@ func runTest(ctx context.Context, config Config) error {
 	}
 
 	if llmEnabled {
-		allFindings, _ = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
+		var triageErr error
+		allFindings, triageErr = triageWithLLM(ctx, allFindings, rolesCfg, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, rep)
+		if triageErr != nil {
+			log.Warn("LLM triage failed, returning original findings: %v", triageErr)
+		}
 	}
 
 	log.Debug("Generating final report with %d findings", len(allFindings))
@@ -302,7 +306,11 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 			}
 		} else {
 			matched, err := regexp.MatchString(sel.PathPattern, op.Path)
-			if err != nil || !matched {
+			if err != nil {
+				log.Error("Invalid path_pattern regex %q: %v", sel.PathPattern, err)
+				return false
+			}
+			if !matched {
 				return false
 			}
 		}

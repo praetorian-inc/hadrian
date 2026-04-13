@@ -508,7 +508,9 @@ func (e *Executor) ExecuteGraphQL(
 		// Store response fields if specified
 		if len(test.StoreResponseFields) > 0 {
 			var responseData map[string]interface{}
-			if err := json.Unmarshal(bodyBytes, &responseData); err == nil {
+			if err := json.Unmarshal(bodyBytes, &responseData); err != nil {
+				log.Debug("Failed to extract stored fields from response: %v (test results may be inconclusive)", err)
+			} else {
 				// Check for GraphQL errors in response
 				if errors, ok := responseData["errors"]; ok && errors != nil {
 					if errArr, ok := errors.([]interface{}); ok && len(errArr) > 0 {
