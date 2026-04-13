@@ -261,33 +261,27 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 	return result, nil
 }
 
-// matchesCategory checks if a compiled template matches any of the requested categories.
-// Matching is done against template metadata (info.category and info.tags), not file paths.
+// matchesCategory reports whether tmpl matches any of the requested categories.
+// Matching is exact (case-insensitive) against info.category and info.tags.
+// The special value "all" matches every template.
 func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool {
 	for _, cat := range categories {
-		cat = strings.ToLower(cat)
-
+		cat = strings.ToLower(strings.TrimSpace(cat))
 		if cat == "" {
 			continue
 		}
-
-		if len(cat) < 2 {
-			continue
-		}
-
-		// "all" matches everything
 		if cat == "all" {
 			return true
 		}
 
-		// Match against info.category (e.g., "API1:2023" matches "api1")
-		if strings.Contains(strings.ToLower(tmpl.Info.Category), cat) {
+		// Exact match against info.category
+		if strings.EqualFold(tmpl.Info.Category, cat) {
 			return true
 		}
 
-		// Match against info.tags (e.g., "owasp-api-top10" matches "owasp")
+		// Exact match against info.tags
 		for _, tag := range tmpl.Info.Tags {
-			if strings.Contains(strings.ToLower(tag), cat) {
+			if strings.EqualFold(tag, cat) {
 				return true
 			}
 		}

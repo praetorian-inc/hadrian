@@ -176,7 +176,7 @@ info:
   category: "API1:2023"
   severity: "HIGH"
   test_pattern: "simple"
-  tags: ["owasp-api-top10", "bola"]
+  tags: ["owasp", "owasp-api-top10", "bola"]
 endpoint_selector:
   methods: ["GET"]
 role_selector:
@@ -218,14 +218,14 @@ detection:
 	require.Len(t, loaded, 1)
 	assert.Equal(t, "01-owasp", loaded[0].ID)
 
-	// "api1" should match via category
-	loaded, err = loadTemplateFiles(tmpDir, []string{"api1"})
+	// "API1:2023" should match via exact category match
+	loaded, err = loadTemplateFiles(tmpDir, []string{"API1:2023"})
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	assert.Equal(t, "01-owasp", loaded[0].ID)
 
-	// "custom" should match the custom template via category
-	loaded, err = loadTemplateFiles(tmpDir, []string{"custom"})
+	// "custom-internal" should match the custom template via exact category match
+	loaded, err = loadTemplateFiles(tmpDir, []string{"custom-internal"})
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	assert.Equal(t, "02-custom", loaded[0].ID)
@@ -246,24 +246,14 @@ detection:
 	require.NoError(t, err)
 	assert.Len(t, loaded, 0)
 
-	// Single character category should be skipped (too broad)
-	loaded, err = loadTemplateFiles(tmpDir, []string{"a"})
-	require.NoError(t, err)
-	assert.Len(t, loaded, 0)
-
-	// Two character category should work normally
-	loaded, err = loadTemplateFiles(tmpDir, []string{"pi"})
-	require.NoError(t, err)
-	assert.True(t, len(loaded) > 0)
-
 	// Empty string in categories should be skipped, not match everything
-	loaded, err = loadTemplateFiles(tmpDir, []string{"owasp", "", "api1"})
+	loaded, err = loadTemplateFiles(tmpDir, []string{"owasp", "", "bola"})
 	require.NoError(t, err)
 	require.Len(t, loaded, 1)
 	assert.Equal(t, "01-owasp", loaded[0].ID)
 
 	// Multiple categories should match union
-	loaded, err = loadTemplateFiles(tmpDir, []string{"api1", "regression"})
+	loaded, err = loadTemplateFiles(tmpDir, []string{"bola", "regression"})
 	require.NoError(t, err)
 	require.Len(t, loaded, 2)
 }

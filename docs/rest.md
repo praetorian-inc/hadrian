@@ -31,7 +31,7 @@ Optional Flags:
       --auth <file>             Authentication configuration YAML file
       --template-dir <dir>      Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)
       --template <list>         Specific template files to run
-      --category <list>         Filter by template metadata — matches against info.category and info.tags (case-insensitive substring, default: owasp)
+      --category <list>         Filter by template metadata — exact match against info.category and info.tags (case-insensitive, default: owasp)
       --owasp <list>            OWASP API categories to test (e.g., API1,API2,API5,API9)
       --header, -H <header>     Custom HTTP header (repeatable, format: "Key: Value")
       --timeout <n>             Request timeout in seconds (default: 30)
@@ -261,7 +261,7 @@ For complete crAPI setup including user registration and token generation, see [
 
 ### "Loaded 0 templates"
 
-The `--category` flag filters templates by matching against `info.category` and `info.tags` metadata fields (case-insensitive substring match). The default category `owasp` matches all 8 built-in templates via their `owasp-api-top10` tag. If you have custom templates without OWASP tags, use `--category all` or add appropriate tags to your templates.
+The `--category` flag filters templates by exact match against `info.category` and `info.tags` metadata fields (case-insensitive). The default category `owasp` matches all 8 built-in templates via their `owasp` tag. If you have custom templates without matching tags, use `--category all` or add appropriate tags to your templates.
 
 ### "Role has no credentials configured"
 
