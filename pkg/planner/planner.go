@@ -58,7 +58,8 @@ func parsePlan(raw string) (*AttackPlan, error) {
 
 	// Try parsing as full AttackPlan first (includes empty steps arrays)
 	var plan AttackPlan
-	if err := json.Unmarshal([]byte(raw), &plan); err == nil {
+	planErr := json.Unmarshal([]byte(raw), &plan)
+	if planErr == nil {
 		return &plan, nil
 	}
 
@@ -68,7 +69,7 @@ func parsePlan(raw string) (*AttackPlan, error) {
 		return &AttackPlan{Steps: steps}, nil
 	}
 
-	return nil, fmt.Errorf("could not parse LLM response as AttackPlan or []AttackStep")
+	return nil, fmt.Errorf("could not parse LLM response as AttackPlan or []AttackStep: %w", planErr)
 }
 
 // stripCodeFences removes markdown code fences that LLMs sometimes wrap around JSON.

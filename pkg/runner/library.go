@@ -97,7 +97,11 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 			llmClient, planErr = newPlannerLLMClient(config.PlannerProvider, config.PlannerModel, time.Duration(config.PlannerTimeout)*time.Second)
 		}
 		if planErr != nil {
-			log.Warn("Planner: %v — falling back to brute-force execution", planErr)
+			if config.PlannerOnly {
+				log.Warn("Planner: %v", planErr)
+			} else {
+				log.Warn("Planner: %v — falling back to brute-force execution", planErr)
+			}
 		} else {
 			p := planner.NewPlanner(llmClient)
 			planInput := &planner.PlannerInput{
@@ -110,7 +114,11 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 			}
 			attackPlan, planErr = p.Plan(ctx, planInput)
 			if planErr != nil {
-				log.Warn("Planner failed: %v — falling back to brute-force execution", planErr)
+				if config.PlannerOnly {
+					log.Warn("Planner failed: %v", planErr)
+				} else {
+					log.Warn("Planner failed: %v — falling back to brute-force execution", planErr)
+				}
 				attackPlan = nil
 			} else {
 				if len(attackPlan.Steps) == 0 {
@@ -173,8 +181,17 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		}
 	}
 
-	// Brute-force remaining combos (skip if --planner-only)
-	if !config.PlannerOnly || attackPlan == nil {
+	// If --planner-only, never run brute-force — even if the planner failed.
+	// The user explicitly opted into planner-only execution.
+	if config.PlannerOnly {
+		if attackPlan == nil {
+			log.Warn("Planner failed and --planner-only is set — returning 0 findings without brute-force fallback")
+		}
+		return allFindings, nil
+	}
+
+	// Brute-force remaining combos
+	{
 		for _, op := range spec.Operations {
 			for _, tmpl := range tmplFiles {
 				if !templateApplies(tmpl, op) {

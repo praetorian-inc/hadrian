@@ -156,6 +156,47 @@ func TestValidatePlan_DropsUnknownRole(t *testing.T) {
 	assert.Empty(t, result.Steps)
 }
 
+func TestStripCodeFences(t *testing.T) {
+	tests := []struct {
+		name, input, want string
+	}{
+		{"no fences", `{"steps":[]}`, `{"steps":[]}`},
+		{"json fence", "```json\n{\"steps\":[]}\n```", `{"steps":[]}`},
+		{"bare fence", "```\n{\"steps\":[]}\n```", `{"steps":[]}`},
+		{"fence no closing", "```json\n{\"steps\":[]}", `{"steps":[]}`},
+		{"empty string", "", ""},
+		{"whitespace around fence", "   ```json\n{\"x\":1}\n```   ", `{"x":1}`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, stripCodeFences(tc.input))
+		})
+	}
+}
+
+func TestSanitizeForLog(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		maxLen int
+		want   string
+	}{
+		{"plain text", "hello world", 100, "hello world"},
+		{"empty", "", 100, ""},
+		{"shorter than maxLen", "hi", 100, "hi"},
+		{"strips ANSI", "\x1b[31mred\x1b[0m", 100, "[31mred[0m"},
+		{"strips control chars", "a\x00b\x01c", 100, "abc"},
+		{"strips DEL", "a\x7fb", 100, "ab"},
+		{"truncates long", "abcdefghij", 5, "abcde..."},
+		{"multi-byte preserved", "héllo", 100, "héllo"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, sanitizeForLog(tc.input, tc.maxLen))
+		})
+	}
+}
+
 func TestAttackStepJSONRoundTrip(t *testing.T) {
 	step := AttackStep{
 		ID:           "step-1",

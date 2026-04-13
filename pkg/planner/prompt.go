@@ -3,7 +3,13 @@ package planner
 import (
 	"fmt"
 	"strings"
+
+	"github.com/praetorian-inc/hadrian/pkg/log"
 )
+
+// maxOperationsInPrompt caps how many operations are included in the prompt
+// to keep it within typical LLM context windows. Larger specs get truncated.
+const maxOperationsInPrompt = 200
 
 // buildPrompt constructs a structured prompt for the LLM from the planner input.
 func buildPrompt(input *PlannerInput) string {
@@ -24,10 +30,15 @@ RULES:
 
 `)
 
-	// Endpoints
+	// Endpoints (capped to keep prompt within LLM context limits)
 	b.WriteString("## API ENDPOINTS\n\n")
 	if input.Spec != nil {
-		for _, op := range input.Spec.Operations {
+		ops := input.Spec.Operations
+		if len(ops) > maxOperationsInPrompt {
+			log.Warn("Planner: API has %d operations — truncating to first %d to stay within LLM context", len(ops), maxOperationsInPrompt)
+			ops = ops[:maxOperationsInPrompt]
+		}
+		for _, op := range ops {
 			params := ""
 			if len(op.PathParams) > 0 {
 				names := make([]string, len(op.PathParams))
