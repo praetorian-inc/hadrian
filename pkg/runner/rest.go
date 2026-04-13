@@ -307,7 +307,7 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 		} else {
 			matched, err := regexp.MatchString(sel.PathPattern, op.Path)
 			if err != nil {
-				log.Warn("Invalid path_pattern regex %q: %v", sel.PathPattern, err)
+				log.Error("Invalid path_pattern regex %q: %v", sel.PathPattern, err)
 				return false
 			}
 			if !matched {
