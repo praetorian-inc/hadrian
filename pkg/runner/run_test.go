@@ -256,4 +256,23 @@ detection:
 	loaded, err = loadTemplateFiles(tmpDir, []string{"bola", "regression"})
 	require.NoError(t, err)
 	require.Len(t, loaded, 2)
+
+	// Whitespace trimming: leading/trailing spaces should be stripped before matching
+	loaded, err = loadTemplateFiles(tmpDir, []string{" owasp "})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// Case-insensitive: uppercase "OWASP" should match the lowercase "owasp" tag
+	loaded, err = loadTemplateFiles(tmpDir, []string{"OWASP"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// Non-YAML files in the template directory should be ignored
+	err = os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("not a template"), 0644)
+	require.NoError(t, err)
+	loaded, err = loadTemplateFiles(tmpDir, []string{"all"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 2) // Still only the 2 YAML templates
 }

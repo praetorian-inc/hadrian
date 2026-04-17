@@ -79,7 +79,7 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout (seconds)")
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
-	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Test categories (owasp, custom)")
+	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Filter by template metadata — exact match against info.category and info.tags (case-insensitive, default: owasp)")
 	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)")
 	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 	cmd.Flags().StringVar(&config.AuditLog, "audit-log", ".hadrian/audit.log", "Audit log file")
@@ -138,6 +138,9 @@ func runTest(ctx context.Context, config Config) error {
 	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
 	if err != nil {
 		return fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
+	}
+	if len(tmplFiles) == 0 {
+		log.Warn("No templates matched categories %v in %s — check --category values or template tags", config.Categories, templateDir)
 	}
 	if len(config.Templates) > 0 {
 		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
@@ -266,11 +269,11 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 // The special value "all" matches every template.
 func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool {
 	for _, cat := range categories {
-		cat = strings.ToLower(strings.TrimSpace(cat))
+		cat = strings.TrimSpace(cat)
 		if cat == "" {
 			continue
 		}
-		if cat == "all" {
+		if strings.EqualFold(cat, "all") {
 			return true
 		}
 
