@@ -134,7 +134,7 @@ info:
   description: |
     Tests for Broken Object Level Authorization by attempting
     to access resources belonging to other users.
-  tags: ["bola", "owasp-api-top10", "api1"]
+  tags: ["owasp", "bola", "owasp-api-top10", "api1"]
   requires_llm_triage: true
   test_pattern: "simple"
 
