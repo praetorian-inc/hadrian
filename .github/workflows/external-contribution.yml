@@ -8,5 +8,5 @@ on:
 
 jobs:
   notify:
-    uses: praetorian-inc/public-workflows/.github/workflows/external-contrib-notify.yml@ed9e647c09219b8058da8fcaa908eb03520feccd  # v2.0.0
+    uses: praetorian-inc/public-workflows/.github/workflows/external-contrib-notify.yml@faa2e42989736cf9b3f47e5377dd5f2e0327517f  # v2.0.2
     secrets: inherit
