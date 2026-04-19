@@ -50,10 +50,11 @@ func NewOllamaClient(host, model string, timeout time.Duration) *OllamaClient {
 
 func (c *OllamaClient) Generate(ctx context.Context, prompt string) (string, error) {
 	reqBody := map[string]interface{}{
-		"model":  c.model,
-		"prompt": prompt,
-		"stream": false,
-		"format": "json",
+		"model":   c.model,
+		"prompt":  prompt,
+		"stream":  false,
+		"format":  "json",
+		"options": map[string]interface{}{"temperature": 0.2},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -79,7 +80,7 @@ func (c *OllamaClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Ollama API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:staticcheck // proper noun
+		return "", &APIError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("Ollama API returned status %d: %.500s", resp.StatusCode, string(respBody))} //nolint:staticcheck // proper noun
 	}
 
 	var result struct {

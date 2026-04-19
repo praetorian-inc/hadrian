@@ -123,17 +123,17 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 				attackPlan = nil
 			} else {
 				if len(attackPlan.Steps) == 0 {
-					log.Warn("LLM Attack Plan: 0 steps")
+					log.Info("LLM Attack Plan: 0 steps")
 					if attackPlan.Reasoning != "" {
-						log.Warn("Reason: %s", attackPlan.Reasoning)
+						log.Info("Reason: %s", attackPlan.Reasoning)
 					}
 				} else {
-					log.Warn("LLM Attack Plan (%d steps)", len(attackPlan.Steps))
+					log.Info("LLM Attack Plan (%d steps)", len(attackPlan.Steps))
 					if attackPlan.Reasoning != "" {
-						log.Warn("Strategy: %s", attackPlan.Reasoning)
+						log.Info("Strategy: %s", attackPlan.Reasoning)
 					}
 					for i, step := range attackPlan.Steps {
-						log.Warn("[%d] %s %s -> template=%s attacker=%s victim=%s",
+						log.Info("[%d] %s %s -> template=%s attacker=%s victim=%s",
 							i+1, step.Method, step.Path, step.TemplateID, step.AttackerRole, step.VictimRole)
 						if step.Rationale != "" {
 							log.Debug("    %s", step.Rationale)
@@ -159,7 +159,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 			opMap[normalizeOpKey(o.Method, o.Path)] = o
 		}
 
-		log.Warn("Executing %d planned steps...", len(attackPlan.Steps))
+		log.Info("Executing %d planned steps...", len(attackPlan.Steps))
 		for i, step := range attackPlan.Steps {
 			tmpl, ok := tmplMap[step.TemplateID]
 			if !ok {
@@ -186,7 +186,10 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 	// The user explicitly opted into planner-only execution.
 	if config.PlannerOnly {
 		if attackPlan == nil {
-			log.Warn("Planner failed and --planner-only is set — returning 0 findings without brute-force fallback")
+			return nil, fmt.Errorf("planner failed and --planner-only is set — cannot continue without a plan")
+		}
+		if len(allFindings) == 0 && len(attackPlan.Steps) > 0 {
+			log.Warn("All %d planned steps were dropped or failed — 0 valid tests executed", len(attackPlan.Steps))
 		}
 		return allFindings, nil
 	}

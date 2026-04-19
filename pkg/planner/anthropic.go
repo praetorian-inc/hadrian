@@ -48,9 +48,10 @@ func NewAnthropicClient(apiKey, model string, timeout time.Duration) (*Anthropic
 
 func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, error) {
 	reqBody := map[string]interface{}{
-		"model":      c.model,
-		"max_tokens": 4096,
-		"system":     "You are a security expert. Respond with valid JSON only.",
+		"model":       c.model,
+		"max_tokens":  4096,
+		"temperature": 0.2,
+		"system":      "You are a security expert. Respond with valid JSON only.",
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
 		},
@@ -81,7 +82,7 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Anthropic API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:staticcheck // proper noun
+		return "", &APIError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("Anthropic API returned status %d: %.500s", resp.StatusCode, string(respBody))} //nolint:staticcheck // proper noun
 	}
 
 	var result struct {

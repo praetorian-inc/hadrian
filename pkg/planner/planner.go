@@ -35,7 +35,7 @@ func (p *llmPlanner) Plan(ctx context.Context, input *PlannerInput) (*AttackPlan
 
 	log.Debug("Sending planning prompt to LLM (%d bytes)", len(prompt))
 
-	raw, err := p.client.Generate(ctx, prompt)
+	raw, err := RetryGenerate(ctx, p.client, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM generation failed: %w", err)
 	}

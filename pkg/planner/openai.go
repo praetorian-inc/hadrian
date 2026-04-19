@@ -80,7 +80,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OpenAI API returned status %d: %s", resp.StatusCode, string(respBody)) //nolint:staticcheck // proper noun
+		return "", &APIError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("OpenAI API returned status %d: %.500s", resp.StatusCode, string(respBody))} //nolint:staticcheck // proper noun
 	}
 
 	var result struct {
