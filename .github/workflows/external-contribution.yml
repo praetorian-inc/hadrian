@@ -8,5 +8,18 @@ on:
 
 jobs:
   notify:
-    uses: praetorian-inc/public-workflows/.github/workflows/external-contrib-notify.yml@ed9e647c09219b8058da8fcaa908eb03520feccd  # v2.0.0
-    secrets: inherit
+    uses: praetorian-inc/public-workflows/.github/workflows/external-contrib-notify.yml@faa2e42989736cf9b3f47e5377dd5f2e0327517f  # v2.0.2
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    secrets:
+      EXTERNAL_CONTRIB_APP_ID: ${{ secrets.EXTERNAL_CONTRIB_APP_ID }}
+      EXTERNAL_CONTRIB_APP_PRIVATE_KEY: ${{ secrets.EXTERNAL_CONTRIB_APP_PRIVATE_KEY }}
+      LINEAR_API_KEY: ${{ secrets.LINEAR_API_KEY }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      LINEAR_TEAM_ID: ${{ secrets.LINEAR_TEAM_ID }}
+      SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+      LINEAR_ASSIGNEE_ID: ${{ secrets.LINEAR_ASSIGNEE_ID }}
+      LINEAR_PARENT_ISSUE_ID: ${{ secrets.LINEAR_PARENT_ISSUE_ID }}
+      LINEAR_PROJECT_ID: ${{ secrets.LINEAR_PROJECT_ID }}
