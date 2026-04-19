@@ -8,10 +8,5 @@ on:
 
 jobs:
   notify:
-    uses: praetorian-inc/public-workflows/.github/workflows/external-contrib-notify.yml@c357674282ed4de58cecc0f30b4e25d39871aa2f  # v1.2.0
-    with:
-      slack-channel-id: ${{ secrets.SLACK_CHANNEL_ID }}
-      linear-team-id: ${{ secrets.LINEAR_TEAM_ID }}
-      linear-assignee-id: ${{ secrets.LINEAR_ASSIGNEE_ID }}
-      linear-parent-issue-id: ${{ secrets.LINEAR_PARENT_ISSUE_ID }}
+    uses: praetorian-inc/public-workflows/.github/workflows/external-contrib-notify.yml@ed9e647c09219b8058da8fcaa908eb03520feccd  # v2.0.0
     secrets: inherit
