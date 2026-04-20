@@ -76,7 +76,7 @@ USER_TOKEN=$(crapi_login "user1@test.com" "Testpass123!")
 USER2_TOKEN=$(crapi_login "user2@test.com" "Testpass123!")
 MECH_TOKEN=$(crapi_login "mechanic1@test.com" "Testpass123!")
 
-if [ -z "$USER_TOKEN" ] || [ -z "$USER2_TOKEN" ]; then
+if [ -z "$USER_TOKEN" ] || [ -z "$USER2_TOKEN" ] || [ -z "$MECH_TOKEN" ]; then
     log_fail "Failed to get crAPI tokens"
     exit 1
 fi
@@ -151,6 +151,37 @@ run_test "planner-context steers plan" \
         --planner --planner-only --planner-provider "$PROVIDER" \
         --planner-context "Only test the orders endpoint" \
         --output json --output-file "$RESULT_FILE_CTX"
+
+# Validate result contents (not just exit status)
+assert_findings() {
+    local label="$1" file="$2" min_count="$3"
+    if [ ! -f "$file" ]; then
+        log_fail "$label: result file not found"
+        FAILED=$((FAILED + 1))
+        return
+    fi
+    local count
+    count=$(python3 -c "import json; d=json.load(open('$file')); print(len(d.get('findings',[])))" 2>/dev/null || echo "0")
+    if [ "$count" -ge "$min_count" ]; then
+        log_ok "$label: $count findings (>= $min_count expected)"
+        PASSED=$((PASSED + 1))
+    else
+        log_fail "$label: only $count findings (expected >= $min_count)"
+        FAILED=$((FAILED + 1))
+    fi
+}
+
+# Test 1 (plan + brute-force) should find crAPI BOLA vulns
+assert_findings "test1 has findings" "$RESULT_FILE" 1
+
+# Test 2 (planner-only) — may have 0 if plan missed orders, but file should exist
+if [ -f "$RESULT_FILE_ONLY" ]; then
+    log_ok "test2 result file exists"
+    PASSED=$((PASSED + 1))
+else
+    log_fail "test2 result file missing"
+    FAILED=$((FAILED + 1))
+fi
 
 # Summary
 echo ""

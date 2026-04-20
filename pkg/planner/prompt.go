@@ -10,9 +10,11 @@ import (
 // maxOperationsInPrompt caps how many operations are included in the prompt
 // to keep it within typical LLM context windows. Larger specs get truncated.
 const (
-	maxOperationsInPrompt = 200
-	maxTemplatesInPrompt  = 100
-	maxRolesInPrompt      = 50
+	maxOperationsInPrompt   = 200
+	maxTemplatesInPrompt    = 100
+	maxRolesInPrompt        = 50
+	maxPriorResultsInPrompt = 50
+	maxCustomContextLen     = 2000 // characters
 )
 
 // buildPrompt constructs a structured prompt for the LLM from the planner input.
@@ -102,10 +104,15 @@ RULES:
 	}
 	b.WriteString("\n")
 
-	// Prior results
+	// Prior results (capped)
 	if len(input.PriorResults) > 0 {
 		b.WriteString("## PRIOR FINDINGS (from previous run)\n\n")
-		for _, f := range input.PriorResults {
+		results := input.PriorResults
+		if len(results) > maxPriorResultsInPrompt {
+			log.Warn("Planner: %d prior results — truncating to %d to stay within LLM context", len(results), maxPriorResultsInPrompt)
+			results = results[:maxPriorResultsInPrompt]
+		}
+		for _, f := range results {
 			b.WriteString(fmt.Sprintf("- %s %s category=%s attacker=%s victim=%s vuln=%v\n",
 				f.Method, f.Endpoint, f.Category, f.AttackerRole, f.VictimRole, f.IsVulnerability))
 		}
@@ -125,10 +132,15 @@ RULES:
 			strings.Join(input.Options.FocusEndpoints, ", ")))
 	}
 
-	// Custom context
+	// Custom context (capped)
 	if input.Options.CustomContext != "" {
+		ctx := input.Options.CustomContext
+		if len(ctx) > maxCustomContextLen {
+			log.Warn("Planner: custom context is %d chars — truncating to %d", len(ctx), maxCustomContextLen)
+			ctx = ctx[:maxCustomContextLen]
+		}
 		b.WriteString("## ADDITIONAL CONTEXT\n\n")
-		b.WriteString(input.Options.CustomContext)
+		b.WriteString(ctx)
 		b.WriteString("\n\n")
 	}
 

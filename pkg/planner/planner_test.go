@@ -135,8 +135,8 @@ func TestParsePlan_BareArray(t *testing.T) {
 func TestValidatePlan_DropsUnknownTemplate(t *testing.T) {
 	plan := &AttackPlan{
 		Steps: []AttackStep{
-			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user"},
-			{ID: "s2", TemplateID: "nonexistent", AttackerRole: "user"},
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", Method: "GET", Path: "/api/users/{id}"},
+			{ID: "s2", TemplateID: "nonexistent", AttackerRole: "user", Method: "GET", Path: "/api/users/{id}"},
 		},
 	}
 
@@ -148,7 +148,18 @@ func TestValidatePlan_DropsUnknownTemplate(t *testing.T) {
 func TestValidatePlan_DropsUnknownRole(t *testing.T) {
 	plan := &AttackPlan{
 		Steps: []AttackStep{
-			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "hacker"},
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "hacker", Method: "GET", Path: "/api/users/{id}"},
+		},
+	}
+
+	result := validatePlan(plan, testInput())
+	assert.Empty(t, result.Steps)
+}
+
+func TestValidatePlan_DropsUnknownOperation(t *testing.T) {
+	plan := &AttackPlan{
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", Method: "GET", Path: "/api/nonexistent"},
 		},
 	}
 
@@ -184,7 +195,7 @@ func TestSanitizeForLog(t *testing.T) {
 		{"plain text", "hello world", 100, "hello world"},
 		{"empty", "", 100, ""},
 		{"shorter than maxLen", "hi", 100, "hi"},
-		{"strips ANSI", "\x1b[31mred\x1b[0m", 100, "[31mred[0m"},
+		{"strips ANSI", "\x1b[31mred\x1b[0m", 100, "red"},
 		{"strips control chars", "a\x00b\x01c", 100, "abc"},
 		{"strips DEL", "a\x7fb", 100, "ab"},
 		{"truncates long", "abcdefghij", 5, "abcde..."},

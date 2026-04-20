@@ -104,7 +104,7 @@ hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file 
 hadrian test rest --api api.yaml --roles roles.yaml \
   --llm-host http://localhost:11434 --llm-model llama3.2:latest
 
-# AI-assisted attack planning (prioritizes high-risk endpoints)
+# AI-assisted attack planning (requires OPENAI_API_KEY, or use --planner-provider for Anthropic/Ollama)
 hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --planner
 
 # Run only LLM-planned steps (faster, targeted testing)

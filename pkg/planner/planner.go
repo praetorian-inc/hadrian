@@ -65,11 +65,12 @@ func parsePlan(raw string) (*AttackPlan, error) {
 
 	// Try parsing as bare array of steps
 	var steps []AttackStep
-	if err := json.Unmarshal([]byte(raw), &steps); err == nil {
+	arrayErr := json.Unmarshal([]byte(raw), &steps)
+	if arrayErr == nil {
 		return &AttackPlan{Steps: steps}, nil
 	}
 
-	return nil, fmt.Errorf("could not parse LLM response as AttackPlan or []AttackStep: %w", planErr)
+	return nil, fmt.Errorf("could not parse LLM response: as AttackPlan: %v; as []AttackStep: %v", planErr, arrayErr)
 }
 
 // stripCodeFences removes markdown code fences that LLMs sometimes wrap around JSON.
@@ -89,7 +90,7 @@ func stripCodeFences(s string) string {
 	return s
 }
 
-// validatePlan filters out steps that reference non-existent templates or roles.
+// validatePlan filters out steps that reference non-existent templates, roles, or operations.
 func validatePlan(plan *AttackPlan, input *PlannerInput) *AttackPlan {
 	templateIDs := make(map[string]bool)
 	for _, t := range input.Templates {
@@ -100,6 +101,14 @@ func validatePlan(plan *AttackPlan, input *PlannerInput) *AttackPlan {
 	if input.Roles != nil {
 		for _, r := range input.Roles.Roles {
 			roleNames[r.Name] = true
+		}
+	}
+
+	operationKeys := make(map[string]bool)
+	if input.Spec != nil {
+		for _, op := range input.Spec.Operations {
+			key := strings.ToUpper(strings.TrimSpace(op.Method)) + " " + strings.TrimRight(strings.TrimSpace(op.Path), "/")
+			operationKeys[key] = true
 		}
 	}
 
@@ -117,6 +126,11 @@ func validatePlan(plan *AttackPlan, input *PlannerInput) *AttackPlan {
 			log.Debug("Planner: dropping step %s — unknown victim role %q", step.ID, step.VictimRole)
 			continue
 		}
+		opKey := strings.ToUpper(strings.TrimSpace(step.Method)) + " " + strings.TrimRight(strings.TrimSpace(step.Path), "/")
+		if !operationKeys[opKey] {
+			log.Debug("Planner: dropping step %s — operation %s %s not in API spec", step.ID, step.Method, step.Path)
+			continue
+		}
 		valid = append(valid, step)
 	}
 
@@ -126,17 +140,27 @@ func validatePlan(plan *AttackPlan, input *PlannerInput) *AttackPlan {
 	}
 }
 
-// sanitizeForLog strips control/ANSI characters and truncates for safe logging.
+// sanitizeForLog strips ANSI escape sequences and control characters, then truncates by rune count.
 func sanitizeForLog(s string, maxLen int) string {
+	// Strip ANSI escape sequences (ESC [ ... final byte)
 	var b strings.Builder
-	for _, r := range s {
-		if r >= 32 && r != 127 {
-			b.WriteRune(r)
+	runes := []rune(s)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == 0x1b && i+1 < len(runes) && runes[i+1] == '[' {
+			// Skip ESC [ ... until final byte (letter or ~)
+			i += 2
+			for i < len(runes) && !((runes[i] >= 'A' && runes[i] <= 'Z') || (runes[i] >= 'a' && runes[i] <= 'z') || runes[i] == '~') {
+				i++
+			}
+			continue
+		}
+		if runes[i] >= 32 && runes[i] != 127 {
+			b.WriteRune(runes[i])
 		}
 	}
-	result := b.String()
+	result := []rune(b.String())
 	if len(result) > maxLen {
-		result = result[:maxLen] + "..."
+		return string(result[:maxLen]) + "..."
 	}
-	return result
+	return string(result)
 }

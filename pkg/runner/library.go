@@ -160,6 +160,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		}
 
 		log.Info("Executing %d planned steps...", len(attackPlan.Steps))
+		seen := make(map[string]bool) // dedup within the plan itself
 		for i, step := range attackPlan.Steps {
 			tmpl, ok := tmplMap[step.TemplateID]
 			if !ok {
@@ -172,13 +173,27 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 				continue
 			}
 
+			// Check template actually applies to this operation
+			if !templateApplies(tmpl, op) {
+				log.Warn("Plan step %d: template %s does not match operation %s %s, skipping", i+1, tmpl.ID, op.Method, op.Path)
+				continue
+			}
+
+			// Dedup: skip if we already ran this exact combo in this plan
+			dedupKey := tmpl.ID + "|" + op.Method + "|" + op.Path
+			if seen[dedupKey] {
+				log.Debug("Plan step %d: duplicate of earlier step, skipping", i+1)
+				continue
+			}
+			seen[dedupKey] = true
+
 			findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
 			if err != nil {
 				log.Warn("Plan step %d: %s failed on %s %s: %v", i+1, tmpl.ID, op.Method, op.Path, err)
 				continue
 			}
 			allFindings = append(allFindings, findings...)
-			covered[tmpl.ID+"|"+op.Method+"|"+op.Path] = true
+			covered[dedupKey] = true
 		}
 	}
 
