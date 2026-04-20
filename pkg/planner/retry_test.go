@@ -76,22 +76,20 @@ func TestRetryGenerate_NoRetryOnPermanentError(t *testing.T) {
 
 func TestRetryGenerate_ContextCancellation(t *testing.T) {
 	orig := retryBackoffs
-	retryBackoffs = []time.Duration{5 * time.Second} // long backoff
+	retryBackoffs = []time.Duration{5 * time.Second}
 	defer func() { retryBackoffs = orig }()
 
+	// Pre-cancel the context for determinism (no timing race)
 	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
 	client := &sequenceMockClient{responses: []mockResponse{
 		{err: &APIError{StatusCode: 429, Message: "rate limited"}},
-		{result: "ok", err: nil},
 	}}
-
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		cancel()
-	}()
 
 	_, err := RetryGenerate(ctx, client, "prompt")
 	require.Error(t, err)
+	assert.Equal(t, 1, client.calls) // should not retry after cancel
 }
 
 func TestRetryGenerate_ExhaustsRetries(t *testing.T) {

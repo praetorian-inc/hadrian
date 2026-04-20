@@ -18,9 +18,10 @@ const (
 
 // OpenAIClient implements LLMClient using the OpenAI chat completions API.
 type OpenAIClient struct {
-	apiKey string
-	model  string
-	client *http.Client
+	apiKey   string
+	model    string
+	endpoint string
+	client   *http.Client
 }
 
 // NewOpenAIClient creates an OpenAI client. If apiKey is empty, reads OPENAI_API_KEY env var.
@@ -39,9 +40,10 @@ func NewOpenAIClient(apiKey, model string, timeout time.Duration) (*OpenAIClient
 		timeout = 120 * time.Second
 	}
 	return &OpenAIClient{
-		apiKey: apiKey,
-		model:  model,
-		client: &http.Client{Timeout: timeout},
+		apiKey:   apiKey,
+		model:    model,
+		endpoint: openAIEndpoint,
+		client:   &http.Client{Timeout: timeout},
 	}, nil
 }
 
@@ -61,7 +63,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", openAIEndpoint, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}

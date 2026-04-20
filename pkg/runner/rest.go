@@ -223,14 +223,11 @@ func runTest(ctx context.Context, config Config) error {
 // HELPER FUNCTIONS
 // =============================================================================
 
-// getTemplateDir returns the template directory path, using defaultPath if no
-// environment variable override is set.
+// getTemplateDir returns the template directory path, defaulting to defaultPath if HADRIAN_TEMPLATES is not set.
 func getTemplateDir(defaultPath string) string {
-	// Check for environment variable override
 	if dir := os.Getenv("HADRIAN_TEMPLATES"); dir != "" {
 		return dir
 	}
-
 	return defaultPath
 }
 
@@ -349,7 +346,7 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 		} else {
 			matched, err := regexp.MatchString(sel.PathPattern, op.Path)
 			if err != nil {
-				log.Error("Invalid path_pattern regex %q: %v", sel.PathPattern, err)
+				log.Warn("Invalid path_pattern regex %q: %v", sel.PathPattern, err)
 				return false
 			}
 			if !matched {

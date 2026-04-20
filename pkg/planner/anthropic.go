@@ -19,9 +19,10 @@ const (
 
 // AnthropicClient implements LLMClient using the Anthropic Messages API.
 type AnthropicClient struct {
-	apiKey string
-	model  string
-	client *http.Client
+	apiKey   string
+	model    string
+	endpoint string
+	client   *http.Client
 }
 
 // NewAnthropicClient creates an Anthropic client. If apiKey is empty, reads ANTHROPIC_API_KEY env var.
@@ -40,9 +41,10 @@ func NewAnthropicClient(apiKey, model string, timeout time.Duration) (*Anthropic
 		timeout = 120 * time.Second
 	}
 	return &AnthropicClient{
-		apiKey: apiKey,
-		model:  model,
-		client: &http.Client{Timeout: timeout},
+		apiKey:   apiKey,
+		model:    model,
+		endpoint: anthropicEndpoint,
+		client:   &http.Client{Timeout: timeout},
 	}, nil
 }
 
@@ -62,7 +64,7 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", anthropicEndpoint, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}

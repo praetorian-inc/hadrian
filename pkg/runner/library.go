@@ -88,152 +88,167 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)
 
 	// LLM-assisted attack planning (experimental)
-	var attackPlan *planner.AttackPlan
-	if config.PlannerEnabled {
-		var llmClient planner.LLMClient
-		var planErr error
-		if config.PlannerLLMClient != nil {
-			llmClient = config.PlannerLLMClient
-		} else {
-			llmClient, planErr = newPlannerLLMClient(config.PlannerProvider, config.PlannerModel, time.Duration(config.PlannerTimeout)*time.Second)
-		}
-		if planErr != nil {
-			if config.PlannerOnly {
-				log.Warn("Planner: %v", planErr)
-			} else {
-				log.Warn("Planner: %v — falling back to brute-force execution", planErr)
-			}
-		} else {
-			p := planner.NewPlanner(llmClient)
-			planInput := &planner.PlannerInput{
-				Spec:      spec,
-				Roles:     rolesCfg,
-				Templates: tmplFiles,
-				Options: planner.PlannerOptions{
-					CustomContext: config.PlannerContext,
-				},
-			}
-			attackPlan, planErr = p.Plan(ctx, planInput)
-			if planErr != nil {
-				if config.PlannerOnly {
-					log.Warn("Planner failed: %v", planErr)
-				} else {
-					log.Warn("Planner failed: %v — falling back to brute-force execution", planErr)
-				}
-				attackPlan = nil
-			} else {
-				if len(attackPlan.Steps) == 0 {
-					log.Info("LLM Attack Plan: 0 steps")
-					if attackPlan.Reasoning != "" {
-						log.Info("Reason: %s", attackPlan.Reasoning)
-					}
-				} else {
-					log.Info("LLM Attack Plan (%d steps)", len(attackPlan.Steps))
-					if attackPlan.Reasoning != "" {
-						log.Info("Strategy: %s", attackPlan.Reasoning)
-					}
-					for i, step := range attackPlan.Steps {
-						log.Info("[%d] %s %s -> template=%s attacker=%s victim=%s",
-							i+1, step.Method, step.Path, step.TemplateID, step.AttackerRole, step.VictimRole)
-						if step.Rationale != "" {
-							log.Debug("    %s", step.Rationale)
-						}
-					}
-				}
-			}
-		}
+	attackPlan, planErr := buildAttackPlan(ctx, config, spec, rolesCfg, tmplFiles)
+	if planErr != nil && config.PlannerOnly {
+		return nil, fmt.Errorf("planner failed (--planner-only): %w", planErr)
 	}
 
 	var allFindings []*model.Finding
+	covered, executedSteps := executePlannedSteps(ctx, attackPlan, tmplFiles, spec, executor, mutationExecutor, rolesCfg, authCfg)
+	allFindings = append(allFindings, covered.findings...)
 
-	// Execute planned steps first
-	covered := make(map[string]bool)
-	executedSteps := 0
-	if attackPlan != nil && len(attackPlan.Steps) > 0 {
-		// Build lookup maps
-		tmplMap := make(map[string]*templates.CompiledTemplate)
-		for _, t := range tmplFiles {
-			tmplMap[t.ID] = t
-		}
-		opMap := make(map[string]*model.Operation) // "METHOD /path" → operation
-		for _, o := range spec.Operations {
-			opMap[normalizeOpKey(o.Method, o.Path)] = o
-		}
-
-		log.Info("Executing %d planned steps...", len(attackPlan.Steps))
-		seen := make(map[string]bool)
-		for i, step := range attackPlan.Steps {
-			tmpl, ok := tmplMap[step.TemplateID]
-			if !ok {
-				log.Warn("Plan step %d: template %q not found, skipping", i+1, step.TemplateID)
-				continue
-			}
-			op, ok := opMap[normalizeOpKey(step.Method, step.Path)]
-			if !ok {
-				log.Warn("Plan step %d: operation %s %s not found, skipping", i+1, step.Method, step.Path)
-				continue
-			}
-
-			// Check template actually applies to this operation
-			if !templateApplies(tmpl, op) {
-				log.Warn("Plan step %d: template %s does not match operation %s %s, skipping", i+1, tmpl.ID, op.Method, op.Path)
-				continue
-			}
-
-			// Dedup: skip if we already ran this exact combo in this plan
-			dedupKey := tmpl.ID + "|" + op.Method + "|" + op.Path
-			if seen[dedupKey] {
-				log.Debug("Plan step %d: duplicate of earlier step, skipping", i+1)
-				continue
-			}
-			seen[dedupKey] = true
-
-			findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
-			if err != nil {
-				log.Warn("Plan step %d: %s failed on %s %s: %v", i+1, tmpl.ID, op.Method, op.Path, err)
-				continue
-			}
-			executedSteps++
-			allFindings = append(allFindings, findings...)
-			covered[dedupKey] = true
-		}
-	}
-
-	// If --planner-only, never run brute-force — even if the planner failed.
-	// The user explicitly opted into planner-only execution.
 	if config.PlannerOnly {
-		if attackPlan == nil {
-			return nil, fmt.Errorf("planner failed and --planner-only is set — cannot continue without a plan")
-		}
-		if executedSteps == 0 && len(attackPlan.Steps) > 0 {
+		if executedSteps == 0 && attackPlan != nil && len(attackPlan.Steps) > 0 {
 			log.Warn("All %d planned steps were dropped or failed — 0 valid tests executed", len(attackPlan.Steps))
 		}
 		return allFindings, nil
 	}
 
-	// Brute-force remaining combos
-	{
-		for _, op := range spec.Operations {
-			for _, tmpl := range tmplFiles {
-				if !templateApplies(tmpl, op) {
-					continue
-				}
-				// Skip combos already covered by the plan
-				if covered[tmpl.ID+"|"+op.Method+"|"+op.Path] {
-					continue
-				}
-
-				findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
-				if err != nil {
-					log.Warn("Template %s failed on %s %s: %v", tmpl.ID, op.Method, op.Path, err)
-					continue
-				}
-				allFindings = append(allFindings, findings...)
+	// Brute-force remaining combos (skip already-covered)
+	for _, op := range spec.Operations {
+		for _, tmpl := range tmplFiles {
+			if !templateApplies(tmpl, op) {
+				continue
 			}
+			if covered.set[tmpl.ID+"|"+op.Method+"|"+op.Path] {
+				continue
+			}
+			findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
+			if err != nil {
+				log.Warn("Template %s failed on %s %s: %v", tmpl.ID, op.Method, op.Path, err)
+				continue
+			}
+			allFindings = append(allFindings, findings...)
 		}
 	}
 
 	return allFindings, nil
+}
+
+// planResult holds both findings and the coverage set from planned step execution.
+type planResult struct {
+	findings []*model.Finding
+	set      map[string]bool
+}
+
+// buildAttackPlan creates an LLM attack plan if planning is enabled.
+// Returns (nil, nil) when planning is disabled.
+func buildAttackPlan(ctx context.Context, config Config, spec *model.APISpec, rolesCfg *roles.RoleConfig, tmplFiles []*templates.CompiledTemplate) (*planner.AttackPlan, error) {
+	if !config.PlannerEnabled {
+		return nil, nil
+	}
+
+	var llmClient planner.LLMClient
+	var err error
+	if config.PlannerLLMClient != nil {
+		llmClient = config.PlannerLLMClient
+	} else {
+		llmClient, err = newPlannerLLMClient(config.PlannerProvider, config.PlannerModel, time.Duration(config.PlannerTimeout)*time.Second)
+		if err != nil {
+			if !config.PlannerOnly {
+				log.Warn("Planner: %v — falling back to brute-force execution", err)
+			}
+			return nil, err
+		}
+	}
+
+	p := planner.NewPlanner(llmClient)
+	plan, err := p.Plan(ctx, &planner.PlannerInput{
+		Spec:      spec,
+		Roles:     rolesCfg,
+		Templates: tmplFiles,
+		Options:   planner.PlannerOptions{CustomContext: config.PlannerContext},
+	})
+	if err != nil {
+		if !config.PlannerOnly {
+			log.Warn("Planner failed: %v — falling back to brute-force execution", err)
+		}
+		return nil, err
+	}
+
+	// Log the plan
+	if len(plan.Steps) == 0 {
+		log.Info("LLM Attack Plan: 0 steps")
+		if plan.Reasoning != "" {
+			log.Info("Reason: %s", plan.Reasoning)
+		}
+	} else {
+		log.Info("LLM Attack Plan (%d steps)", len(plan.Steps))
+		if plan.Reasoning != "" {
+			log.Info("Strategy: %s", plan.Reasoning)
+		}
+		for i, step := range plan.Steps {
+			log.Info("[%d] %s %s -> template=%s attacker=%s victim=%s",
+				i+1, step.Method, step.Path, step.TemplateID, step.AttackerRole, step.VictimRole)
+			if step.Rationale != "" {
+				log.Debug("    %s", step.Rationale)
+			}
+		}
+	}
+
+	return plan, nil
+}
+
+// executePlannedSteps runs the attack plan steps and returns coverage info + executed count.
+func executePlannedSteps(
+	ctx context.Context,
+	plan *planner.AttackPlan,
+	tmplFiles []*templates.CompiledTemplate,
+	spec *model.APISpec,
+	executor *templates.Executor,
+	mutationExecutor *orchestrator.MutationExecutor,
+	rolesCfg *roles.RoleConfig,
+	authCfg *auth.AuthConfig,
+) (planResult, int) {
+	result := planResult{set: make(map[string]bool)}
+	if plan == nil || len(plan.Steps) == 0 {
+		return result, 0
+	}
+
+	tmplMap := make(map[string]*templates.CompiledTemplate)
+	for _, t := range tmplFiles {
+		tmplMap[t.ID] = t
+	}
+	opMap := make(map[string]*model.Operation)
+	for _, o := range spec.Operations {
+		opMap[normalizeOpKey(o.Method, o.Path)] = o
+	}
+
+	log.Info("Executing %d planned steps...", len(plan.Steps))
+	seen := make(map[string]bool)
+	executed := 0
+	for i, step := range plan.Steps {
+		tmpl, ok := tmplMap[step.TemplateID]
+		if !ok {
+			log.Warn("Plan step %d: template %q not found, skipping", i+1, step.TemplateID)
+			continue
+		}
+		op, ok := opMap[normalizeOpKey(step.Method, step.Path)]
+		if !ok {
+			log.Warn("Plan step %d: operation %s %s not found, skipping", i+1, step.Method, step.Path)
+			continue
+		}
+		if !templateApplies(tmpl, op) {
+			log.Warn("Plan step %d: template %s does not match operation %s %s, skipping", i+1, tmpl.ID, op.Method, op.Path)
+			continue
+		}
+		dedupKey := tmpl.ID + "|" + op.Method + "|" + op.Path
+		if seen[dedupKey] {
+			log.Debug("Plan step %d: duplicate of earlier step, skipping", i+1)
+			continue
+		}
+		seen[dedupKey] = true
+
+		findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
+		if err != nil {
+			log.Warn("Plan step %d: %s failed on %s %s: %v", i+1, tmpl.ID, op.Method, op.Path, err)
+			continue
+		}
+		executed++
+		result.findings = append(result.findings, findings...)
+		result.set[dedupKey] = true
+	}
+	return result, executed
 }
 
 // normalizeOpKey produces a stable key for matching operations,
