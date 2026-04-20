@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/praetorian-inc/hadrian/pkg/llm"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -1076,4 +1077,46 @@ detection:
 	// Dry-run must not send any HTTP requests to the target server
 	assert.Equal(t, int32(0), atomic.LoadInt32(&requestCount),
 		"dry-run mode must not make HTTP requests to the target server")
+}
+
+// TEST-007: triageWithLLM with injected client
+
+type fakeLLMClient struct {
+	calls int
+}
+
+func (f *fakeLLMClient) Triage(_ context.Context, _ *llm.TriageRequest) (*llm.TriageResult, error) {
+	f.calls++
+	return &llm.TriageResult{
+		Provider:        "fake",
+		IsVulnerability: true,
+		Confidence:      0.95,
+		Reasoning:       "fake triage",
+		Severity:        model.SeverityHigh,
+	}, nil
+}
+
+func (f *fakeLLMClient) Name() string { return "fake" }
+
+func TestTriageWithLLM_InjectedClient(t *testing.T) {
+	ctx := context.Background()
+	findings := []*model.Finding{
+		{ID: "f1", Severity: model.SeverityHigh, Category: "API1", Name: "Test", Method: "GET", Endpoint: "/test", AttackerRole: "user"},
+		{ID: "f2", Severity: model.SeverityMedium, Category: "API1", Name: "Test2", Method: "POST", Endpoint: "/test2", AttackerRole: "user"},
+	}
+	rolesCfg := &roles.RoleConfig{Roles: []*roles.Role{{Name: "user"}, {Name: "admin"}}}
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer func() { _ = tmpFile.Close() }()
+	rep := NewTerminalReporter(tmpFile, 1)
+
+	fake := &fakeLLMClient{}
+	// Provider/host/model should be ignored when injected client is set
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "bogus-provider", "bogus-host", "bogus-model", 1, "", fake, rep)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+	assert.Equal(t, 2, fake.calls) // called once per finding
+	assert.NotNil(t, result[0].LLMAnalysis)
+	assert.Equal(t, "fake", result[0].LLMAnalysis.Provider)
 }

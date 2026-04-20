@@ -16,7 +16,6 @@ import (
 )
 
 // OpenAIClient implements Client using the OpenAI chat completions API.
-// OpenAIClient implements Client using the OpenAI chat completions API.
 type OpenAIClient struct {
 	apiKey        string
 	model         string

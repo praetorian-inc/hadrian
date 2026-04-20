@@ -180,3 +180,25 @@ func TestNewClientWithConfig_EmptyHostFallsBackToEnv(t *testing.T) {
 	assert.Nil(t, client)
 	assert.Contains(t, err.Error(), "no LLM provider available")
 }
+
+// TEST-002: NewClientWithProvider dispatch tests
+func TestNewClientWithProvider_OpenAI(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	client, err := NewClientWithProvider(context.Background(), "openai", "", "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.IsType(t, &OpenAIClient{}, client)
+}
+
+func TestNewClientWithProvider_Anthropic(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+	client, err := NewClientWithProvider(context.Background(), "anthropic", "", "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.IsType(t, &AnthropicClient{}, client)
+}
+
+func TestNewClientWithProvider_Unknown(t *testing.T) {
+	_, err := NewClientWithProvider(context.Background(), "bogus", "", "", 60*time.Second, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown LLM provider")
+	assert.Contains(t, err.Error(), "bogus")
+}

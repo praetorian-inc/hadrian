@@ -108,3 +108,22 @@ func TestAnthropicClient_Triage_NoTextContent(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no text content")
 }
+
+func TestAnthropicClient_Triage_MalformedJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{truncated`))
+	}))
+	defer server.Close()
+
+	client := &AnthropicClient{
+		apiKey:   "test-key",
+		model:    "test",
+		endpoint: server.URL,
+		redactor: reporter.NewRedactor(),
+		client:   &http.Client{Timeout: 10 * time.Second},
+	}
+
+	_, err := client.Triage(context.Background(), testTriageRequest())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse Anthropic response")
+}

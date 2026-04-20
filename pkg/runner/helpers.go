@@ -129,9 +129,12 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 			}
 		}
 
-		// PII redaction is handled by BuildTriagePrompt — no need to redact here
+		// Defense-in-depth: redact request body before it enters the LLM pipeline.
+		// BuildTriagePrompt also redacts response body in the prompt itself.
+		redactedFinding := *finding
+		redactedFinding.Evidence.Request.Body = reporter.NewRedactor().RedactForLLM(finding.Evidence.Request.Body)
 		req := &llm.TriageRequest{
-			Finding:      finding,
+			Finding:      &redactedFinding,
 			AttackerRole: attackerRole,
 			VictimRole:   victimRole,
 			RoleConfig:   rolesCfg,

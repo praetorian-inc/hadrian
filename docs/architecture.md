@@ -117,7 +117,7 @@ Hadrian is a security testing framework designed to identify OWASP API Top 10 vu
 │  │                        ▼                                                │ │
 │  │  ┌────────────────────────────────────────────────────────────────┐    │ │
 │  │  │                    LLM TRIAGE                                   │    │ │
-│  │  │   Ollama (local LLM)                                             │    │ │
+│  │  │   Ollama / OpenAI / Anthropic                                     │    │ │
 │  │  │   → is_vulnerability: true/false                               │    │ │
 │  │  │   → confidence: 0.95                                           │    │ │
 │  │  │   → recommendations: [...]                                     │    │ │
@@ -175,7 +175,7 @@ hadrian/
 │   │   └── grpc/            # Protocol Buffers parser
 │   ├── graphql/             # GraphQL security scanning engine
 │   ├── reporter/            # Output formatting (terminal, JSON, markdown)
-│   ├── llm/                 # LLM integration (Ollama)
+│   ├── llm/                 # LLM integration (Ollama, OpenAI, Anthropic)
 │   └── matchers/            # Detection matchers
 ├── internal/http/           # HTTP client with proxy support
 └── templates/

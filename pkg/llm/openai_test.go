@@ -10,7 +10,6 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
-	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -116,13 +115,24 @@ func TestOpenAIClient_Triage_ParseError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse LLM JSON response")
 }
 
-func testTriageRequest() *TriageRequest {
-	return &TriageRequest{
-		Finding: &model.Finding{
-			Category: "API1", Method: "GET", Endpoint: "/api/test",
-			Evidence: model.Evidence{Response: model.HTTPResponse{StatusCode: 200, Body: "test"}},
-		},
-		AttackerRole: &roles.Role{Name: "user", Permissions: []roles.Permission{{Raw: "read:users:own"}}},
-		VictimRole:   &roles.Role{Name: "admin", Permissions: []roles.Permission{{Raw: "*:*:*"}}},
+func TestOpenAIClient_Triage_EmptyChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{},
+		}))
+	}))
+	defer server.Close()
+
+	client := &OpenAIClient{
+		apiKey:   "test-key",
+		model:    "gpt-4o",
+		endpoint: server.URL,
+		redactor: reporter.NewRedactor(),
+		client:   &http.Client{Timeout: 10 * time.Second},
 	}
+
+	_, err := client.Triage(context.Background(), testTriageRequest())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no choices")
 }
