@@ -3,6 +3,7 @@ package planner
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -165,6 +166,88 @@ func TestValidatePlan_DropsUnknownOperation(t *testing.T) {
 
 	result := validatePlan(plan, testInput())
 	assert.Empty(t, result.Steps)
+}
+
+// TEST-002: Plan() failure modes
+
+func TestPlan_LLMError(t *testing.T) {
+	client := &mockLLMClient{err: fmt.Errorf("connection refused")}
+	p := NewPlanner(client)
+	_, err := p.Plan(context.Background(), testInput())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "LLM generation failed")
+}
+
+func TestPlan_MalformedResponse(t *testing.T) {
+	client := &mockLLMClient{response: "not json at all!!!"}
+	p := NewPlanner(client)
+	_, err := p.Plan(context.Background(), testInput())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse LLM response")
+}
+
+func TestPlan_AllStepsDropped(t *testing.T) {
+	// Valid JSON but all steps reference nonexistent templates
+	client := &mockLLMClient{response: `{"reasoning":"test","steps":[{"id":"s1","method":"GET","path":"/fake","template_id":"fake","attacker_role":"fake"}]}`}
+	p := NewPlanner(client)
+	plan, err := p.Plan(context.Background(), testInput())
+	require.NoError(t, err)
+	assert.Empty(t, plan.Steps)
+	assert.Equal(t, "test", plan.Reasoning) // reasoning preserved
+}
+
+// TEST-003: parsePlan includes both errors
+
+func TestParsePlan_BothErrorsIncluded(t *testing.T) {
+	_, err := parsePlan(`{"not_steps": true}this is not json either`)
+	require.Error(t, err)
+	// Should contain info about both parse attempts
+	assert.Contains(t, err.Error(), "AttackPlan")
+	assert.Contains(t, err.Error(), "AttackStep")
+}
+
+// TEST-004: Additional validatePlan edge cases
+
+func TestValidatePlan_EmptyVictimRole(t *testing.T) {
+	plan := &AttackPlan{
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", VictimRole: "", Method: "GET", Path: "/api/users/{id}"},
+		},
+	}
+	result := validatePlan(plan, testInput())
+	require.Len(t, result.Steps, 1) // empty victim is allowed
+}
+
+func TestValidatePlan_TrailingSlashNormalized(t *testing.T) {
+	plan := &AttackPlan{
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", Method: "GET", Path: "/api/users/{id}/"},
+		},
+	}
+	result := validatePlan(plan, testInput())
+	require.Len(t, result.Steps, 1) // trailing slash normalized
+}
+
+func TestValidatePlan_CaseInsensitiveMethod(t *testing.T) {
+	plan := &AttackPlan{
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", Method: "get", Path: "/api/users/{id}"},
+		},
+	}
+	result := validatePlan(plan, testInput())
+	require.Len(t, result.Steps, 1) // lowercase method normalized
+}
+
+func TestValidatePlan_ReasoningPreservedOnEmpty(t *testing.T) {
+	plan := &AttackPlan{
+		Reasoning: "No matching templates",
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "nonexistent", AttackerRole: "user", Method: "GET", Path: "/api/users/{id}"},
+		},
+	}
+	result := validatePlan(plan, testInput())
+	assert.Empty(t, result.Steps)
+	assert.Equal(t, "No matching templates", result.Reasoning)
 }
 
 func TestStripCodeFences(t *testing.T) {
