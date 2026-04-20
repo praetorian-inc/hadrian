@@ -142,7 +142,7 @@ func runTest(ctx context.Context, config Config) error {
 	}
 	defer func() { _ = rep.Close() }()
 
-	llmEnabled := hasLLMConfig() || config.LLMHost != "" || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMTriageClient != nil
+	llmEnabled := hasLLMConfig() || config.LLMHost != "" || config.LLMModel != "" || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMTriageClient != nil
 	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
 		terminalReporter.SetLLMMode(true)
 		log.Debug("LLM mode enabled on terminal reporter")

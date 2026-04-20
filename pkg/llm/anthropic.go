@@ -16,7 +16,6 @@ import (
 )
 
 // AnthropicClient implements Client using the Anthropic Messages API.
-// AnthropicClient implements Client using the Anthropic Messages API.
 type AnthropicClient struct {
 	apiKey        string
 	model         string

@@ -333,7 +333,7 @@ hadrian test rest --api api.yaml --roles roles.yaml \
 | `--llm-timeout <n>` | 180 | Request timeout in seconds |
 | `--llm-context <text>` | - | Additional context for analysis |
 
-### Environment Variables
+### LLM Environment Variables
 
 | Variable | Provider | Description |
 |----------|----------|-------------|

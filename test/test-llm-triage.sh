@@ -144,6 +144,6 @@ elif [ "$FINDING_COUNT" -gt 0 ] && [ "$LLM_COUNT" -eq 0 ]; then
     log_fail "Findings detected but none have LLM analysis — triage may not have fired"
     exit 1
 else
-    log_info "No findings detected (tokens may be expired or crAPI needs setup)"
-    exit 0
+    log_fail "No findings detected — crAPI may not be running or tokens are expired"
+    exit 1
 fi
