@@ -21,7 +21,7 @@ info:
     allowing attackers to modify pastes owned by other users. This template uses a three-phase approach
     to verify the mutation actually persisted: setup reads original state, attack performs unauthorized
     modification, and verify confirms the change persisted.
-  tags: ["graphql", "dvga", "bola", "authorization", "idor", "mutation"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "dvga", "bola", "authorization", "idor", "mutation"]
   requires_llm_triage: false
   test_pattern: "mutation"
 

@@ -5,7 +5,7 @@ info:
   severity: "HIGH"
   author: "hadrian"
   description: "Tests for sensitive data exposure in DVGA's UserObject type. The password field is directly exposed in the GraphQL schema, allowing any authenticated user to query and retrieve plaintext or hashed passwords for all users in the system."
-  tags: ["graphql", "dvga", "sensitive-data", "password-exposure", "information-disclosure"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "dvga", "sensitive-data", "password-exposure", "information-disclosure"]
   requires_llm_triage: true
   test_pattern: "simple"
 

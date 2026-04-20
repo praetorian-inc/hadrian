@@ -5,7 +5,7 @@ info:
   severity: "HIGH"
   author: "hadrian"
   description: "Tests for SQL/NoSQL injection vulnerabilities through GraphQL variables. When user input from variables is not properly sanitized before being used in database queries, attackers can inject malicious payloads to access or manipulate data."
-  tags: ["graphql", "injection", "sql-injection", "nosql-injection", "variables"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "injection", "sql-injection", "nosql-injection", "variables"]
   requires_llm_triage: true
   test_pattern: "simple"
 

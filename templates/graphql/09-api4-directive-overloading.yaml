@@ -5,7 +5,7 @@ info:
   severity: "MEDIUM"
   author: "hadrian"
   description: "Tests for GraphQL directive abuse by overloading queries with excessive @skip, @include, or custom directives. Processing many directives can cause performance degradation and resource exhaustion."
-  tags: ["graphql", "dos", "directives", "skip", "include"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "dos", "directives", "skip", "include"]
   requires_llm_triage: true
   test_pattern: "simple"
 
