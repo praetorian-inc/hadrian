@@ -3,6 +3,7 @@ package planner
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
@@ -60,8 +61,9 @@ func TestBuildPrompt_CustomContextUTF8Safe(t *testing.T) {
 	}
 
 	prompt := buildPrompt(input)
-	// Verify no invalid UTF-8 in the prompt
-	assert.True(t, strings.ContainsRune(prompt, 'é'))
+	assert.True(t, utf8.ValidString(prompt), "prompt must be valid UTF-8 after truncation")
+	// Truncated context should have exactly maxCustomContextLen runes of 'é'
+	assert.Equal(t, maxCustomContextLen, strings.Count(prompt, "é"))
 }
 
 func TestBuildPrompt_CapsTemplates(t *testing.T) {

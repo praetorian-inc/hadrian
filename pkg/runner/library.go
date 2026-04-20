@@ -99,7 +99,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 
 	if config.PlannerOnly {
 		if executedSteps == 0 && attackPlan != nil && len(attackPlan.Steps) > 0 {
-			log.Warn("All %d planned steps were dropped or failed — 0 valid tests executed", len(attackPlan.Steps))
+			return allFindings, fmt.Errorf("all %d planned steps were dropped or failed — 0 valid tests executed", len(attackPlan.Steps))
 		}
 		return allFindings, nil
 	}
