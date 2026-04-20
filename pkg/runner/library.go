@@ -147,7 +147,8 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 	var allFindings []*model.Finding
 
 	// Execute planned steps first
-	covered := make(map[string]bool) // tracks "templateID|method|path" combos already run
+	covered := make(map[string]bool)
+	executedSteps := 0
 	if attackPlan != nil && len(attackPlan.Steps) > 0 {
 		// Build lookup maps
 		tmplMap := make(map[string]*templates.CompiledTemplate)
@@ -160,7 +161,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		}
 
 		log.Info("Executing %d planned steps...", len(attackPlan.Steps))
-		seen := make(map[string]bool) // dedup within the plan itself
+		seen := make(map[string]bool)
 		for i, step := range attackPlan.Steps {
 			tmpl, ok := tmplMap[step.TemplateID]
 			if !ok {
@@ -192,6 +193,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 				log.Warn("Plan step %d: %s failed on %s %s: %v", i+1, tmpl.ID, op.Method, op.Path, err)
 				continue
 			}
+			executedSteps++
 			allFindings = append(allFindings, findings...)
 			covered[dedupKey] = true
 		}
@@ -203,7 +205,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		if attackPlan == nil {
 			return nil, fmt.Errorf("planner failed and --planner-only is set — cannot continue without a plan")
 		}
-		if len(allFindings) == 0 && len(attackPlan.Steps) > 0 {
+		if executedSteps == 0 && len(attackPlan.Steps) > 0 {
 			log.Warn("All %d planned steps were dropped or failed — 0 valid tests executed", len(attackPlan.Steps))
 		}
 		return allFindings, nil

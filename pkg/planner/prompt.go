@@ -134,11 +134,12 @@ RULES:
 
 	// Custom context (capped)
 	if input.Options.CustomContext != "" {
-		ctx := input.Options.CustomContext
-		if len(ctx) > maxCustomContextLen {
-			log.Warn("Planner: custom context is %d chars — truncating to %d", len(ctx), maxCustomContextLen)
-			ctx = ctx[:maxCustomContextLen]
+		ctxRunes := []rune(input.Options.CustomContext)
+		if len(ctxRunes) > maxCustomContextLen {
+			log.Warn("Planner: custom context is %d chars — truncating to %d", len(ctxRunes), maxCustomContextLen)
+			ctxRunes = ctxRunes[:maxCustomContextLen]
 		}
+		ctx := string(ctxRunes)
 		b.WriteString("## ADDITIONAL CONTEXT\n\n")
 		b.WriteString(ctx)
 		b.WriteString("\n\n")
