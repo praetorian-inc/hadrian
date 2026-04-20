@@ -111,8 +111,6 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 		return findings, nil
 	}
 
-	redactor := reporter.NewRedactor()
-
 	for i, finding := range findings {
 		log.Debug("Triaging finding %d/%d: %s", i+1, len(findings), finding.ID)
 		// Skip already-triaged findings
@@ -131,13 +129,9 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 			}
 		}
 
-		// Redact sensitive data before sending to LLM (PII protection)
-		redactedFinding := *finding
-		redactedFinding.Evidence.Request.Body = redactor.RedactForLLM(finding.Evidence.Request.Body)
-		redactedFinding.Evidence.Response.Body = redactor.RedactForLLM(finding.Evidence.Response.Body)
-
+		// PII redaction is handled by BuildTriagePrompt — no need to redact here
 		req := &llm.TriageRequest{
-			Finding:      &redactedFinding,
+			Finding:      finding,
 			AttackerRole: attackerRole,
 			VictimRole:   victimRole,
 			RoleConfig:   rolesCfg,

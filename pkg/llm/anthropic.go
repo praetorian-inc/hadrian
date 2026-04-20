@@ -3,9 +3,11 @@ package llm
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -14,9 +16,11 @@ import (
 )
 
 // AnthropicClient implements Client using the Anthropic Messages API.
+// AnthropicClient implements Client using the Anthropic Messages API.
 type AnthropicClient struct {
 	apiKey        string
 	model         string
+	endpoint      string // defaults to "https://api.anthropic.com/v1/messages"
 	redactor      *reporter.Redactor
 	client        *http.Client
 	customContext string
@@ -37,10 +41,17 @@ func NewAnthropicClient(apiKey, model string, timeout time.Duration, customConte
 		timeout = 120 * time.Second
 	}
 	return &AnthropicClient{
-		apiKey:        apiKey,
-		model:         model,
-		redactor:      reporter.NewRedactor(),
-		client:        &http.Client{Timeout: timeout},
+		apiKey:   apiKey,
+		model:    model,
+		endpoint: "https://api.anthropic.com/v1/messages",
+		redactor: reporter.NewRedactor(),
+		client: &http.Client{
+			Timeout: timeout,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+				DialContext:     (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			},
+		},
 		customContext: customContext,
 	}, nil
 }
@@ -66,7 +77,7 @@ func (c *AnthropicClient) Triage(ctx context.Context, req *TriageRequest) (*Tria
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", c.endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

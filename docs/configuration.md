@@ -301,18 +301,25 @@ hadrian test rest --api api.yaml --roles roles.yaml \
 
 ## LLM Triage
 
-Hadrian supports optional AI-powered finding analysis using a local LLM via [Ollama](https://ollama.ai/). When enabled, each finding is sent to the LLM for contextual triage to reduce false positives.
+Hadrian supports optional AI-powered finding analysis using [Ollama](https://ollama.ai/) (local), OpenAI, or Anthropic. When enabled, each finding is sent to the LLM for contextual triage to reduce false positives.
 
 ```bash
-# Enable LLM triage with Ollama
+# Ollama (local, default provider)
 hadrian test rest --api api.yaml --roles roles.yaml \
   --llm-host http://localhost:11434 \
   --llm-model llama3.2:latest
 
+# OpenAI (requires OPENAI_API_KEY env var)
+hadrian test rest --api api.yaml --roles roles.yaml \
+  --llm-provider openai
+
+# Anthropic (requires ANTHROPIC_API_KEY env var)
+hadrian test rest --api api.yaml --roles roles.yaml \
+  --llm-provider anthropic
+
 # Add domain context for better analysis
 hadrian test rest --api api.yaml --roles roles.yaml \
-  --llm-host http://localhost:11434 \
-  --llm-model llama3.2:latest \
+  --llm-provider openai \
   --llm-context "This API handles financial data with PCI DSS requirements"
 ```
 
@@ -320,10 +327,19 @@ hadrian test rest --api api.yaml --roles roles.yaml \
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--llm-provider <name>` | `ollama` | LLM provider: `ollama`, `openai`, `anthropic` |
 | `--llm-host <url>` | - | LLM service host URL (e.g., `http://localhost:11434` for Ollama) |
-| `--llm-model <model>` | - | Model name (e.g., `llama3.2:latest`) |
+| `--llm-model <model>` | - | Model name (e.g., `llama3.2:latest`, `gpt-4o`, `claude-sonnet-4-20250514`) |
 | `--llm-timeout <n>` | 180 | Request timeout in seconds |
 | `--llm-context <text>` | - | Additional context for analysis |
+
+### Environment Variables
+
+| Variable | Provider | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | OpenAI | API key for OpenAI triage |
+| `ANTHROPIC_API_KEY` | Anthropic | API key for Anthropic triage |
+| `OLLAMA_HOST` | Ollama | Custom Ollama host (default: `http://localhost:11434`) |
 
 ### Data Safety
 

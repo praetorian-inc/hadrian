@@ -247,15 +247,18 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	endpoint := config.Target + config.Endpoint
 	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders)
 
+	// Compute unified LLM-enabled flag (same logic as REST command)
+	graphqlLLMEnabled := hasLLMConfig() || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMHost != "" || config.LLMModel != ""
+
 	// Only report findings if not already reported via callback (non-verbose mode)
-	if config.Output == "terminal" && config.LLMHost == "" && !config.Verbose {
+	if config.Output == "terminal" && !graphqlLLMEnabled && !config.Verbose {
 		for _, finding := range modelFindings {
 			reporter.ReportFinding(finding)
 		}
 	}
 
-	// LLM triage if configured (exclude default "ollama" when no host is set)
-	if (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMHost != "" || config.LLMModel != "" {
+	// LLM triage if configured
+	if graphqlLLMEnabled {
 		if rolesConfig != nil {
 			graphqlVerboseLog(config.Verbose, "Running LLM triage on %d findings", len(modelFindings))
 			modelFindings, err = triageWithLLM(ctx, modelFindings, rolesConfig,

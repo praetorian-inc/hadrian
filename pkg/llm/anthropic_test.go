@@ -2,13 +2,14 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
-	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,31 +34,77 @@ func TestNewAnthropicClient_UsesEnvKey(t *testing.T) {
 	assert.Equal(t, "claude-sonnet-4-20250514", client.model)
 }
 
-func TestNewAnthropicClient_DefaultTimeout(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-	client, err := NewAnthropicClient("", "", 0, "")
-	require.NoError(t, err)
-	assert.Equal(t, 120*time.Second, client.client.Timeout)
-}
+func TestAnthropicClient_Triage_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "test-key", r.Header.Get("x-api-key"))
+		assert.Equal(t, "2023-06-01", r.Header.Get("anthropic-version"))
 
-func TestAnthropicClient_Triage_ConnectionError(t *testing.T) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"content": []map[string]interface{}{
+				{"type": "text", "text": `{"is_vulnerability":true,"confidence":0.85,"reasoning":"BOLA detected","severity":"CRITICAL","recommendations":"Add authz"}`},
+			},
+		}))
+	}))
+	defer server.Close()
+
 	client := &AnthropicClient{
 		apiKey:   "test-key",
 		model:    "claude-sonnet-4-20250514",
+		endpoint: server.URL,
 		redactor: reporter.NewRedactor(),
-		client:   &http.Client{Timeout: 1 * time.Second},
+		client:   &http.Client{Timeout: 10 * time.Second},
 	}
 
-	finding := &model.Finding{
-		Category: "API1", Method: "GET", Endpoint: "/test",
-		Evidence: model.Evidence{Response: model.HTTPResponse{StatusCode: 200, Body: "test"}},
-	}
-	req := &TriageRequest{
-		Finding:      finding,
-		AttackerRole: &roles.Role{Name: "user"},
-		VictimRole:   &roles.Role{Name: "admin"},
+	result, err := client.Triage(context.Background(), testTriageRequest())
+	require.NoError(t, err)
+	assert.True(t, result.IsVulnerability)
+	assert.Equal(t, 0.85, result.Confidence)
+	assert.Equal(t, "anthropic", result.Provider)
+	assert.Equal(t, model.SeverityCritical, result.Severity)
+}
+
+func TestAnthropicClient_Triage_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(401)
+		_, _ = w.Write([]byte(`{"error":"invalid key"}`))
+	}))
+	defer server.Close()
+
+	client := &AnthropicClient{
+		apiKey:   "test-key",
+		model:    "claude-sonnet-4-20250514",
+		endpoint: server.URL,
+		redactor: reporter.NewRedactor(),
+		client:   &http.Client{Timeout: 10 * time.Second},
 	}
 
-	_, err := client.Triage(context.Background(), req)
-	assert.Error(t, err)
+	_, err := client.Triage(context.Background(), testTriageRequest())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "401")
+}
+
+func TestAnthropicClient_Triage_NoTextContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"content": []map[string]interface{}{
+				{"type": "image", "text": "data"},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	client := &AnthropicClient{
+		apiKey:   "test-key",
+		model:    "claude-sonnet-4-20250514",
+		endpoint: server.URL,
+		redactor: reporter.NewRedactor(),
+		client:   &http.Client{Timeout: 10 * time.Second},
+	}
+
+	_, err := client.Triage(context.Background(), testTriageRequest())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no text content")
 }

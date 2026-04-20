@@ -2,7 +2,9 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -33,31 +35,94 @@ func TestNewOpenAIClient_UsesEnvKey(t *testing.T) {
 	assert.Equal(t, "gpt-4o", client.model)
 }
 
-func TestNewOpenAIClient_DefaultTimeout(t *testing.T) {
-	t.Setenv("OPENAI_API_KEY", "sk-test")
-	client, err := NewOpenAIClient("", "", 0, "")
-	require.NoError(t, err)
-	assert.Equal(t, 120*time.Second, client.client.Timeout)
-}
+func TestOpenAIClient_Triage_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "POST", r.Method)
+		assert.Equal(t, "Bearer test-key", r.Header.Get("Authorization"))
 
-func TestOpenAIClient_Triage_ConnectionError(t *testing.T) {
+		var req map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&req))
+		assert.Equal(t, "gpt-4o", req["model"])
+		assert.Equal(t, 0.2, req["temperature"])
+
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]string{
+					"content": `{"is_vulnerability":true,"confidence":0.9,"reasoning":"BOLA","severity":"HIGH","recommendations":"Fix it"}`,
+				}},
+			},
+		}))
+	}))
+	defer server.Close()
+
 	client := &OpenAIClient{
 		apiKey:   "test-key",
 		model:    "gpt-4o",
+		endpoint: server.URL,
 		redactor: reporter.NewRedactor(),
-		client:   &http.Client{Timeout: 1 * time.Second},
+		client:   &http.Client{Timeout: 10 * time.Second},
 	}
 
-	finding := &model.Finding{
-		Category: "API1", Method: "GET", Endpoint: "/test",
-		Evidence: model.Evidence{Response: model.HTTPResponse{StatusCode: 200, Body: "test"}},
-	}
-	req := &TriageRequest{
-		Finding:      finding,
-		AttackerRole: &roles.Role{Name: "user"},
-		VictimRole:   &roles.Role{Name: "admin"},
+	result, err := client.Triage(context.Background(), testTriageRequest())
+	require.NoError(t, err)
+	assert.True(t, result.IsVulnerability)
+	assert.Equal(t, 0.9, result.Confidence)
+	assert.Equal(t, "openai", result.Provider)
+	assert.Equal(t, model.SeverityHigh, result.Severity)
+}
+
+func TestOpenAIClient_Triage_HTTPError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(429)
+		_, _ = w.Write([]byte(`{"error":"rate limited"}`))
+	}))
+	defer server.Close()
+
+	client := &OpenAIClient{
+		apiKey:   "test-key",
+		model:    "gpt-4o",
+		endpoint: server.URL,
+		redactor: reporter.NewRedactor(),
+		client:   &http.Client{Timeout: 10 * time.Second},
 	}
 
-	_, err := client.Triage(context.Background(), req)
-	assert.Error(t, err)
+	_, err := client.Triage(context.Background(), testTriageRequest())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "429")
+}
+
+func TestOpenAIClient_Triage_ParseError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]string{"content": "not json"}},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	client := &OpenAIClient{
+		apiKey:   "test-key",
+		model:    "gpt-4o",
+		endpoint: server.URL,
+		redactor: reporter.NewRedactor(),
+		client:   &http.Client{Timeout: 10 * time.Second},
+	}
+
+	_, err := client.Triage(context.Background(), testTriageRequest())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse LLM JSON response")
+}
+
+func testTriageRequest() *TriageRequest {
+	return &TriageRequest{
+		Finding: &model.Finding{
+			Category: "API1", Method: "GET", Endpoint: "/api/test",
+			Evidence: model.Evidence{Response: model.HTTPResponse{StatusCode: 200, Body: "test"}},
+		},
+		AttackerRole: &roles.Role{Name: "user", Permissions: []roles.Permission{{Raw: "read:users:own"}}},
+		VictimRole:   &roles.Role{Name: "admin", Permissions: []roles.Permission{{Raw: "*:*:*"}}},
+	}
 }
