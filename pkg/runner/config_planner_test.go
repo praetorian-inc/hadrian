@@ -44,9 +44,8 @@ func TestSetDefaults_PlannerTimeoutPositive(t *testing.T) {
 	assert.Equal(t, 60, c.PlannerTimeout) // should not override
 }
 
-// validTestConfig returns a Config that passes Validate() for use as a base.
+// validTestConfig returns a Config that passes Validate() using existing fixture files.
 func validTestConfig() Config {
-	// Create temp files for API and Roles since Validate checks os.Stat
 	return Config{
 		API:                  "../../test/crapi/crapi-openapi-spec.json",
 		Roles:                "../../test/crapi/roles.yaml",

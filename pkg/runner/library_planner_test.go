@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/praetorian-inc/hadrian/pkg/planner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,29 +31,34 @@ func TestNormalizeOpKey(t *testing.T) {
 // TEST-006: newPlannerLLMClient dispatch tests
 func TestNewPlannerLLMClient_OpenAI(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
+	t.Setenv("ANTHROPIC_API_KEY", "")
 	client, err := newPlannerLLMClient("openai", "", 60*time.Second)
 	require.NoError(t, err)
-	assert.NotNil(t, client)
+	assert.IsType(t, &planner.OpenAIClient{}, client)
 }
 
 func TestNewPlannerLLMClient_EmptyDefaultsToOpenAI(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "sk-test")
+	t.Setenv("ANTHROPIC_API_KEY", "")
 	client, err := newPlannerLLMClient("", "", 60*time.Second)
 	require.NoError(t, err)
-	assert.NotNil(t, client)
+	assert.IsType(t, &planner.OpenAIClient{}, client)
 }
 
 func TestNewPlannerLLMClient_Anthropic(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+	t.Setenv("OPENAI_API_KEY", "")
 	client, err := newPlannerLLMClient("anthropic", "", 60*time.Second)
 	require.NoError(t, err)
-	assert.NotNil(t, client)
+	assert.IsType(t, &planner.AnthropicClient{}, client)
 }
 
 func TestNewPlannerLLMClient_Ollama(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("ANTHROPIC_API_KEY", "")
 	client, err := newPlannerLLMClient("ollama", "", 60*time.Second)
 	require.NoError(t, err)
-	assert.NotNil(t, client)
+	assert.IsType(t, &planner.OllamaClient{}, client)
 }
 
 func TestNewPlannerLLMClient_Unknown(t *testing.T) {
