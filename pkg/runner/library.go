@@ -15,6 +15,47 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
+// testInputs holds pre-loaded spec, roles, and templates to avoid redundant parsing.
+type testInputs struct {
+	spec      *model.APISpec
+	rolesCfg  *roles.RoleConfig
+	tmplFiles []*templates.CompiledTemplate
+}
+
+// loadTestInputs parses and loads the API spec, roles, and templates from config.
+// Shared by both runTest (CLI) and RunTest (library) to avoid double-loading.
+func loadTestInputs(config Config) (*testInputs, error) {
+	spec, err := parseAPISpec(config.API)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse API spec: %w", err)
+	}
+
+	rolesCfg, err := roles.Load(config.Roles)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load roles: %w", err)
+	}
+
+	templateDir := config.TemplateDir
+	if templateDir == "" {
+		templateDir = getTemplateDir("./templates/rest")
+	}
+	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
+	}
+	if len(tmplFiles) == 0 {
+		log.Warn("No templates matched categories %v in %s — check --category values or template tags", config.Categories, templateDir)
+	}
+	if len(config.Templates) > 0 {
+		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
+		if len(tmplFiles) == 0 {
+			return nil, fmt.Errorf("no templates matched the specified filters: %v", config.Templates)
+		}
+	}
+
+	return &testInputs{spec: spec, rolesCfg: rolesCfg, tmplFiles: tmplFiles}, nil
+}
+
 // RunTest executes security tests against an API and returns findings directly.
 // It is the library entry point for programmatic usage (e.g. from Chariot),
 // performing the same core work as the CLI minus reporter output and LLM triage.
@@ -25,21 +66,18 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 		return nil, fmt.Errorf("configuration error: %w", err)
 	}
 
-	// Parse custom headers
 	customHeaders, err := ParseCustomHeaders(config.Headers)
 	if err != nil {
 		return nil, fmt.Errorf("invalid custom header: %w", err)
 	}
 
-	spec, err := parseAPISpec(config.API)
+	inputs, err := loadTestInputs(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse API spec: %w", err)
+		return nil, err
 	}
-
-	rolesCfg, err := roles.Load(config.Roles)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load roles: %w", err)
-	}
+	spec := inputs.spec
+	rolesCfg := inputs.rolesCfg
+	tmplFiles := inputs.tmplFiles
 
 	var authCfg *auth.AuthConfig
 	if config.Auth != "" {
@@ -66,23 +104,6 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 	}
 	rateLimiter := NewRateLimiter(config.RateLimit, config.RateLimit)
 	rateLimitingClient := NewRateLimitingClient(httpClient, rateLimiter, rateLimitConfig)
-
-	templateDir := config.TemplateDir
-	if templateDir == "" {
-		templateDir = getTemplateDir("./templates/rest")
-	}
-
-	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
-	}
-
-	if len(config.Templates) > 0 {
-		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
-		if len(tmplFiles) == 0 {
-			return nil, fmt.Errorf("no templates matched the specified filters: %v", config.Templates)
-		}
-	}
 
 	executor := templates.NewExecutor(rateLimitingClient, customHeaders)
 	mutationExecutor := orchestrator.NewMutationExecutor(rateLimitingClient, customHeaders)

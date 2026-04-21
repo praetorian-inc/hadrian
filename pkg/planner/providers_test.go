@@ -401,3 +401,41 @@ func TestOllamaClient_Generate_OversizedErrorBody(t *testing.T) {
 	require.ErrorAs(t, err, &apiErr)
 	assert.Equal(t, 503, apiErr.StatusCode) // status check fires before size check
 }
+
+func TestOpenAIClient_Generate_OversizedErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(429)
+		huge := make([]byte, maxResponseSize+1024)
+		for i := range huge {
+			huge[i] = 'x'
+		}
+		_, _ = w.Write(huge)
+	}))
+	defer server.Close()
+
+	c := &OpenAIClient{apiKey: "test", model: "gpt-4o", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, 429, apiErr.StatusCode)
+}
+
+func TestAnthropicClient_Generate_OversizedErrorBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(503)
+		huge := make([]byte, maxResponseSize+1024)
+		for i := range huge {
+			huge[i] = 'x'
+		}
+		_, _ = w.Write(huge)
+	}))
+	defer server.Close()
+
+	c := &AnthropicClient{apiKey: "test", model: "test", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	var apiErr *APIError
+	require.ErrorAs(t, err, &apiErr)
+	assert.Equal(t, 503, apiErr.StatusCode)
+}

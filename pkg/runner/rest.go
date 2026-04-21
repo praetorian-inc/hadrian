@@ -13,7 +13,6 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/planner"
-	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
 )
@@ -125,15 +124,13 @@ func runTest(ctx context.Context, config Config) error {
 		return fmt.Errorf("configuration error: %w", err)
 	}
 
-	spec, err := parseAPISpec(config.API)
+	inputs, err := loadTestInputs(config)
 	if err != nil {
-		return fmt.Errorf("failed to parse API spec: %w", err)
+		return err
 	}
-
-	rolesCfg, err := roles.Load(config.Roles)
-	if err != nil {
-		return fmt.Errorf("failed to load roles: %w", err)
-	}
+	spec := inputs.spec
+	rolesCfg := inputs.rolesCfg
+	tmplFiles := inputs.tmplFiles
 
 	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
@@ -145,24 +142,6 @@ func runTest(ctx context.Context, config Config) error {
 	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
 		terminalReporter.SetLLMMode(true)
 		log.Debug("LLM mode enabled on terminal reporter")
-	}
-
-	templateDir := config.TemplateDir
-	if templateDir == "" {
-		templateDir = getTemplateDir("./templates/rest")
-	}
-	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
-	if err != nil {
-		return fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
-	}
-	if len(tmplFiles) == 0 {
-		log.Warn("No templates matched categories %v in %s — check --category values or template tags", config.Categories, templateDir)
-	}
-	if len(config.Templates) > 0 {
-		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
-		if len(tmplFiles) == 0 {
-			return fmt.Errorf("no templates matched the specified filters: %v", config.Templates)
-		}
 	}
 
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
