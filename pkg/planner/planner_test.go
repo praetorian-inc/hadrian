@@ -157,6 +157,16 @@ func TestValidatePlan_DropsUnknownRole(t *testing.T) {
 	assert.Empty(t, result.Steps)
 }
 
+func TestValidatePlan_DropsUnknownVictimRole(t *testing.T) {
+	plan := &AttackPlan{
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", VictimRole: "ghost", Method: "GET", Path: "/api/users/{id}"},
+		},
+	}
+	result := validatePlan(plan, testInput())
+	assert.Empty(t, result.Steps)
+}
+
 func TestValidatePlan_DropsUnknownOperation(t *testing.T) {
 	plan := &AttackPlan{
 		Steps: []AttackStep{

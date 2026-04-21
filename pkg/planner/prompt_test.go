@@ -107,3 +107,37 @@ func TestBuildPrompt_CapsPriorResults(t *testing.T) {
 	count := strings.Count(prompt, "- GET /test")
 	assert.Equal(t, maxPriorResultsInPrompt, count)
 }
+
+func TestBuildPrompt_CapsRoles(t *testing.T) {
+	rs := make([]*roles.Role, 60)
+	for i := range rs {
+		rs[i] = &roles.Role{Name: "role" + string(rune('A'+i%26)), Level: i}
+	}
+	input := &PlannerInput{
+		Spec:      &model.APISpec{},
+		Roles:     &roles.RoleConfig{Roles: rs},
+		Templates: []*templates.CompiledTemplate{},
+	}
+	prompt := buildPrompt(input)
+	count := strings.Count(prompt, "- name=")
+	assert.Equal(t, maxRolesInPrompt, count)
+}
+
+func TestBuildPrompt_Options(t *testing.T) {
+	input := &PlannerInput{
+		Spec:      &model.APISpec{},
+		Roles:     &roles.RoleConfig{},
+		Templates: []*templates.CompiledTemplate{},
+		Options: PlannerOptions{
+			MaxSteps:        5,
+			FocusCategories: []string{"API1:2023", "API5:2023"},
+			FocusEndpoints:  []string{"/users", "/admin"},
+		},
+	}
+	prompt := buildPrompt(input)
+	assert.Contains(t, prompt, "at most 5 steps")
+	assert.Contains(t, prompt, "API1:2023")
+	assert.Contains(t, prompt, "API5:2023")
+	assert.Contains(t, prompt, "/users")
+	assert.Contains(t, prompt, "/admin")
+}

@@ -110,7 +110,7 @@ func RunTest(ctx context.Context, config Config) ([]*model.Finding, error) {
 			if !templateApplies(tmpl, op) {
 				continue
 			}
-			if covered.set[tmpl.ID+"|"+op.Method+"|"+op.Path] {
+			if covered.set[tmpl.ID+"|"+normalizeOpKey(op.Method, op.Path)] {
 				continue
 			}
 			findings, err := executeTemplate(ctx, executor, mutationExecutor, tmpl, op, rolesCfg, authCfg, spec.BaseURL)
@@ -232,7 +232,7 @@ func executePlannedSteps(
 			log.Warn("Plan step %d: template %s does not match operation %s %s, skipping", i+1, tmpl.ID, op.Method, op.Path)
 			continue
 		}
-		dedupKey := tmpl.ID + "|" + op.Method + "|" + op.Path
+		dedupKey := tmpl.ID + "|" + normalizeOpKey(op.Method, op.Path)
 		if seen[dedupKey] {
 			log.Debug("Plan step %d: duplicate of earlier step, skipping", i+1)
 			continue

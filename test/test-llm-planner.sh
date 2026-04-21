@@ -174,14 +174,11 @@ assert_findings() {
 # Test 1 (plan + brute-force) should find crAPI BOLA vulns
 assert_findings "test1 has findings" "$RESULT_FILE" 1
 
-# Test 2 (planner-only) — may have 0 if plan missed orders, but file should exist
-if [ -f "$RESULT_FILE_ONLY" ]; then
-    log_ok "test2 result file exists"
-    PASSED=$((PASSED + 1))
-else
-    log_fail "test2 result file missing"
-    FAILED=$((FAILED + 1))
-fi
+# Test 2 (planner-only) — file should exist and be valid JSON
+assert_findings "test2 result file valid" "$RESULT_FILE_ONLY" 0
+
+# Test 3 (context-steered) — orders endpoint is a known crAPI BOLA target
+assert_findings "test3 context-steered findings" "$RESULT_FILE_CTX" 0
 
 # Summary
 echo ""

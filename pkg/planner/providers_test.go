@@ -201,6 +201,37 @@ func TestOllamaClient_Generate_Success(t *testing.T) {
 	assert.Equal(t, `{"steps":[]}`, result)
 }
 
+// TEST-001: OpenAI empty choices
+func TestOpenAIClient_Generate_NoChoices(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{"choices": []interface{}{}}))
+	}))
+	defer server.Close()
+
+	c := &OpenAIClient{apiKey: "test", model: "gpt-4o", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no choices")
+}
+
+// TEST-005: Response size cap
+func TestOpenAIClient_Generate_ResponseSizeCapped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Write more than maxResponseSize bytes
+		w.Header().Set("Content-Type", "application/json")
+		huge := make([]byte, maxResponseSize+1024)
+		for i := range huge {
+			huge[i] = 'x'
+		}
+		_, _ = w.Write(huge)
+	}))
+	defer server.Close()
+
+	c := &OpenAIClient{apiKey: "test", model: "gpt-4o", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err) // should fail to parse truncated body
+}
+
 func TestOllamaClient_Generate_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(500)
