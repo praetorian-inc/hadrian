@@ -2,8 +2,12 @@ package runner
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -277,4 +281,179 @@ func TestExecutePlannedSteps_DuplicateDedup(t *testing.T) {
 	result, executed := executePlannedSteps(context.Background(), plan, []*templates.CompiledTemplate{tmpl}, spec, executor, mutExecutor, rolesCfg, nil)
 	assert.Equal(t, 1, executed) // dedup prevents second execution
 	assert.Len(t, result.set, 1)
+}
+
+// === RunTest integration tests (TEST-008) ===
+
+// writeRunTestFixtures creates temp API spec, roles, and template files for RunTest tests.
+func writeRunTestFixtures(t *testing.T, serverURL string) (apiPath, rolesPath, tmplDir string) {
+	t.Helper()
+	tmpDir := t.TempDir()
+
+	apiSpec := fmt.Sprintf(`openapi: "3.0.0"
+info:
+  title: Test
+  version: "1.0"
+servers:
+  - url: "%s"
+paths:
+  /test:
+    get:
+      summary: Test
+      responses:
+        "200":
+          description: OK
+`, serverURL)
+	apiPath = filepath.Join(tmpDir, "api.yaml")
+	require.NoError(t, os.WriteFile(apiPath, []byte(apiSpec), 0644))
+
+	rolesYAML := `objects: [test]
+roles:
+  - name: anon
+    level: 0
+    permissions: ["read:test:public"]
+`
+	rolesPath = filepath.Join(tmpDir, "roles.yaml")
+	require.NoError(t, os.WriteFile(rolesPath, []byte(rolesYAML), 0644))
+
+	tmplDir = filepath.Join(tmpDir, "templates", "owasp")
+	require.NoError(t, os.MkdirAll(tmplDir, 0755))
+	tmplYAML := `id: test-tmpl
+info:
+  name: Test
+  category: "API2:2023"
+  severity: HIGH
+  test_pattern: simple
+endpoint_selector:
+  methods: [GET]
+role_selector:
+  attacker_permission_level: none
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200]
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: test
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "test.yaml"), []byte(tmplYAML), 0644))
+
+	return apiPath, rolesPath, tmplDir
+}
+
+func baseRunTestConfig(apiPath, rolesPath, tmplDir string) Config {
+	return Config{
+		API:                  apiPath,
+		Roles:                rolesPath,
+		TemplateDir:          tmplDir,
+		Output:               "json",
+		RateLimit:            100,
+		RateLimitBackoff:     "exponential",
+		RateLimitMaxWait:     time.Second,
+		RateLimitMaxRetries:  1,
+		RateLimitStatusCodes: []int{429},
+		Timeout:              10,
+		Categories:           []string{"owasp"},
+	}
+}
+
+func TestRunTest_PlannerOnly_AllStepsDropped(t *testing.T) {
+	server := testServer()
+	defer server.Close()
+
+	apiPath, rolesPath, tmplDir := writeRunTestFixtures(t, server.URL)
+
+	// Plan has a valid template+op but the template requires auth (RequiresAuth=true)
+	// while the op doesn't have auth — so templateApplies fails and the step is dropped.
+	// We need a template that matches validation but fails templateApplies.
+	// Write an auth-requiring template:
+	authTmplYAML := `id: auth-tmpl
+info:
+  name: Auth Test
+  category: "API1:2023"
+  severity: HIGH
+  test_pattern: simple
+endpoint_selector:
+  requires_auth: true
+  methods: [GET]
+role_selector:
+  attacker_permission_level: lower
+  victim_permission_level: higher
+http:
+  - method: "{{operation.method}}"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200]
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: test
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmplDir, "auth.yaml"), []byte(authTmplYAML), 0644))
+
+	// Plan references auth-tmpl on /test — but /test has no auth required, so templateApplies fails
+	mock := &mockPlannerClient{response: `{"steps":[{"id":"s1","method":"GET","path":"/test","template_id":"auth-tmpl","attacker_role":"anon"}]}`}
+	config := baseRunTestConfig(apiPath, rolesPath, tmplDir)
+	config.PlannerEnabled = true
+	config.PlannerOnly = true
+	config.PlannerLLMClient = mock
+
+	_, err := RunTest(context.Background(), config)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "0 valid tests executed")
+}
+
+func TestRunTest_PlannerFallbackToBruteForce(t *testing.T) {
+	server := testServer()
+	defer server.Close()
+
+	apiPath, rolesPath, tmplDir := writeRunTestFixtures(t, server.URL)
+
+	// Inject a client that errors — should fall through to brute-force
+	mock := &mockPlannerClient{err: &planner.APIError{StatusCode: 401, Message: "bad key"}}
+	config := baseRunTestConfig(apiPath, rolesPath, tmplDir)
+	config.PlannerEnabled = true
+	config.PlannerOnly = false
+	config.PlannerLLMClient = mock
+
+	findings, err := RunTest(context.Background(), config)
+	require.NoError(t, err) // graceful fallback, no error
+	// Brute-force should still produce findings from the test template
+	assert.NotEmpty(t, findings)
+}
+
+func TestRunTest_PlannerCoverageSkip(t *testing.T) {
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"id":"1"}`))
+	}))
+	defer server.Close()
+
+	apiPath, rolesPath, tmplDir := writeRunTestFixtures(t, server.URL)
+
+	// Inject a client that returns a plan covering the exact template+op
+	mock := &mockPlannerClient{response: `{"steps":[{"id":"s1","method":"GET","path":"/test","template_id":"test-tmpl","attacker_role":"anon"}]}`}
+	config := baseRunTestConfig(apiPath, rolesPath, tmplDir)
+	config.PlannerEnabled = true
+	config.PlannerOnly = false
+	config.PlannerLLMClient = mock
+
+	findings, err := RunTest(context.Background(), config)
+	require.NoError(t, err)
+	_ = findings
+
+	// The template should execute exactly once (planned step), NOT twice (plan + brute-force)
+	// Since the template has attacker_permission_level: none, it runs once per operation
+	// With coverage-skip, brute-force should skip the same combo
+	count := atomic.LoadInt32(&requestCount)
+	// Should be 1 (planned step only), not 2 (plan + brute-force duplicate)
+	assert.Equal(t, int32(1), count, "coverage-skip should prevent brute-force from re-executing the planned combo")
 }
