@@ -19,11 +19,14 @@ type PlannerInput struct {
 }
 
 // PlannerOptions configures planner behavior.
+// MaxSteps, FocusCategories, and FocusEndpoints are available for library callers
+// (e.g., platform integration via RunTest) but are not yet exposed as CLI flags.
+// CustomContext is the only option currently wired to a CLI flag (--planner-context).
 type PlannerOptions struct {
-	MaxSteps        int
-	FocusCategories []string
-	FocusEndpoints  []string
-	CustomContext   string // Additional user-provided context appended to the prompt
+	MaxSteps        int      // Cap on plan steps (0 = no limit). Library-only, no CLI flag yet.
+	FocusCategories []string // Limit to specific OWASP categories. Library-only, no CLI flag yet.
+	FocusEndpoints  []string // Limit to specific endpoint paths. Library-only, no CLI flag yet.
+	CustomContext   string   // Additional user-provided context appended to the prompt.
 }
 
 // AttackPlan is the LLM's output: a flat ordered list of attack steps.

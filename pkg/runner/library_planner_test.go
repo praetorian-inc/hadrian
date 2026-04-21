@@ -2,10 +2,13 @@ package runner
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/planner"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -181,28 +184,97 @@ func TestExecutePlannedSteps_UnknownOperation(t *testing.T) {
 	assert.Equal(t, 0, executed)
 }
 
-func TestExecutePlannedSteps_DuplicateDedup(t *testing.T) {
-	// Use a template that requires auth but operation doesn't — templateApplies returns false
-	// This tests that the dedup logic path exists without needing a real executor
-	plan := &planner.AttackPlan{
-		Steps: []planner.AttackStep{
-			{ID: "s1", TemplateID: "t1", Method: "GET", Path: "/test"},
-			{ID: "s2", TemplateID: "t1", Method: "GET", Path: "/test"}, // duplicate
+// === Happy-path + dedup tests with real httptest executor (TEST-009, TEST-010) ===
+
+func testServer() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"id":"1"}`))
+	}))
+}
+
+func testTemplateForServer() *templates.CompiledTemplate {
+	compiled, _ := templates.Compile(&templates.Template{
+		ID: "test-tmpl",
+		Info: templates.TemplateInfo{
+			Name: "Test", Category: "API1:2023", Severity: "HIGH",
+			TestPattern: "simple",
 		},
-	}
-	tmpl := &templates.CompiledTemplate{
-		Template: &templates.Template{
-			ID: "t1",
-			EndpointSelector: templates.EndpointSelector{
-				RequiresAuth: true, // requires auth
-				Methods:      []string{"GET"},
+		EndpointSelector: templates.EndpointSelector{
+			Methods: []string{"GET"},
+		},
+		RoleSelector: templates.RoleSelector{
+			AttackerPermissionLevel: "none",
+		},
+		HTTP: []templates.HTTPTest{
+			{
+				Method: "{{operation.method}}",
+				Path:   "{{operation.path}}",
+				Matchers: []templates.Matcher{
+					{Type: "status", Status: []int{200}},
+				},
 			},
 		},
-	}
-	spec := &model.APISpec{Operations: []*model.Operation{{Method: "GET", Path: "/test", RequiresAuth: false}}} // no auth
+		Detection: templates.Detection{
+			SuccessIndicators: []templates.Indicator{
+				{Type: "status_code", StatusCode: 200},
+			},
+		},
+	})
+	return compiled
+}
 
-	// Both steps fail templateApplies (auth mismatch), but dedup would prevent the second anyway
-	result, executed := executePlannedSteps(context.Background(), plan, []*templates.CompiledTemplate{tmpl}, spec, nil, nil, nil, nil)
-	assert.Empty(t, result.set)
-	assert.Equal(t, 0, executed)
+func TestExecutePlannedSteps_HappyPath(t *testing.T) {
+	server := testServer()
+	defer server.Close()
+
+	tmpl := testTemplateForServer()
+	spec := &model.APISpec{
+		BaseURL:    server.URL,
+		Operations: []*model.Operation{{Method: "GET", Path: "/test"}},
+	}
+	plan := &planner.AttackPlan{
+		Steps: []planner.AttackStep{
+			{ID: "s1", TemplateID: "test-tmpl", Method: "GET", Path: "/test"},
+		},
+	}
+
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	rateLimiter := NewRateLimiter(100, 100)
+	rlClient := NewRateLimitingClient(httpClient, rateLimiter, &RateLimitConfig{Rate: 100, Enabled: true, BackoffType: "exponential", BackoffInitial: time.Second, BackoffMax: time.Second, MaxRetries: 1, StatusCodes: []int{429}})
+	executor := templates.NewExecutor(rlClient, nil)
+	mutExecutor := orchestrator.NewMutationExecutor(rlClient, nil)
+	rolesCfg := &roles.RoleConfig{Roles: []*roles.Role{{Name: "anon", Level: 0}}}
+
+	result, executed := executePlannedSteps(context.Background(), plan, []*templates.CompiledTemplate{tmpl}, spec, executor, mutExecutor, rolesCfg, nil)
+	assert.Equal(t, 1, executed)
+	assert.Contains(t, result.set, "test-tmpl|GET /test")
+}
+
+func TestExecutePlannedSteps_DuplicateDedup(t *testing.T) {
+	server := testServer()
+	defer server.Close()
+
+	tmpl := testTemplateForServer()
+	spec := &model.APISpec{
+		BaseURL:    server.URL,
+		Operations: []*model.Operation{{Method: "GET", Path: "/test"}},
+	}
+	plan := &planner.AttackPlan{
+		Steps: []planner.AttackStep{
+			{ID: "s1", TemplateID: "test-tmpl", Method: "GET", Path: "/test"},
+			{ID: "s2", TemplateID: "test-tmpl", Method: "GET", Path: "/test"}, // duplicate
+		},
+	}
+
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	rateLimiter := NewRateLimiter(100, 100)
+	rlClient := NewRateLimitingClient(httpClient, rateLimiter, &RateLimitConfig{Rate: 100, Enabled: true, BackoffType: "exponential", BackoffInitial: time.Second, BackoffMax: time.Second, MaxRetries: 1, StatusCodes: []int{429}})
+	executor := templates.NewExecutor(rlClient, nil)
+	mutExecutor := orchestrator.NewMutationExecutor(rlClient, nil)
+	rolesCfg := &roles.RoleConfig{Roles: []*roles.Role{{Name: "anon", Level: 0}}}
+
+	result, executed := executePlannedSteps(context.Background(), plan, []*templates.CompiledTemplate{tmpl}, spec, executor, mutExecutor, rolesCfg, nil)
+	assert.Equal(t, 1, executed) // dedup prevents second execution
+	assert.Len(t, result.set, 1)
 }

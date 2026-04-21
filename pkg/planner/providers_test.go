@@ -246,3 +246,138 @@ func TestOllamaClient_Generate_HTTPError(t *testing.T) {
 	require.ErrorAs(t, err, &apiErr)
 	assert.Equal(t, 500, apiErr.StatusCode)
 }
+
+// TEST-001: Anthropic max_tokens truncation
+func TestAnthropicClient_Generate_MaxTokensTruncated(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"stop_reason": "max_tokens",
+			"content":     []map[string]interface{}{{"type": "text", "text": "partial"}},
+		}))
+	}))
+	defer server.Close()
+
+	c := &AnthropicClient{apiKey: "test", model: "test", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "max_tokens")
+}
+
+// TEST-002: Ollama empty response + parse error
+func TestOllamaClient_Generate_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{"response": ""}))
+	}))
+	defer server.Close()
+
+	c := NewOllamaClient(server.URL, "test", 10*time.Second)
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty response")
+}
+
+func TestOllamaClient_Generate_ParseError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{not json`))
+	}))
+	defer server.Close()
+
+	c := NewOllamaClient(server.URL, "test", 10*time.Second)
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse Ollama response")
+}
+
+// TEST-004: OpenAI finish_reason and empty content
+func TestOpenAIClient_Generate_FinishReasonLength(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]string{"content": "partial"}, "finish_reason": "length"},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	c := &OpenAIClient{apiKey: "test", model: "gpt-4o", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "finish_reason=length")
+}
+
+func TestOpenAIClient_Generate_ContentFilter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]string{"content": ""}, "finish_reason": "content_filter"},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	c := &OpenAIClient{apiKey: "test", model: "gpt-4o", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "content_filter")
+}
+
+func TestOpenAIClient_Generate_EmptyContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		require.NoError(t, json.NewEncoder(w).Encode(map[string]interface{}{
+			"choices": []map[string]interface{}{
+				{"message": map[string]string{"content": ""}, "finish_reason": "stop"},
+			},
+		}))
+	}))
+	defer server.Close()
+
+	c := &OpenAIClient{apiKey: "test", model: "gpt-4o", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "empty content")
+}
+
+// TEST-005: Anthropic + Ollama response size cap and parse error
+func TestAnthropicClient_Generate_ResponseSizeCapped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		huge := make([]byte, maxResponseSize+1024)
+		for i := range huge {
+			huge[i] = 'x'
+		}
+		_, _ = w.Write(huge)
+	}))
+	defer server.Close()
+
+	c := &AnthropicClient{apiKey: "test", model: "test", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeded")
+}
+
+func TestAnthropicClient_Generate_ParseError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{broken`))
+	}))
+	defer server.Close()
+
+	c := &AnthropicClient{apiKey: "test", model: "test", endpoint: server.URL, client: server.Client()}
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse Anthropic response")
+}
+
+func TestOllamaClient_Generate_ResponseSizeCapped(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		huge := make([]byte, maxResponseSize+1024)
+		for i := range huge {
+			huge[i] = 'x'
+		}
+		_, _ = w.Write(huge)
+	}))
+	defer server.Close()
+
+	c := NewOllamaClient(server.URL, "test", 10*time.Second)
+	_, err := c.Generate(context.Background(), "test")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeded")
+}

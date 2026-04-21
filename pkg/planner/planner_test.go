@@ -178,6 +178,30 @@ func TestValidatePlan_DropsUnknownOperation(t *testing.T) {
 	assert.Empty(t, result.Steps)
 }
 
+func TestValidatePlan_NilSpec(t *testing.T) {
+	plan := &AttackPlan{
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", Method: "GET", Path: "/api/users/{id}"},
+		},
+	}
+	input := testInput()
+	input.Spec = nil
+	result := validatePlan(plan, input)
+	assert.Empty(t, result.Steps) // all dropped because no operations
+}
+
+func TestValidatePlan_NilRoles(t *testing.T) {
+	plan := &AttackPlan{
+		Steps: []AttackStep{
+			{ID: "s1", TemplateID: "api1-bola-read", AttackerRole: "user", Method: "GET", Path: "/api/users/{id}"},
+		},
+	}
+	input := testInput()
+	input.Roles = nil
+	result := validatePlan(plan, input)
+	assert.Empty(t, result.Steps) // all dropped because no roles
+}
+
 // TEST-002: Plan() failure modes
 
 func TestPlan_LLMError(t *testing.T) {

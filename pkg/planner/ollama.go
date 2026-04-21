@@ -94,5 +94,9 @@ func (c *OllamaClient) Generate(ctx context.Context, prompt string) (string, err
 		return "", fmt.Errorf("failed to parse Ollama response: %w", err)
 	}
 
+	if result.Response == "" {
+		return "", fmt.Errorf("Ollama returned empty response") //nolint:staticcheck // proper noun
+	}
+
 	return result.Response, nil
 }
