@@ -46,15 +46,18 @@ func NewClient(ctx context.Context) (Client, error) {
 
 // NewClientWithConfig creates LLM client with explicit configuration
 func NewClientWithConfig(ctx context.Context, host, model string, timeout time.Duration, customContext string) (Client, error) {
-	// If host is specified, assume Ollama at that host
-	if host != "" {
-		if IsOllamaRunningAt(ctx, host) {
-			return NewOllamaClientWithConfig(host, model, timeout, customContext), nil
-		}
-		return nil, fmt.Errorf("ollama not reachable at %s", host)
+	// Resolve host from env var if not specified
+	if host == "" {
+		host = os.Getenv("OLLAMA_HOST")
 	}
-	// Fall back to existing env var logic
-	return NewClient(ctx)
+	if host == "" {
+		host = "http://localhost:11434"
+	}
+
+	if IsOllamaRunningAt(ctx, host) {
+		return NewOllamaClientWithConfig(host, model, timeout, customContext), nil
+	}
+	return nil, fmt.Errorf("ollama not reachable at %s", host)
 }
 
 // NewClientWithProvider creates an LLM client for the specified provider.

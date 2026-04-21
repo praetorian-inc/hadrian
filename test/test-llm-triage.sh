@@ -82,7 +82,7 @@ USER_TOKEN=$(crapi_login "user1@test.com" "Testpass123!")
 USER2_TOKEN=$(crapi_login "user2@test.com" "Testpass123!")
 MECH_TOKEN=$(crapi_login "mechanic1@test.com" "Testpass123!")
 
-if [ -z "$USER_TOKEN" ] || [ -z "$USER2_TOKEN" ]; then
+if [ -z "$USER_TOKEN" ] || [ -z "$USER2_TOKEN" ] || [ -z "$MECH_TOKEN" ]; then
     log_fail "Failed to get crAPI tokens. Create users first (see test/crapi/README.md)"
     exit 1
 fi

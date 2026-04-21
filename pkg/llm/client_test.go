@@ -165,20 +165,18 @@ func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
 	assert.Contains(t, err.Error(), "not reachable")
 }
 
-func TestNewClientWithConfig_EmptyHostFallsBackToEnv(t *testing.T) {
-	// Arrange
+func TestNewClientWithConfig_EmptyHostFallsBackToDefault(t *testing.T) {
 	_ = os.Unsetenv("OLLAMA_HOST")
 
-	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	client, err := NewClientWithConfig(ctx, "", "", 180*time.Second, "")
 
-	// Assert - Should fall back to NewClient logic, which will fail with no env vars
+	// Should try localhost:11434 and fail because Ollama isn't running
 	assert.Error(t, err)
 	assert.Nil(t, client)
-	assert.Contains(t, err.Error(), "no LLM provider available")
+	assert.Contains(t, err.Error(), "not reachable")
 }
 
 // TEST-002: NewClientWithProvider dispatch tests

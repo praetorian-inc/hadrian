@@ -47,6 +47,7 @@ func NewOpenAIClient(apiKey, model string, timeout time.Duration, customContext 
 		client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
+				Proxy:           http.ProxyFromEnvironment,
 				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 				DialContext:     (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
 			},
@@ -68,8 +69,9 @@ func (c *OpenAIClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 			{"role": "system", "content": "You are a security expert. Respond with valid JSON only."},
 			{"role": "user", "content": prompt},
 		},
-		"temperature":     0.2,
-		"response_format": map[string]string{"type": "json_object"},
+		"temperature":           0.2,
+		"max_completion_tokens": 4096,
+		"response_format":       map[string]string{"type": "json_object"},
 	}
 
 	body, err := json.Marshal(reqBody)
@@ -104,6 +106,7 @@ func (c *OpenAIClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 	}
 
@@ -113,6 +116,10 @@ func (c *OpenAIClient) Triage(ctx context.Context, req *TriageRequest) (*TriageR
 
 	if len(result.Choices) == 0 {
 		return nil, fmt.Errorf("OpenAI returned no choices") //nolint:staticcheck // proper noun
+	}
+
+	if fr := result.Choices[0].FinishReason; fr == "length" || fr == "content_filter" {
+		return nil, fmt.Errorf("OpenAI response incomplete (finish_reason=%s)", fr) //nolint:staticcheck // proper noun
 	}
 
 	return ParseTriageJSON(result.Choices[0].Message.Content, "openai")

@@ -129,13 +129,15 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 			}
 		}
 
-		// Defense-in-depth: redact both request and response bodies before they enter the LLM pipeline.
+		// Defense-in-depth: redact all evidence fields before they enter the LLM pipeline.
 		// BuildTriagePrompt also redacts response body in the prompt, but we redact here too so
 		// the TriageRequest never carries unredacted PII regardless of how clients use it.
 		redactor := reporter.NewRedactor()
 		redactedFinding := *finding
 		redactedFinding.Evidence.Request.Body = redactor.RedactForLLM(finding.Evidence.Request.Body)
+		redactedFinding.Evidence.Request.URL = redactor.RedactForLLM(finding.Evidence.Request.URL)
 		redactedFinding.Evidence.Response.Body = redactor.RedactForLLM(finding.Evidence.Response.Body)
+		redactedFinding.Description = redactor.RedactForLLM(finding.Description)
 		req := &llm.TriageRequest{
 			Finding:      &redactedFinding,
 			AttackerRole: attackerRole,

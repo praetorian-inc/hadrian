@@ -47,6 +47,7 @@ func NewAnthropicClient(apiKey, model string, timeout time.Duration, customConte
 		client: &http.Client{
 			Timeout: timeout,
 			Transport: &http.Transport{
+				Proxy:           http.ProxyFromEnvironment,
 				TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 				DialContext:     (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
 			},
@@ -104,10 +105,15 @@ func (c *AnthropicClient) Triage(ctx context.Context, req *TriageRequest) (*Tria
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
+		StopReason string `json:"stop_reason"`
 	}
 
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse Anthropic response: %w", err)
+	}
+
+	if result.StopReason == "max_tokens" {
+		return nil, fmt.Errorf("Anthropic response truncated (hit max_tokens limit)") //nolint:staticcheck // proper noun
 	}
 
 	for _, block := range result.Content {

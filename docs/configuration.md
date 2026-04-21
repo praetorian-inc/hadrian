@@ -339,7 +339,6 @@ hadrian test rest --api api.yaml --roles roles.yaml \
 |----------|----------|-------------|
 | `OPENAI_API_KEY` | OpenAI | API key for OpenAI triage |
 | `ANTHROPIC_API_KEY` | Anthropic | API key for Anthropic triage |
-| `OLLAMA_HOST` | Ollama | Custom Ollama host (default: `http://localhost:11434`) |
 
 ### Data Safety
 
