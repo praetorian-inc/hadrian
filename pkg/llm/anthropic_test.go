@@ -21,7 +21,7 @@ func TestAnthropicClient_Name(t *testing.T) {
 
 func TestNewAnthropicClient_RequiresAPIKey(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
-	_, err := NewAnthropicClient("", "claude-sonnet-4-20250514", 120*time.Second, "")
+	_, err := NewAnthropicClient("", "claude-sonnet-4-6", 120*time.Second, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ANTHROPIC_API_KEY not set")
 }
@@ -31,7 +31,7 @@ func TestNewAnthropicClient_UsesEnvKey(t *testing.T) {
 	client, err := NewAnthropicClient("", "", 0, "")
 	require.NoError(t, err)
 	assert.Equal(t, "sk-ant-test-123", client.apiKey)
-	assert.Equal(t, "claude-sonnet-4-20250514", client.model)
+	assert.Equal(t, "claude-sonnet-4-6", client.model)
 }
 
 func TestAnthropicClient_Triage_Success(t *testing.T) {
@@ -51,7 +51,7 @@ func TestAnthropicClient_Triage_Success(t *testing.T) {
 
 	client := &AnthropicClient{
 		apiKey:   "test-key",
-		model:    "claude-sonnet-4-20250514",
+		model:    "claude-sonnet-4-6",
 		endpoint: server.URL,
 		redactor: reporter.NewRedactor(),
 		client:   &http.Client{Timeout: 10 * time.Second},
@@ -74,7 +74,7 @@ func TestAnthropicClient_Triage_HTTPError(t *testing.T) {
 
 	client := &AnthropicClient{
 		apiKey:   "test-key",
-		model:    "claude-sonnet-4-20250514",
+		model:    "claude-sonnet-4-6",
 		endpoint: server.URL,
 		redactor: reporter.NewRedactor(),
 		client:   &http.Client{Timeout: 10 * time.Second},
@@ -98,7 +98,7 @@ func TestAnthropicClient_Triage_NoTextContent(t *testing.T) {
 
 	client := &AnthropicClient{
 		apiKey:   "test-key",
-		model:    "claude-sonnet-4-20250514",
+		model:    "claude-sonnet-4-6",
 		endpoint: server.URL,
 		redactor: reporter.NewRedactor(),
 		client:   &http.Client{Timeout: 10 * time.Second},

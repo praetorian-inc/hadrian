@@ -329,7 +329,7 @@ hadrian test rest --api api.yaml --roles roles.yaml \
 |------|---------|-------------|
 | `--llm-provider <name>` | `ollama` | LLM provider: `ollama`, `openai`, `anthropic` |
 | `--llm-host <url>` | - | LLM service host URL (e.g., `http://localhost:11434` for Ollama) |
-| `--llm-model <model>` | - | Model name (e.g., `llama3.2:latest`, `gpt-4o`, `claude-sonnet-4-20250514`) |
+| `--llm-model <model>` | - | Model name (e.g., `llama3.2:latest`, `gpt-4o`, `claude-sonnet-4-6`) |
 | `--llm-timeout <n>` | 180 | Request timeout in seconds |
 | `--llm-context <text>` | - | Additional context for analysis |
 

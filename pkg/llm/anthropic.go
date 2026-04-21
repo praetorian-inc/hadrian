@@ -34,7 +34,7 @@ func NewAnthropicClient(apiKey, model string, timeout time.Duration, customConte
 		return nil, fmt.Errorf("ANTHROPIC_API_KEY not set")
 	}
 	if model == "" {
-		model = "claude-sonnet-4-20250514"
+		model = "claude-sonnet-4-6"
 	}
 	if timeout == 0 {
 		timeout = 120 * time.Second
