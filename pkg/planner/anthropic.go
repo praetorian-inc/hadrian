@@ -82,12 +82,13 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
 	}
-	if int64(len(respBody)) > maxResponseSize {
-		return "", fmt.Errorf("Anthropic response exceeded %d byte limit", maxResponseSize) //nolint:staticcheck // proper noun
-	}
 
 	if resp.StatusCode != http.StatusOK {
 		return "", &APIError{StatusCode: resp.StatusCode, Message: fmt.Sprintf("Anthropic API returned status %d: %.500s", resp.StatusCode, string(respBody))} //nolint:staticcheck // proper noun
+	}
+
+	if int64(len(respBody)) > maxResponseSize {
+		return "", fmt.Errorf("Anthropic response exceeded %d byte limit", maxResponseSize) //nolint:staticcheck // proper noun
 	}
 
 	var result struct {
@@ -108,6 +109,9 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 
 	for _, block := range result.Content {
 		if block.Type == "text" {
+			if block.Text == "" {
+				return "", fmt.Errorf("Anthropic returned empty text content") //nolint:staticcheck // proper noun
+			}
 			return block.Text, nil
 		}
 	}

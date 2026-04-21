@@ -161,9 +161,13 @@ assert_findings() {
         return
     fi
     local count
-    count=$(python3 -c "import json,sys; d=json.load(open('$file')); print(len(d.get('findings',[]))); sys.exit(0)" 2>/dev/null)
-    if [ $? -ne 0 ] || [ -z "$count" ]; then
+    if ! count=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(len(d.get('findings',[])))" "$file" 2>/dev/null); then
         log_fail "$label: result file is not valid JSON"
+        FAILED=$((FAILED + 1))
+        return
+    fi
+    if [ -z "$count" ]; then
+        log_fail "$label: could not parse finding count"
         FAILED=$((FAILED + 1))
         return
     fi
