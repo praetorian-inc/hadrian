@@ -74,9 +74,12 @@ func (c *OllamaClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	if int64(len(respBody)) > maxResponseSize {
+		return "", fmt.Errorf("Ollama response exceeded %d byte limit", maxResponseSize) //nolint:staticcheck // proper noun
 	}
 
 	if resp.StatusCode != http.StatusOK {

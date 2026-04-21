@@ -56,7 +56,7 @@ if [ ! -f "$HADRIAN_BIN" ]; then
     (cd "$REPO_ROOT" && go build -o hadrian ./cmd/hadrian)
 fi
 
-if ! curl -sf -o /dev/null "$CRAPI_URL" 2>/dev/null; then
+if ! curl -s -o /dev/null -w '%{http_code}' "${CRAPI_URL}/identity/api/auth/signup" 2>/dev/null | grep -qE '^[2-4][0-9]{2}$'; then
     log_fail "crAPI not running on $CRAPI_URL"
     exit 1
 fi
@@ -161,7 +161,12 @@ assert_findings() {
         return
     fi
     local count
-    count=$(python3 -c "import json; d=json.load(open('$file')); print(len(d.get('findings',[])))" 2>/dev/null || echo "0")
+    count=$(python3 -c "import json,sys; d=json.load(open('$file')); print(len(d.get('findings',[]))); sys.exit(0)" 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$count" ]; then
+        log_fail "$label: result file is not valid JSON"
+        FAILED=$((FAILED + 1))
+        return
+    fi
     if [ "$count" -ge "$min_count" ]; then
         log_ok "$label: $count findings (>= $min_count expected)"
         PASSED=$((PASSED + 1))
@@ -177,8 +182,8 @@ assert_findings "test1 has findings" "$RESULT_FILE" 1
 # Test 2 (planner-only) — file should exist and be valid JSON
 assert_findings "test2 result file valid" "$RESULT_FILE_ONLY" 0
 
-# Test 3 (context-steered) — orders endpoint is a known crAPI BOLA target
-assert_findings "test3 context-steered findings" "$RESULT_FILE_CTX" 0
+# Test 3 (context-steered) — orders endpoint is a known crAPI BOLA target with >=1 finding
+assert_findings "test3 context-steered findings" "$RESULT_FILE_CTX" 1
 
 # Summary
 echo ""

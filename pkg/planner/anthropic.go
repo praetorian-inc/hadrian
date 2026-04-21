@@ -78,9 +78,12 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	if int64(len(respBody)) > maxResponseSize {
+		return "", fmt.Errorf("Anthropic response exceeded %d byte limit", maxResponseSize) //nolint:staticcheck // proper noun
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -92,10 +95,15 @@ func (c *AnthropicClient) Generate(ctx context.Context, prompt string) (string, 
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
+		StopReason string `json:"stop_reason"`
 	}
 
 	if err := json.Unmarshal(respBody, &result); err != nil {
 		return "", fmt.Errorf("failed to parse Anthropic response: %w", err)
+	}
+
+	if result.StopReason == "max_tokens" {
+		return "", fmt.Errorf("Anthropic response truncated (hit max_tokens limit)") //nolint:staticcheck // proper noun
 	}
 
 	for _, block := range result.Content {

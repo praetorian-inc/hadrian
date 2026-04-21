@@ -76,9 +76,12 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize+1))
 	if err != nil {
 		return "", fmt.Errorf("failed to read response: %w", err)
+	}
+	if int64(len(respBody)) > maxResponseSize {
+		return "", fmt.Errorf("OpenAI response exceeded %d byte limit", maxResponseSize) //nolint:staticcheck // proper noun
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -90,6 +93,7 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 	}
 
@@ -101,5 +105,14 @@ func (c *OpenAIClient) Generate(ctx context.Context, prompt string) (string, err
 		return "", fmt.Errorf("OpenAI returned no choices") //nolint:staticcheck // proper noun
 	}
 
-	return result.Choices[0].Message.Content, nil
+	if result.Choices[0].FinishReason == "length" || result.Choices[0].FinishReason == "content_filter" {
+		return "", fmt.Errorf("OpenAI response incomplete (finish_reason=%s)", result.Choices[0].FinishReason) //nolint:staticcheck // proper noun
+	}
+
+	content := result.Choices[0].Message.Content
+	if content == "" {
+		return "", fmt.Errorf("OpenAI returned empty content") //nolint:staticcheck // proper noun
+	}
+
+	return content, nil
 }
