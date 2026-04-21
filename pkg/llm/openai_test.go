@@ -136,3 +136,23 @@ func TestOpenAIClient_Triage_EmptyChoices(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no choices")
 }
+
+func TestOpenAIClient_Triage_MalformedEnvelope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{truncated`))
+	}))
+	defer server.Close()
+
+	client := &OpenAIClient{
+		apiKey:   "test-key",
+		model:    "gpt-4o",
+		endpoint: server.URL,
+		redactor: reporter.NewRedactor(),
+		client:   &http.Client{Timeout: 10 * time.Second},
+	}
+
+	_, err := client.Triage(context.Background(), testTriageRequest())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse OpenAI response")
+}

@@ -196,6 +196,32 @@ func TestNewClientWithProvider_Anthropic(t *testing.T) {
 	assert.IsType(t, &AnthropicClient{}, client)
 }
 
+func TestNewClientWithProvider_Ollama(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClientWithProvider(context.Background(), "ollama", server.URL, "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.Equal(t, "ollama", client.Name())
+}
+
+func TestNewClientWithProvider_EmptyDefaultsToOllama(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClientWithProvider(context.Background(), "", server.URL, "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.Equal(t, "ollama", client.Name())
+}
+
 func TestNewClientWithProvider_Unknown(t *testing.T) {
 	_, err := NewClientWithProvider(context.Background(), "bogus", "", "", 60*time.Second, "")
 	require.Error(t, err)
