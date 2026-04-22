@@ -33,6 +33,11 @@ func IsVerbose() bool {
 	return verboseFlag.Load()
 }
 
+// Info prints an informational message to stderr (always displayed)
+func Info(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "%s[INFO]%s %s\n", ColorCyan, ColorReset, fmt.Sprintf(format, args...))
+}
+
 // Warn prints a warning message with magenta [WARN] prefix to stderr (always displayed)
 func Warn(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "%s[WARN]%s %s\n", ColorMagenta, ColorReset, fmt.Sprintf(format, args...))

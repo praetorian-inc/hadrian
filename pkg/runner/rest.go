@@ -12,7 +12,7 @@ import (
 
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
-	"github.com/praetorian-inc/hadrian/pkg/roles"
+	"github.com/praetorian-inc/hadrian/pkg/planner"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
 )
@@ -39,12 +39,19 @@ type Config struct {
 	AuditLog             string
 	Verbose              bool
 	DryRun               bool
-	RequestIDsLimit      int      // Number of request IDs to display per finding (0 = all)
-	LLMHost              string   // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel             string   // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout           int      // LLM request timeout in seconds
-	LLMContext           string   // Additional context for LLM prompts
-	Headers              []string // Custom HTTP headers (format: "Key: Value")
+	RequestIDsLimit      int               // Number of request IDs to display per finding (0 = all)
+	LLMHost              string            // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel             string            // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout           int               // LLM request timeout in seconds
+	LLMContext           string            // Additional context for LLM prompts
+	Headers              []string          // Custom HTTP headers (format: "Key: Value")
+	PlannerEnabled       bool              // Enable LLM-assisted attack planning (experimental)
+	PlannerOnly          bool              // Run ONLY the LLM-planned steps, skip brute-force
+	PlannerProvider      string            // LLM provider: openai, anthropic, ollama
+	PlannerModel         string            // LLM model for planner
+	PlannerTimeout       int               // Planner LLM timeout in seconds (default 120)
+	PlannerContext       string            // Additional context for planner prompt
+	PlannerLLMClient     planner.LLMClient // Optional: platform-injected LLM client (takes priority over provider flags)
 }
 
 // newTestRestCmd creates the "test rest" subcommand (was previously the main test command)
@@ -96,6 +103,14 @@ func newTestRestCmd() *cobra.Command {
 	// Custom headers
 	cmd.Flags().StringArrayVarP(&config.Headers, "header", "H", []string{}, "Custom HTTP header (format: 'Key: Value', can specify multiple)")
 
+	// Planner configuration (experimental)
+	cmd.Flags().BoolVar(&config.PlannerEnabled, "planner", false, "Enable LLM-assisted attack planning (experimental)")
+	cmd.Flags().BoolVar(&config.PlannerOnly, "planner-only", false, "Run ONLY the LLM-planned steps, skip brute-force (requires --planner)")
+	cmd.Flags().StringVar(&config.PlannerProvider, "planner-provider", "openai", "LLM provider for planner: openai, anthropic, ollama")
+	cmd.Flags().StringVar(&config.PlannerModel, "planner-model", "", "LLM model for planner (default: gpt-4o for openai, claude-sonnet-4-20250514 for anthropic)")
+	cmd.Flags().IntVar(&config.PlannerTimeout, "planner-timeout", 120, "Planner LLM request timeout in seconds")
+	cmd.Flags().StringVar(&config.PlannerContext, "planner-context", "", "Additional context for the planner (e.g., 'Focus on payment endpoints, this is a fintech API')")
+
 	return cmd
 }
 
@@ -109,15 +124,13 @@ func runTest(ctx context.Context, config Config) error {
 		return fmt.Errorf("configuration error: %w", err)
 	}
 
-	spec, err := parseAPISpec(config.API)
+	inputs, err := loadTestInputs(config)
 	if err != nil {
-		return fmt.Errorf("failed to parse API spec: %w", err)
+		return err
 	}
-
-	rolesCfg, err := roles.Load(config.Roles)
-	if err != nil {
-		return fmt.Errorf("failed to load roles: %w", err)
-	}
+	spec := inputs.spec
+	rolesCfg := inputs.rolesCfg
+	tmplFiles := inputs.tmplFiles
 
 	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
 	if err != nil {
@@ -129,24 +142,6 @@ func runTest(ctx context.Context, config Config) error {
 	if terminalReporter, ok := rep.(*TerminalReporter); ok && llmEnabled {
 		terminalReporter.SetLLMMode(true)
 		log.Debug("LLM mode enabled on terminal reporter")
-	}
-
-	templateDir := config.TemplateDir
-	if templateDir == "" {
-		templateDir = getTemplateDir("./templates/rest")
-	}
-	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
-	if err != nil {
-		return fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
-	}
-	if len(tmplFiles) == 0 {
-		log.Warn("No templates matched categories %v in %s — check --category values or template tags", config.Categories, templateDir)
-	}
-	if len(config.Templates) > 0 {
-		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
-		if len(tmplFiles) == 0 {
-			return fmt.Errorf("no templates matched the specified filters: %v", config.Templates)
-		}
 	}
 
 	fmt.Printf("[INFO] Loaded %d templates\n", len(tmplFiles))
@@ -207,14 +202,11 @@ func runTest(ctx context.Context, config Config) error {
 // HELPER FUNCTIONS
 // =============================================================================
 
-// getTemplateDir returns the template directory path, using defaultPath if no
-// environment variable override is set.
+// getTemplateDir returns the template directory path, defaulting to defaultPath if HADRIAN_TEMPLATES is not set.
 func getTemplateDir(defaultPath string) string {
-	// Check for environment variable override
 	if dir := os.Getenv("HADRIAN_TEMPLATES"); dir != "" {
 		return dir
 	}
-
 	return defaultPath
 }
 
@@ -333,7 +325,7 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 		} else {
 			matched, err := regexp.MatchString(sel.PathPattern, op.Path)
 			if err != nil {
-				log.Error("Invalid path_pattern regex %q: %v", sel.PathPattern, err)
+				log.Warn("Invalid path_pattern regex %q: %v", sel.PathPattern, err)
 				return false
 			}
 			if !matched {

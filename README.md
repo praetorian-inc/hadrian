@@ -31,6 +31,7 @@ Most API security scanners test for injection and configuration issues but miss 
 | **Adaptive Rate Limiting** | Proactive request throttling with reactive backoff on 429/503 responses |
 | **Proxy Support** | Route traffic through Burp Suite or other intercepting proxies |
 | **LLM-Powered Triage** | Optional AI analysis of findings via Ollama to reduce false positives |
+| **LLM-Assisted Attack Planning** | AI-driven prioritization of which endpoints and vulnerability patterns to test first |
 | **Claude Code Integration** | Auto-generate auth and role configs from OpenAPI, GraphQL SDL, or proto files |
 
 ## OWASP API Security Top 10 Coverage
@@ -102,6 +103,12 @@ hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file 
 # AI-powered triage to reduce false positives
 hadrian test rest --api api.yaml --roles roles.yaml \
   --llm-host http://localhost:11434 --llm-model llama3.2:latest
+
+# AI-assisted attack planning (requires OPENAI_API_KEY, or use --planner-provider for Anthropic/Ollama)
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --planner
+
+# Run only LLM-planned steps (faster, targeted testing)
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --planner --planner-only
 
 # Route through a proxy for manual inspection
 hadrian test rest --api api.yaml --roles roles.yaml --proxy http://localhost:8080 --insecure
