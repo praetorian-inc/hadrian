@@ -323,6 +323,7 @@ info:
   name: Test
   category: "API2:2023"
   severity: HIGH
+  tags: [owasp]
   test_pattern: simple
 endpoint_selector:
   methods: [GET]
@@ -376,6 +377,7 @@ info:
   name: Auth Test
   category: "API1:2023"
   severity: HIGH
+  tags: [owasp]
   test_pattern: simple
 endpoint_selector:
   requires_auth: true
