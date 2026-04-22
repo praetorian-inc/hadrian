@@ -278,13 +278,13 @@ func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool
 		}
 
 		// Exact match against info.category
-		if strings.EqualFold(tmpl.Info.Category, cat) {
+		if strings.EqualFold(strings.TrimSpace(tmpl.Info.Category), cat) {
 			return true
 		}
 
 		// Exact match against info.tags
 		for _, tag := range tmpl.Info.Tags {
-			if strings.EqualFold(tag, cat) {
+			if strings.EqualFold(strings.TrimSpace(tag), cat) {
 				return true
 			}
 		}
