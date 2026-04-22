@@ -5,6 +5,7 @@ info:
   severity: "HIGH"
   requires_llm_triage: true
   test_pattern: "simple"
+  tags: ["owasp", "owasp-api-top10", "bola"]
 
 endpoint_selector:
   has_path_parameter: true

@@ -79,7 +79,7 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout (seconds)")
 	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
-	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Test categories (owasp, custom)")
+	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Filter by template metadata — exact match against info.category and info.tags (case-insensitive, default: owasp)")
 	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)")
 	cmd.Flags().StringSliceVar(&config.Templates, "template", []string{}, "Filter templates by ID or name (can specify multiple)")
 	cmd.Flags().StringVar(&config.AuditLog, "audit-log", ".hadrian/audit.log", "Audit log file")
@@ -138,6 +138,9 @@ func runTest(ctx context.Context, config Config) error {
 	tmplFiles, err := loadTemplateFiles(templateDir, config.Categories)
 	if err != nil {
 		return fmt.Errorf("failed to load templates from %s: %w", templateDir, err)
+	}
+	if len(tmplFiles) == 0 {
+		log.Warn("No templates matched categories %v in %s — check --category values or template tags", config.Categories, templateDir)
 	}
 	if len(config.Templates) > 0 {
 		tmplFiles = filterByTemplates(tmplFiles, config.Templates)
@@ -215,17 +218,15 @@ func getTemplateDir(defaultPath string) string {
 	return defaultPath
 }
 
-// loadTemplateFiles loads and compiles templates from directory
+// loadTemplateFiles loads and compiles templates from directory, then filters by metadata categories.
 func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTemplate, error) {
 	var result []*templates.CompiledTemplate
 
-	// Walk template directory
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Skip directories and non-YAML files
 		if info.IsDir() {
 			return nil
 		}
@@ -234,25 +235,22 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 			return nil
 		}
 
-		// Check if template matches requested categories
-		for _, cat := range categories {
-			if strings.Contains(path, cat) || cat == "all" {
-				tmpl, err := templates.Parse(path)
-				if err != nil {
-					log.Warn("Failed to parse template %s: %v", path, err)
-					return nil
-				}
+		tmpl, err := templates.Parse(path)
+		if err != nil {
+			log.Warn("Failed to parse template %s: %v", path, err)
+			return nil
+		}
 
-				compiled, err := templates.Compile(tmpl)
-				if err != nil {
-					log.Warn("Failed to compile template %s: %v", path, err)
-					return nil
-				}
+		compiled, err := templates.Compile(tmpl)
+		if err != nil {
+			log.Warn("Failed to compile template %s: %v", path, err)
+			return nil
+		}
 
-				compiled.FilePath = path
-				result = append(result, compiled)
-				break
-			}
+		compiled.FilePath = path
+
+		if matchesCategory(compiled, categories) {
+			result = append(result, compiled)
 		}
 
 		return nil
@@ -268,6 +266,34 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 	})
 
 	return result, nil
+}
+
+// matchesCategory reports whether tmpl matches any of the requested categories.
+// Matching is exact (case-insensitive) against info.category and info.tags.
+// The special value "all" matches every template.
+func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool {
+	for _, cat := range categories {
+		cat = strings.TrimSpace(cat)
+		if cat == "" {
+			continue
+		}
+		if strings.EqualFold(cat, "all") {
+			return true
+		}
+
+		// Exact match against info.category
+		if strings.EqualFold(strings.TrimSpace(tmpl.Info.Category), cat) {
+			return true
+		}
+
+		// Exact match against info.tags
+		for _, tag := range tmpl.Info.Tags {
+			if strings.EqualFold(strings.TrimSpace(tag), cat) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // templateApplies checks if template selector matches operation

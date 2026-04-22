@@ -9,7 +9,7 @@ info:
   category: "API1:2023"
   severity: "HIGH"
   author: "hadrian"
-  tags: ["bola", "owasp-api-top10", "api1", "horizontal"]
+  tags: ["bola", "owasp", "owasp-api-top10", "api1", "horizontal"]
   requires_llm_triage: true
   test_pattern: "simple"
 
