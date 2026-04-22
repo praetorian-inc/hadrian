@@ -32,7 +32,6 @@ Optional Flags:
       --template-dir <dir>      Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)
       --template <list>         Specific template files to run
       --category <list>         Filter by template metadata — exact match against info.category and info.tags (case-insensitive, default: owasp)
-      --owasp <list>            OWASP API categories to test (e.g., API1,API2,API5,API9)
       --header, -H <header>     Custom HTTP header (repeatable, format: "Key: Value")
       --timeout <n>             Request timeout in seconds (default: 30)
       --verbose, -v             Enable verbose logging output

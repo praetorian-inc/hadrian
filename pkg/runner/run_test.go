@@ -207,9 +207,50 @@ detection:
   vulnerability_pattern: "test"
 `
 
+	// Template with only category, no tags
+	categoryOnlyTemplate := `id: 03-category-only
+info:
+  name: "Category Only Test"
+  category: "custom-cat"
+  severity: "LOW"
+  test_pattern: "simple"
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
+	// Template with tags but no matching category (match only via tags)
+	tagsOnlyTemplate := `id: 04-tags-only
+info:
+  name: "Tags Only Test"
+  category: "unrelated-category"
+  severity: "LOW"
+  test_pattern: "simple"
+  tags: ["special-tag"]
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
 	err := os.WriteFile(filepath.Join(tmpDir, "01-owasp.yaml"), []byte(owaspTemplate), 0644)
 	require.NoError(t, err)
 	err = os.WriteFile(filepath.Join(tmpDir, "02-custom.yaml"), []byte(customTemplate), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tmpDir, "03-category-only.yaml"), []byte(categoryOnlyTemplate), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tmpDir, "04-tags-only.yaml"), []byte(tagsOnlyTemplate), 0644)
 	require.NoError(t, err)
 
 	// "owasp" should match the OWASP template via tags
@@ -230,10 +271,37 @@ detection:
 	require.Len(t, loaded, 1)
 	assert.Equal(t, "02-custom", loaded[0].ID)
 
+	// Template with only category, no tags — matches via category only
+	loaded, err = loadTemplateFiles(tmpDir, []string{"custom-cat"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "03-category-only", loaded[0].ID)
+
+	// Template with only tags, no category — matches via tags only
+	loaded, err = loadTemplateFiles(tmpDir, []string{"special-tag"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "04-tags-only", loaded[0].ID)
+
+	// nil categories should match nothing
+	loaded, err = loadTemplateFiles(tmpDir, nil)
+	require.NoError(t, err)
+	require.Len(t, loaded, 0)
+
+	// empty categories slice should match nothing
+	loaded, err = loadTemplateFiles(tmpDir, []string{})
+	require.NoError(t, err)
+	require.Len(t, loaded, 0)
+
 	// "all" should match everything
 	loaded, err = loadTemplateFiles(tmpDir, []string{"all"})
 	require.NoError(t, err)
-	require.Len(t, loaded, 2)
+	require.Len(t, loaded, 4)
+
+	// "ALL" uppercase should match everything (case-insensitive wildcard)
+	loaded, err = loadTemplateFiles(tmpDir, []string{"ALL"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 4) // all 4 templates
 
 	// "regression" should match custom template via tags
 	loaded, err = loadTemplateFiles(tmpDir, []string{"regression"})
@@ -274,5 +342,5 @@ detection:
 	require.NoError(t, err)
 	loaded, err = loadTemplateFiles(tmpDir, []string{"all"})
 	require.NoError(t, err)
-	require.Len(t, loaded, 2) // Still only the 2 YAML templates
+	require.Len(t, loaded, 4) // Still only the 4 YAML templates
 }
