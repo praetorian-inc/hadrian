@@ -21,7 +21,7 @@ info:
     allowing attackers to delete pastes owned by other users. This template uses a three-phase approach
     to verify the mutation actually persisted: setup confirms resource exists, attack performs unauthorized
     deletion, and verify confirms the resource was deleted (returns null).
-  tags: ["graphql", "dvga", "bola", "authorization", "idor", "mutation", "delete"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "dvga", "bola", "authorization", "idor", "mutation", "delete"]
   requires_llm_triage: false
   test_pattern: "mutation"
 

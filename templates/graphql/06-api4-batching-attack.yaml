@@ -4,7 +4,7 @@ info:
   category: "API4:2023 Unrestricted Resource Consumption"
   severity: "HIGH"
   author: "hadrian"
-  tags: ["graphql", "dos", "batching", "aliasing"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "dos", "batching", "aliasing"]
   requires_llm_triage: true
   test_pattern: "simple"
 
