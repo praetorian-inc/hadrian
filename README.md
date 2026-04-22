@@ -30,7 +30,7 @@ Most API security scanners test for injection and configuration issues but miss 
 | **Multiple Output Formats** | Terminal, JSON, and Markdown reports for CI/CD integration |
 | **Adaptive Rate Limiting** | Proactive request throttling with reactive backoff on 429/503 responses |
 | **Proxy Support** | Route traffic through Burp Suite or other intercepting proxies |
-| **LLM-Powered Triage** | Optional AI analysis of findings via Ollama to reduce false positives |
+| **LLM-Powered Triage** | Optional AI analysis of findings via Ollama, OpenAI, or Anthropic to reduce false positives |
 | **LLM-Assisted Attack Planning** | AI-driven prioritization of which endpoints and vulnerability patterns to test first |
 | **Claude Code Integration** | Auto-generate auth and role configs from OpenAPI, GraphQL SDL, or proto files |
 
@@ -100,9 +100,15 @@ hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 # Export findings as JSON
 hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file report.json
 
-# AI-powered triage to reduce false positives
+# AI-powered triage with Ollama (local)
 hadrian test rest --api api.yaml --roles roles.yaml \
   --llm-host http://localhost:11434 --llm-model llama3.2:latest
+
+# AI-powered triage with OpenAI (requires OPENAI_API_KEY)
+hadrian test rest --api api.yaml --roles roles.yaml --llm-provider openai
+
+# AI-powered triage with Anthropic (requires ANTHROPIC_API_KEY)
+hadrian test rest --api api.yaml --roles roles.yaml --llm-provider anthropic
 
 # AI-assisted attack planning (requires OPENAI_API_KEY, or use --planner-provider for Anthropic/Ollama)
 hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --planner

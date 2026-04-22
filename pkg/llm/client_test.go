@@ -165,18 +165,64 @@ func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
 	assert.Contains(t, err.Error(), "not reachable")
 }
 
-func TestNewClientWithConfig_EmptyHostFallsBackToEnv(t *testing.T) {
-	// Arrange
+func TestNewClientWithConfig_EmptyHostFallsBackToDefault(t *testing.T) {
 	_ = os.Unsetenv("OLLAMA_HOST")
 
-	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	client, err := NewClientWithConfig(ctx, "", "", 180*time.Second, "")
 
-	// Assert - Should fall back to NewClient logic, which will fail with no env vars
+	// Should try localhost:11434 and fail because Ollama isn't running
 	assert.Error(t, err)
 	assert.Nil(t, client)
-	assert.Contains(t, err.Error(), "no LLM provider available")
+	assert.Contains(t, err.Error(), "not reachable")
+}
+
+// TEST-002: NewClientWithProvider dispatch tests
+func TestNewClientWithProvider_OpenAI(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "sk-test")
+	client, err := NewClientWithProvider(context.Background(), "openai", "", "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.IsType(t, &OpenAIClient{}, client)
+}
+
+func TestNewClientWithProvider_Anthropic(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+	client, err := NewClientWithProvider(context.Background(), "anthropic", "", "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.IsType(t, &AnthropicClient{}, client)
+}
+
+func TestNewClientWithProvider_Ollama(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClientWithProvider(context.Background(), "ollama", server.URL, "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.Equal(t, "ollama", client.Name())
+}
+
+func TestNewClientWithProvider_EmptyDefaultsToOllama(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewClientWithProvider(context.Background(), "", server.URL, "", 60*time.Second, "")
+	require.NoError(t, err)
+	assert.Equal(t, "ollama", client.Name())
+}
+
+func TestNewClientWithProvider_Unknown(t *testing.T) {
+	_, err := NewClientWithProvider(context.Background(), "bogus", "", "", 60*time.Second, "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown LLM provider")
+	assert.Contains(t, err.Error(), "bogus")
 }

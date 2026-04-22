@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/praetorian-inc/hadrian/pkg/llm"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -554,7 +555,7 @@ func TestTriageWithLLM_NoProvider(t *testing.T) {
 	rep := NewTerminalReporter(tmpFile, 1)
 
 	// Should return findings unchanged (no LLM available)
-	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, "", rep)
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", "", 180, "", nil, rep)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 	assert.Equal(t, "test-1", result[0].ID)
@@ -594,7 +595,7 @@ func TestTriageWithLLM_PrintsFindingsImmediately(t *testing.T) {
 	rep := NewTerminalReporter(tmpFile, 1)
 
 	// Should not panic with reporter parameter
-	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, "", rep)
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", "", 180, "", nil, rep)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 
@@ -628,7 +629,7 @@ func TestTriageWithLLM_WithContext(t *testing.T) {
 
 	// Should return findings unchanged (no LLM available)
 	// This test verifies the signature accepts llmContext parameter
-	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", 180, customContext, rep)
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "", "", "", 180, customContext, nil, rep)
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 	assert.Equal(t, "test-1", result[0].ID)
@@ -1076,4 +1077,93 @@ detection:
 	// Dry-run must not send any HTTP requests to the target server
 	assert.Equal(t, int32(0), atomic.LoadInt32(&requestCount),
 		"dry-run mode must not make HTTP requests to the target server")
+}
+
+// TEST-007: triageWithLLM with injected client
+
+type capturingLLMClient struct {
+	calls    int
+	requests []*llm.TriageRequest
+}
+
+func (f *capturingLLMClient) Triage(_ context.Context, req *llm.TriageRequest) (*llm.TriageResult, error) {
+	f.calls++
+	f.requests = append(f.requests, req)
+	return &llm.TriageResult{
+		Provider:        "fake",
+		IsVulnerability: true,
+		Confidence:      0.95,
+		Reasoning:       "fake triage",
+		Severity:        model.SeverityHigh,
+	}, nil
+}
+
+func (f *capturingLLMClient) Name() string { return "fake" }
+
+func TestTriageWithLLM_InjectedClient(t *testing.T) {
+	ctx := context.Background()
+	findings := []*model.Finding{
+		{ID: "f1", Severity: model.SeverityHigh, Category: "API1", Name: "Test", Method: "GET", Endpoint: "/test", AttackerRole: "user"},
+		{ID: "f2", Severity: model.SeverityMedium, Category: "API1", Name: "Test2", Method: "POST", Endpoint: "/test2", AttackerRole: "user"},
+	}
+	rolesCfg := &roles.RoleConfig{Roles: []*roles.Role{{Name: "user"}, {Name: "admin"}}}
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer func() { _ = tmpFile.Close() }()
+	rep := NewTerminalReporter(tmpFile, 1)
+
+	fake := &capturingLLMClient{}
+	result, err := triageWithLLM(ctx, findings, rolesCfg, "bogus-provider", "bogus-host", "bogus-model", 1, "", fake, rep)
+	require.NoError(t, err)
+	assert.Len(t, result, 2)
+	assert.Equal(t, 2, fake.calls)
+	assert.NotNil(t, result[0].LLMAnalysis)
+	assert.Equal(t, "fake", result[0].LLMAnalysis.Provider)
+}
+
+func TestTriageWithLLM_RedactsPII(t *testing.T) {
+	ctx := context.Background()
+	// Seed findings with recognizable PII that the redactor will replace
+	findings := []*model.Finding{
+		{
+			ID:           "f1",
+			Severity:     model.SeverityHigh,
+			Category:     "API1",
+			Name:         "Test",
+			Method:       "GET",
+			Endpoint:     "/test",
+			AttackerRole: "user",
+			Evidence: model.Evidence{
+				Request: model.HTTPRequest{
+					Method: "GET",
+					URL:    "/test",
+					Body:   `{"email":"user@example.com","ssn":"123-45-6789"}`,
+				},
+				Response: model.HTTPResponse{
+					StatusCode: 200,
+					Body:       `{"email":"admin@secret.com","card":"4111-1111-1111-1111"}`,
+				},
+			},
+		},
+	}
+	rolesCfg := &roles.RoleConfig{Roles: []*roles.Role{{Name: "user"}}}
+
+	tmpFile, err := os.CreateTemp(t.TempDir(), "output")
+	require.NoError(t, err)
+	defer func() { _ = tmpFile.Close() }()
+	rep := NewTerminalReporter(tmpFile, 1)
+
+	fake := &capturingLLMClient{}
+	_, err = triageWithLLM(ctx, findings, rolesCfg, "", "", "", 180, "", fake, rep)
+	require.NoError(t, err)
+	require.Len(t, fake.requests, 1)
+
+	// Assert PII is redacted in both request and response bodies
+	reqBody := fake.requests[0].Finding.Evidence.Request.Body
+	respBody := fake.requests[0].Finding.Evidence.Response.Body
+	assert.NotContains(t, reqBody, "user@example.com", "request body email should be redacted")
+	assert.NotContains(t, reqBody, "123-45-6789", "request body SSN should be redacted")
+	assert.NotContains(t, respBody, "admin@secret.com", "response body email should be redacted")
+	assert.NotContains(t, respBody, "4111-1111-1111-1111", "response body card should be redacted")
 }

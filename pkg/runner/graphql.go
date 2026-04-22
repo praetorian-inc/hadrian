@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
+	"github.com/praetorian-inc/hadrian/pkg/llm"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -66,11 +67,13 @@ type GraphQLConfig struct {
 	SkipBuiltinChecks bool     // Skip built-in security checks (introspection, depth limit, batching)
 
 	// LLM triage (optional)
-	LLMHost    string   // LLM service host
-	LLMModel   string   // LLM model name
-	LLMTimeout int      // LLM request timeout (seconds)
-	LLMContext string   // Additional context for LLM
-	Headers    []string // Custom HTTP headers (format: "Key: Value")
+	LLMProvider     string     // LLM provider: ollama, openai, anthropic
+	LLMHost         string     // LLM service host
+	LLMModel        string     // LLM model name
+	LLMTimeout      int        // LLM request timeout (seconds)
+	LLMContext      string     // Additional context for LLM
+	LLMTriageClient llm.Client // Optional: platform-injected LLM client for triage
+	Headers         []string   // Custom HTTP headers (format: "Key: Value")
 }
 
 // newTestGraphQLCmd creates the "test graphql" subcommand
@@ -131,9 +134,10 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().IntSliceVar(&config.RateLimitStatusCodes, "rate-limit-status-codes", []int{429, 503}, "HTTP status codes that trigger rate limiting")
 
 	// LLM triage (optional)
+	cmd.Flags().StringVar(&config.LLMProvider, "llm-provider", "ollama", "LLM provider for triage: ollama, openai, anthropic")
 	cmd.Flags().StringVar(&config.LLMHost, "llm-host", "", "LLM service host for finding triage")
 	cmd.Flags().StringVar(&config.LLMModel, "llm-model", "", "LLM model name for triage")
-	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 30, "LLM request timeout (seconds)")
+	cmd.Flags().IntVar(&config.LLMTimeout, "llm-timeout", 180, "LLM request timeout (seconds)")
 	cmd.Flags().StringVar(&config.LLMContext, "llm-context", "", "Additional context for LLM triage")
 
 	// Custom headers
@@ -245,19 +249,22 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	endpoint := config.Target + config.Endpoint
 	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders)
 
+	// Compute unified LLM-enabled flag (same logic as REST command)
+	graphqlLLMEnabled := hasLLMConfig() || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMHost != "" || config.LLMModel != "" || config.LLMTriageClient != nil
+
 	// Only report findings if not already reported via callback (non-verbose mode)
-	if config.Output == "terminal" && config.LLMHost == "" && !config.Verbose {
+	if config.Output == "terminal" && !graphqlLLMEnabled && !config.Verbose {
 		for _, finding := range modelFindings {
 			reporter.ReportFinding(finding)
 		}
 	}
 
 	// LLM triage if configured
-	if config.LLMHost != "" || config.LLMModel != "" {
+	if graphqlLLMEnabled {
 		if rolesConfig != nil {
 			graphqlVerboseLog(config.Verbose, "Running LLM triage on %d findings", len(modelFindings))
 			modelFindings, err = triageWithLLM(ctx, modelFindings, rolesConfig,
-				config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, reporter)
+				config.LLMProvider, config.LLMHost, config.LLMModel, config.LLMTimeout, config.LLMContext, config.LLMTriageClient, reporter)
 			if err != nil {
 				// LLM is optional - continue without it
 				graphqlVerboseLog(config.Verbose, "LLM triage failed: %v", err)

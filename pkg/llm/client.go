@@ -46,15 +46,32 @@ func NewClient(ctx context.Context) (Client, error) {
 
 // NewClientWithConfig creates LLM client with explicit configuration
 func NewClientWithConfig(ctx context.Context, host, model string, timeout time.Duration, customContext string) (Client, error) {
-	// If host is specified, assume Ollama at that host
-	if host != "" {
-		if IsOllamaRunningAt(ctx, host) {
-			return NewOllamaClientWithConfig(host, model, timeout, customContext), nil
-		}
-		return nil, fmt.Errorf("ollama not reachable at %s", host)
+	// Resolve host from env var if not specified
+	if host == "" {
+		host = os.Getenv("OLLAMA_HOST")
 	}
-	// Fall back to existing env var logic
-	return NewClient(ctx)
+	if host == "" {
+		host = "http://localhost:11434"
+	}
+
+	if IsOllamaRunningAt(ctx, host) {
+		return NewOllamaClientWithConfig(host, model, timeout, customContext), nil
+	}
+	return nil, fmt.Errorf("ollama not reachable at %s", host)
+}
+
+// NewClientWithProvider creates an LLM client for the specified provider.
+func NewClientWithProvider(ctx context.Context, provider, host, model string, timeout time.Duration, customContext string) (Client, error) {
+	switch provider {
+	case "openai":
+		return NewOpenAIClient("", model, timeout, customContext)
+	case "anthropic":
+		return NewAnthropicClient("", model, timeout, customContext)
+	case "ollama", "":
+		return NewClientWithConfig(ctx, host, model, timeout, customContext)
+	default:
+		return nil, fmt.Errorf("unknown LLM provider %q (use ollama, openai, or anthropic)", provider)
+	}
 }
 
 // IsOllamaRunningAt checks if Ollama is reachable at the given URL
@@ -89,6 +106,20 @@ func formatPermissions(perms []roles.Permission) string {
 		strs[i] = p.Raw
 	}
 	return strings.Join(strs, ", ")
+}
+
+func getAttackerRoleName(role *roles.Role) string {
+	if role == nil {
+		return "(none)"
+	}
+	return role.Name
+}
+
+func getAttackerRolePermissions(role *roles.Role) string {
+	if role == nil {
+		return "(none)"
+	}
+	return formatPermissions(role.Permissions)
 }
 
 func getVictimRoleName(role *roles.Role) string {

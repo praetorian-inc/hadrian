@@ -56,7 +56,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 - **pkg/model**: Data structures for `Finding`, `Operation`, `Evidence`, `Severity`
 - **pkg/matchers**: Response matching (status codes, word/regex patterns)
 - **pkg/reporter**: Output formatters (terminal, JSON, markdown) with finding redaction
-- **pkg/llm**: LLM triage integration (Ollama)
+- **pkg/llm**: LLM triage integration (Ollama, OpenAI, Anthropic)
 
 ### Template System
 
@@ -175,5 +175,5 @@ config := runner.Config{
 - `HADRIAN_TEMPLATES`: Custom templates directory path
 - `OLLAMA_HOST`: Ollama host for LLM triage and planner (default: http://localhost:11434)
 - `OLLAMA_MODEL`: Ollama model name (default: llama3.2:latest)
-- `OPENAI_API_KEY`: OpenAI API key for planner
-- `ANTHROPIC_API_KEY`: Anthropic API key for planner
+- `OPENAI_API_KEY`: OpenAI API key for LLM triage (`--llm-provider openai`) and planner
+- `ANTHROPIC_API_KEY`: Anthropic API key for LLM triage (`--llm-provider anthropic`) and planner

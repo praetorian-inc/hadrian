@@ -92,20 +92,17 @@ func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, e
 }
 
 // triageWithLLM runs LLM triage on findings and reports each finding immediately after analysis
-func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig, llmHost, llmModel string, llmTimeout int, llmContext string, rep Reporter) ([]*model.Finding, error) {
+func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig, llmProvider, llmHost, llmModel string, llmTimeout int, llmContext string, injectedClient llm.Client, rep Reporter) ([]*model.Finding, error) {
 	log.Debug("Starting LLM triage for %d findings", len(findings))
 
 	var client llm.Client
 	var err error
 
-	// Convert timeout from seconds to time.Duration
-	timeout := time.Duration(llmTimeout) * time.Second
-
-	// Use explicit config if provided, otherwise fall back to env vars
-	if llmHost != "" || llmModel != "" {
-		client, err = llm.NewClientWithConfig(ctx, llmHost, llmModel, timeout, llmContext)
+	if injectedClient != nil {
+		client = injectedClient
 	} else {
-		client, err = llm.NewClient(ctx)
+		timeout := time.Duration(llmTimeout) * time.Second
+		client, err = llm.NewClientWithProvider(ctx, llmProvider, llmHost, llmModel, timeout, llmContext)
 	}
 
 	if err != nil {
@@ -113,8 +110,6 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 		log.Warn("LLM triage disabled: %v", err)
 		return findings, nil
 	}
-
-	redactor := reporter.NewRedactor()
 
 	for i, finding := range findings {
 		log.Debug("Triaging finding %d/%d: %s", i+1, len(findings), finding.ID)
@@ -134,11 +129,15 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 			}
 		}
 
-		// Redact sensitive data before sending to LLM (PII protection)
+		// Defense-in-depth: redact all evidence fields before they enter the LLM pipeline.
+		// BuildTriagePrompt also redacts response body in the prompt, but we redact here too so
+		// the TriageRequest never carries unredacted PII regardless of how clients use it.
+		redactor := reporter.NewRedactor()
 		redactedFinding := *finding
 		redactedFinding.Evidence.Request.Body = redactor.RedactForLLM(finding.Evidence.Request.Body)
+		redactedFinding.Evidence.Request.URL = redactor.RedactForLLM(finding.Evidence.Request.URL)
 		redactedFinding.Evidence.Response.Body = redactor.RedactForLLM(finding.Evidence.Response.Body)
-
+		redactedFinding.Description = redactor.RedactForLLM(finding.Description)
 		req := &llm.TriageRequest{
 			Finding:      &redactedFinding,
 			AttackerRole: attackerRole,
