@@ -66,7 +66,7 @@ func (c *AnthropicClient) Triage(ctx context.Context, req *TriageRequest) (*Tria
 	reqBody := map[string]interface{}{
 		"model":      c.model,
 		"max_tokens": 4096,
-		"system":     "You are a security expert. Respond with valid JSON only.",
+		"system":     "You are a security expert. Respond with valid JSON only. Do NOT wrap the response in markdown code fences or backticks.",
 		"messages": []map[string]string{
 			{"role": "user", "content": prompt},
 		},

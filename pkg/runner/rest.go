@@ -40,21 +40,21 @@ type Config struct {
 	AuditLog             string
 	Verbose              bool
 	DryRun               bool
-	RequestIDsLimit  int               // Number of request IDs to display per finding (0 = all)
-	LLMProvider      string            // LLM provider: ollama, openai, anthropic
-	LLMHost          string            // LLM provider host (e.g., http://localhost:11434 for Ollama)
-	LLMModel         string            // LLM model name (e.g., llama3.2:latest)
-	LLMTimeout       int               // LLM request timeout in seconds
-	LLMContext       string            // Additional context for LLM prompts
-	LLMTriageClient  llm.Client        // Optional: platform-injected LLM client for triage
-	Headers          []string          // Custom HTTP headers (format: "Key: Value")
-	PlannerEnabled   bool              // Enable LLM-assisted attack planning (experimental)
-	PlannerOnly      bool              // Run ONLY the LLM-planned steps, skip brute-force
-	PlannerProvider  string            // LLM provider: openai, anthropic, ollama
-	PlannerModel     string            // LLM model for planner
-	PlannerTimeout   int               // Planner LLM timeout in seconds (default 120)
-	PlannerContext   string            // Additional context for planner prompt
-	PlannerLLMClient planner.LLMClient // Optional: platform-injected LLM client
+	RequestIDsLimit      int               // Number of request IDs to display per finding (0 = all)
+	LLMProvider          string            // LLM provider: ollama, openai, anthropic
+	LLMHost              string            // LLM provider host (e.g., http://localhost:11434 for Ollama)
+	LLMModel             string            // LLM model name (e.g., llama3.2:latest)
+	LLMTimeout           int               // LLM request timeout in seconds
+	LLMContext           string            // Additional context for LLM prompts
+	LLMTriageClient      llm.Client        // Optional: platform-injected LLM client for triage
+	Headers              []string          // Custom HTTP headers (format: "Key: Value")
+	PlannerEnabled       bool              // Enable LLM-assisted attack planning (experimental)
+	PlannerOnly          bool              // Run ONLY the LLM-planned steps, skip brute-force
+	PlannerProvider      string            // LLM provider: openai, anthropic, ollama
+	PlannerModel         string            // LLM model for planner
+	PlannerTimeout       int               // Planner LLM timeout in seconds (default 120)
+	PlannerContext       string            // Additional context for planner prompt
+	PlannerLLMClient     planner.LLMClient // Optional: platform-injected LLM client
 }
 
 // newTestRestCmd creates the "test rest" subcommand (was previously the main test command)

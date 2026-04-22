@@ -66,3 +66,28 @@ func TestParseTriageJSON_MalformedJSON(t *testing.T) {
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "failed to parse LLM JSON response"))
 }
+
+func TestParseTriageJSON_MarkdownFenced(t *testing.T) {
+	raw := "```json\n{\"is_vulnerability\":true,\"confidence\":0.9,\"reasoning\":\"BOLA detected\",\"severity\":\"HIGH\",\"recommendations\":\"Fix it\"}\n```"
+	result, err := ParseTriageJSON(raw, "anthropic")
+	require.NoError(t, err)
+	assert.True(t, result.IsVulnerability)
+	assert.Equal(t, 0.9, result.Confidence)
+	assert.Equal(t, model.SeverityHigh, result.Severity)
+}
+
+func TestParseTriageJSON_FencedWithPreamble(t *testing.T) {
+	raw := "Here is my analysis:\n\n```json\n{\"is_vulnerability\":false,\"confidence\":0.3,\"reasoning\":\"Looks fine\",\"severity\":\"LOW\",\"recommendations\":\"None\"}\n```\n\nHope this helps!"
+	result, err := ParseTriageJSON(raw, "anthropic")
+	require.NoError(t, err)
+	assert.False(t, result.IsVulnerability)
+	assert.Equal(t, model.SeverityLow, result.Severity)
+}
+
+func TestParseTriageJSON_RawJSON(t *testing.T) {
+	// Already-clean JSON should still work
+	raw := `{"is_vulnerability":true,"confidence":0.8,"reasoning":"test","severity":"MEDIUM","recommendations":"do this"}`
+	result, err := ParseTriageJSON(raw, "openai")
+	require.NoError(t, err)
+	assert.True(t, result.IsVulnerability)
+}

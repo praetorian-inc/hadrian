@@ -67,7 +67,16 @@ Respond with JSON only:
 }
 
 // ParseTriageJSON parses the raw JSON string from any LLM into a TriageResult.
+// Handles markdown code fences that Claude commonly wraps around JSON responses.
 func ParseTriageJSON(raw string, provider string) (*TriageResult, error) {
+	// Extract JSON object from potential markdown fences or surrounding text.
+	// Claude routinely wraps responses in ```json ... ``` despite system prompt instructions.
+	if start := strings.Index(raw, "{"); start >= 0 {
+		if end := strings.LastIndex(raw, "}"); end > start {
+			raw = raw[start : end+1]
+		}
+	}
+
 	var triageData struct {
 		IsVulnerability bool            `json:"is_vulnerability"`
 		Confidence      float64         `json:"confidence"`
