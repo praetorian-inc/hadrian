@@ -10,7 +10,7 @@ info:
     name: Hadrian Security Testing
 
 servers:
-  - url: http://localhost:8889
+  - url: http://localhost:9889
     description: Local development server
 
 tags:
