@@ -3,7 +3,7 @@ module github.com/praetorian-inc/hadrian
 go 1.26
 
 require (
-	github.com/getkin/kin-openapi v0.136.0
+	github.com/getkin/kin-openapi v0.137.0
 	github.com/spf13/cobra v1.10.2
 	gopkg.in/yaml.v3 v3.0.1
 )
