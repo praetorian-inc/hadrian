@@ -18,8 +18,9 @@ info:
     path with the attacker's (lower-privilege) credentials. Many frameworks
     apply authorization only to documented verbs, so attackers can swap
     GET → DELETE / POST → PUT / etc. to bypass access control or trigger
-    unintended state changes. Also probes non-standard verbs (HEAD, and a
-    deliberately invalid verb) to surface method-confusion routing bugs.
+    unintended state changes. Also sends a deliberately invalid verb to
+    surface method-confusion routing bugs (well-behaved servers return
+    400/405/501).
   tags: ["http-method-tampering", "verb-tampering", "owasp", "owasp-api-top10", "api5", "authorization", "privilege-escalation"]
   requires_llm_triage: true
   test_pattern: "simple"
@@ -79,11 +80,6 @@ http:
     matchers:
       - type: status
         status: [200, 202, 204]
-  - method: "HEAD"
-    path: "{{operation.path}}"
-    matchers:
-      - type: status
-        status: [200, 204]
   # Deliberately invalid verb — well-behaved servers return 400/405/501.
   # A 2xx here is strong evidence of method-confusion routing.
   - method: "FOO"
