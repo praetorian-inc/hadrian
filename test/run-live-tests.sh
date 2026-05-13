@@ -40,22 +40,43 @@ HADRIAN_BIN="${HADRIAN_BIN:-${REPO_ROOT}/hadrian}"
 OUTPUT_DIR="${SCRIPT_DIR}/.results"
 CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
-# Load config from setup script if it exists (ports, paths)
+# Load config from setup script if it exists (ports, paths).
+# The regex requires every value to be double-quoted so `source` can't
+# word-split a path containing whitespace into a command (the previous
+# regex permitted unquoted values with spaces, which made
+# `--crapi-dir '/tmp/foo bar'` exec `bar`). Quoted form is what
+# setup-live-targets.sh writes; an old/loose config will be rejected
+# loudly — re-run setup to regenerate.
 if [ -f "$CONFIG_FILE" ]; then
-    # Validate config contains only comments, blank lines, or safe KEY=VALUE assignments
-    if grep -qvE '^[[:space:]]*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_./:@,+" -]*$' "$CONFIG_FILE"; then
-        echo "ERROR: Config file $CONFIG_FILE contains unsafe content. Only KEY=VALUE lines are allowed." >&2
+    if grep -qvE '^[[:space:]]*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*="[A-Za-z0-9_./:@,+ -]*"$' "$CONFIG_FILE"; then
+        echo "ERROR: $CONFIG_FILE contains unsafe content. Expected only comments, blank lines, or KEY=\"VALUE\" assignments. Re-run setup-live-targets.sh to regenerate." >&2
         exit 1
     fi
     # shellcheck disable=SC1090
     . "$CONFIG_FILE"
 fi
 
+# Default ports — the single source of truth for "what port does target X
+# bind by default". Conditionals later in the script reference these
+# constants instead of hardcoded literals so a future port move only has
+# to touch one place per target.
+VULN_API_DEFAULT_PORT=9889
+DVGA_DEFAULT_PORT=5013
+GRPC_DEFAULT_PORT=50051
+# CRAPI default port comes from crapi-helpers.sh
+# (CRAPI_OPENAPI_SPEC_DEFAULT_PORT, sourced below).
+
 # Target ports (env vars > config file > defaults)
-VULN_API_PORT="${VULN_API_PORT:-8889}"
-DVGA_PORT="${DVGA_PORT:-5013}"
-GRPC_PORT="${GRPC_PORT:-50051}"
-CRAPI_PORT="${CRAPI_PORT:-8888}"
+VULN_API_PORT="${VULN_API_PORT:-$VULN_API_DEFAULT_PORT}"
+DVGA_PORT="${DVGA_PORT:-$DVGA_DEFAULT_PORT}"
+GRPC_PORT="${GRPC_PORT:-$GRPC_DEFAULT_PORT}"
+
+# Shared crAPI helpers (canonical users, signup/login, spec patcher).
+# shellcheck source=test/crapi/crapi-helpers.sh
+. "${SCRIPT_DIR}/crapi/crapi-helpers.sh"
+
+# CRAPI_PORT default tracks the helper's CRAPI_OPENAPI_SPEC_DEFAULT_PORT.
+CRAPI_PORT="${CRAPI_PORT:-$CRAPI_OPENAPI_SPEC_DEFAULT_PORT}"
 
 # Require Bash 4+ for associative arrays
 if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
@@ -132,28 +153,19 @@ get_duration() { echo "${DURATION[$1]:-0}"; }
 
 # ==== Helper functions ====
 
+# All log_* helpers write to stderr so they don't collide with values
+# captured from `$(...)`. Same convention as setup-live-targets.sh.
 log_header() {
-    echo ""
-    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD}${BLUE}  $1${NC}"
-    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}"
+    echo "" >&2
+    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}" >&2
+    echo -e "${BOLD}${BLUE}  $1${NC}" >&2
+    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}" >&2
 }
 
-log_info() {
-    echo -e "${CYAN}[INFO]${NC} $1"
-}
-
-log_ok() {
-    echo -e "${GREEN}[OK]${NC} $1"
-}
-
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
-
-log_fail() {
-    echo -e "${RED}[FAIL]${NC} $1"
-}
+log_info() { echo -e "${CYAN}[INFO]${NC} $1" >&2; }
+log_ok()   { echo -e "${GREEN}[OK]${NC} $1" >&2; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1" >&2; }
+log_fail() { echo -e "${RED}[FAIL]${NC} $1" >&2; }
 
 wait_for_http() {
     local url=$1
@@ -291,11 +303,13 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
     VULN_API_AUTH_METHODS="bearer api_key basic cookie"
     VULN_API_SKIP_ALL=false
 
-    # If using a non-default port, patch the OpenAPI spec's server URL
+    # If using a non-default port, patch the OpenAPI spec's server URL.
+    # Default and the substitution target both come from
+    # VULN_API_DEFAULT_PORT so a future port move is a single-line edit.
     VULN_API_SPEC="${SCRIPT_DIR}/vulnerable-api/openapi.yaml"
-    if [ "$VULN_API_PORT" != "8889" ]; then
+    if [ "$VULN_API_PORT" != "$VULN_API_DEFAULT_PORT" ]; then
         VULN_API_SPEC="${OUTPUT_DIR}/vulnerable-api-openapi.yaml"
-        sed "s|http://localhost:8889|http://localhost:${VULN_API_PORT}|g" \
+        sed "s|http://localhost:${VULN_API_DEFAULT_PORT}|http://localhost:${VULN_API_PORT}|g" \
             "${SCRIPT_DIR}/vulnerable-api/openapi.yaml" > "$VULN_API_SPEC"
         log_info "Patched OpenAPI spec to use port $VULN_API_PORT"
     fi
@@ -634,52 +648,35 @@ if echo "$TARGETS" | grep -q "crapi"; then
 
     if [ "$(get_status crapi)" != "SKIP" ]; then
         # ---- Setup: Auto-create users and acquire tokens ----
+        # Canonical user identities, signup, and login come from
+        # crapi-helpers.sh (sourced at the top of this script). That file
+        # is the single source of truth for credentials so this script and
+        # test-llm-planner.sh can't drift.
         log_info "Setting up crapi test users and tokens..."
 
-        crapi_signup() {
-            local email="$1" name="$2" number="$3" password="$4"
-            printf '{"email":"%s","name":"%s","number":"%s","password":"%s"}' "$email" "$name" "$number" "$password" | \
-                curl -sf -X POST "${CRAPI_URL}/identity/api/auth/signup" \
-                    -H "Content-Type: application/json" \
-                    --data-binary @- 2>/dev/null || true
-        }
+        if ! crapi_setup_users "$CRAPI_URL"; then
+            log_fail "crapi user provisioning failed (see error above)"
+            set_status "crapi" "ERROR"
+        fi
+    fi
 
-        crapi_login() {
-            local email="$1" password="$2"
-            printf '{"email":"%s","password":"%s"}' "$email" "$password" | \
-                curl -sf -X POST "${CRAPI_URL}/identity/api/auth/login" \
-                    -H "Content-Type: application/json" \
-                    --data-binary @- 2>/dev/null | \
-                python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo ""
-        }
-
-        crapi_mechanic_signup() {
-            local email="$1" name="$2" number="$3" password="$4" code="$5"
-            printf '{"email":"%s","name":"%s","number":"%s","password":"%s","mechanic_code":"%s"}' "$email" "$name" "$number" "$password" "$code" | \
-                curl -sf -X POST "${CRAPI_URL}/workshop/api/mechanic/signup" \
-                    -H "Content-Type: application/json" \
-                    --data-binary @- 2>/dev/null || true
-        }
-
-        CRAPI_ADMIN_EMAIL="hadrian-admin@test.com"
-        CRAPI_USER_EMAIL="hadrian-user1@test.com"
-        CRAPI_USER2_EMAIL="hadrian-user2@test.com"
-        CRAPI_MECHANIC_EMAIL="hadrian-mechanic@test.com"
-        CRAPI_PASSWORD="${CRAPI_PASSWORD:-HadrianTest123!}"
-
-        crapi_signup "$CRAPI_ADMIN_EMAIL" "Hadrian Admin" "1111111111" "$CRAPI_PASSWORD" >/dev/null
-        crapi_signup "$CRAPI_USER_EMAIL" "Hadrian User1" "2222222222" "$CRAPI_PASSWORD" >/dev/null
-        crapi_signup "$CRAPI_USER2_EMAIL" "Hadrian User2" "3333333333" "$CRAPI_PASSWORD" >/dev/null
-        crapi_mechanic_signup "$CRAPI_MECHANIC_EMAIL" "Hadrian Mechanic" "4444444444" "$CRAPI_PASSWORD" "TRAC_MECH1" >/dev/null
+    # Re-check status: skip the test phase if provisioning errored.
+    if [ "$(get_status crapi)" != "SKIP" ] && [ "$(get_status crapi)" != "ERROR" ]; then
         log_ok "crapi users created/verified"
 
-        CRAPI_ADMIN_TOKEN=$(crapi_login "$CRAPI_ADMIN_EMAIL" "$CRAPI_PASSWORD")
-        CRAPI_USER_TOKEN=$(crapi_login "$CRAPI_USER_EMAIL" "$CRAPI_PASSWORD")
-        CRAPI_USER2_TOKEN=$(crapi_login "$CRAPI_USER2_EMAIL" "$CRAPI_PASSWORD")
-        CRAPI_MECHANIC_TOKEN=$(crapi_login "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
+        CRAPI_ADMIN_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_ADMIN_EMAIL"    "$CRAPI_PASSWORD")
+        CRAPI_USER_TOKEN=$(crapi_login     "$CRAPI_URL" "$CRAPI_USER_EMAIL"     "$CRAPI_PASSWORD")
+        CRAPI_USER2_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_USER2_EMAIL"    "$CRAPI_PASSWORD")
+        CRAPI_MECHANIC_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
 
-        if [ -z "$CRAPI_USER_TOKEN" ] || [ -z "$CRAPI_USER2_TOKEN" ]; then
-            log_fail "Failed to acquire crapi tokens"
+        # All four tokens must be acquired — admin and mechanic are used by
+        # role-specific templates (BFLA admin-video-delete, mechanic
+        # workflows). A missing token here would silently produce
+        # `token: ""` in the auth file and degrade those tests to anonymous
+        # requests. Fail loudly instead.
+        if [ -z "$CRAPI_ADMIN_TOKEN" ] || [ -z "$CRAPI_USER_TOKEN" ] \
+                || [ -z "$CRAPI_USER2_TOKEN" ] || [ -z "$CRAPI_MECHANIC_TOKEN" ]; then
+            log_fail "Failed to acquire crapi tokens (admin/user1/user2/mechanic must all be non-empty)"
             set_status "crapi" "ERROR"
         else
             log_ok "crapi tokens acquired"
@@ -721,26 +718,56 @@ EOF
 
             RESULT_FILE="${OUTPUT_DIR}/crapi-results.json"
 
-            # If using a non-default port, patch the OpenAPI spec
-            CRAPI_SPEC="${SCRIPT_DIR}/crapi/crapi-openapi-spec.json"
-            if [ "$CRAPI_PORT" != "8888" ]; then
-                CRAPI_SPEC="${OUTPUT_DIR}/crapi-openapi-spec.json"
-                sed "s|http://localhost:8888|http://localhost:${CRAPI_PORT}|g" \
-                    "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" > "$CRAPI_SPEC"
-                log_info "Patched OpenAPI spec to use port $CRAPI_PORT"
+            # Prefer the spec patched at setup time (CRAPI_SPEC_FILE in
+            # .live-test-config), but only if its baked-in port matches
+            # the port we're about to test against. If the operator
+            # overrides CRAPI_PORT at runtime (e.g.
+            # `CRAPI_PORT=9999 ./run-live-tests.sh`), the cached spec
+            # will be pinned to the old port and silently mis-route
+            # every request — so re-patch in that case.
+            # When re-patching, write into the same SPEC_CACHE_DIR
+            # setup-live-targets.sh uses so the artifact lives alongside
+            # the cache rather than mixed into the JSON results dir.
+            SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
+            CRAPI_SPEC=""
+            # Anchor the port match on a non-digit / end-of-line boundary
+            # so CRAPI_PORT=889 doesn't accept a stale spec pinned to
+            # localhost:8895 (substring match).
+            if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ] \
+                    && grep -qE "localhost:${CRAPI_PORT}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
+                CRAPI_SPEC="$CRAPI_SPEC_FILE"
+            else
+                if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
+                    log_info "Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${CRAPI_PORT}; re-patching."
+                fi
+                mkdir -p "$SPEC_CACHE_DIR"
+                CRAPI_SPEC=$(crapi_patch_openapi_spec \
+                    "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
+                    "$CRAPI_PORT" \
+                    "$SPEC_CACHE_DIR")
+                if [ "$CRAPI_PORT" != "$CRAPI_OPENAPI_SPEC_DEFAULT_PORT" ]; then
+                    log_info "Patched OpenAPI spec to use port $CRAPI_PORT"
+                fi
             fi
+            # Guard against silent failure of crapi_patch_openapi_spec —
+            # an empty path here would pass `--api ""` to hadrian and
+            # produce an opaque downstream error.
+            if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
+                log_fail "Could not resolve crAPI OpenAPI spec (empty path or missing file)"
+                set_status "crapi" "ERROR"
+            else
+                run_hadrian "crapi" test rest \
+                    --api "$CRAPI_SPEC" \
+                    --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
+                    --auth "$CRAPI_AUTH_FILE" \
+                    --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
+                    --output json \
+                    --output-file "$RESULT_FILE" \
+                    $VERBOSE
 
-            run_hadrian "crapi" test rest \
-                --api "$CRAPI_SPEC" \
-                --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
-                --auth "$CRAPI_AUTH_FILE" \
-                --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
-                --output json \
-                --output-file "$RESULT_FILE" \
-                $VERBOSE
-
-            set_findings "crapi" "$(extract_finding_count "$RESULT_FILE")"
-            log_ok "crapi: $(get_findings crapi) findings in $(get_duration crapi)s"
+                set_findings "crapi" "$(extract_finding_count "$RESULT_FILE")"
+                log_ok "crapi: $(get_findings crapi) findings in $(get_duration crapi)s"
+            fi
         fi
     fi
 fi

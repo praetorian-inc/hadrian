@@ -3,7 +3,7 @@
 
 set -e
 
-API_URL="${API_URL:-http://localhost:8889}"
+API_URL="${API_URL:-http://localhost:9889}"
 
 echo "=========================================="
 echo "BOLA Vulnerability Test Script"

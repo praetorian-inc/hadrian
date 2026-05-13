@@ -10,7 +10,7 @@
 
 set -e
 
-API_URL="${API_URL:-http://localhost:8889}"
+API_URL="${API_URL:-http://localhost:9889}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=== Hadrian Token Generator ==="

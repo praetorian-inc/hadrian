@@ -117,14 +117,24 @@ Built-in safeguards in `pkg/runner/ratelimit_client.go`:
 
 ## Testing with crAPI
 
-The `test/crapi/` directory contains a complete example for testing [OWASP crAPI](https://github.com/OWASP/crAPI), an intentionally vulnerable API. See `test/crapi/README.md` for full setup instructions.
+The `test/crapi/` directory contains a complete example for testing [OWASP crAPI](https://github.com/OWASP/crAPI), an intentionally vulnerable API. The supported flow is the wrapper scripts under `test/`:
 
-Quick start:
 ```bash
-# Start crAPI (note: compose file is in deploy/docker/)
-git clone https://github.com/OWASP/crAPI.git && cd crAPI/deploy/docker && docker-compose up -d
+# One-time setup: clones crAPI, patches its compose to bind 8888,
+# starts the stack, signs up canonical users, writes .live-test-config.
+./test/setup-live-targets.sh --targets crapi
 
-# Run Hadrian (after setting up test users and tokens per the README)
+# Run hadrian against the prepared target.
+./test/run-live-tests.sh --targets crapi
+
+# Tear down (volumes too — required for repeatable runs).
+./test/setup-live-targets.sh --teardown
+```
+
+Note: upstream crAPI's compose default has shifted between 8888 and 8889 over time; `setup-live-targets.sh` auto-detects the current upstream port and patches the compose so hadrian's downstream code keeps using whatever you resolve. See `test/crapi/README.md` for the canonical user credentials, port-override env vars, and a manual fallback flow.
+
+Programmatic invocation (without the wrapper):
+```bash
 HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
   --api test/crapi/crapi-openapi-spec.json \
   --roles test/crapi/roles.yaml \

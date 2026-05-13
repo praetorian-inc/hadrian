@@ -1,5 +1,8 @@
 .PHONY: help build run run-apikey run-basic test test-all test-bearer test-apikey test-basic clean reset
 
+API_PORT ?= 9889
+API_URL  ?= http://localhost:$(API_PORT)
+
 help: ## Show this help message
 	@echo "Vulnerable API - BOLA Testing"
 	@echo ""
@@ -33,7 +36,7 @@ tidy: ## Tidy Go dependencies
 	go mod tidy
 
 reset: ## Reset API data to initial state (requires running API)
-	curl -s -X POST http://localhost:8889/api/reset | jq .
+	curl -s -X POST $(API_URL)/api/reset | jq .
 
 test-all: build ## Run Hadrian tests with all auth methods
 	./run-all-auth-tests.sh --verbose
