@@ -21,9 +21,13 @@ info:
       - X-HTTP-Method-Override: DELETE
       - X-HTTP-Method: DELETE
       - X-Method-Override: DELETE
-      - ?_method=DELETE query string
     A 2xx response indicates the framework dispatched on the overridden
     method, bypassing any per-verb authorization on DELETE.
+
+    Note: the Rails/Sinatra `?_method=DELETE` query-string idiom is not
+    probed here because the runner's path substitution does not currently
+    support composing `{{operation.path}}` with a query string. The
+    header-based overrides above already cover the dominant frameworks.
   tags: ["http-method-tampering", "method-override", "owasp", "owasp-api-top10", "api5", "authorization", "privilege-escalation"]
   requires_llm_triage: true
   test_pattern: "simple"
@@ -67,15 +71,12 @@ http:
     matchers:
       - type: status
         status: [200, 202, 204]
-  # Rails/Sinatra _method query parameter
-  - method: "POST"
-    path: "{{operation.path}}?_method=DELETE"
-    headers:
-      Content-Type: "application/json"
-    body: "{}"
-    matchers:
-      - type: status
-        status: [200, 202, 204]
+  # NOTE: Rails/Sinatra `?_method=DELETE` query-string variant omitted —
+  # the runner's path substitution requires `{{operation.path}}` to be the
+  # entire path (see pkg/templates/execute.go buildRequest path equality
+  # check), so it can't be composed with a query string. Header-based
+  # overrides above cover Spring, IIS, Java, IBM/Google, and most Express
+  # middleware — the dominant frameworks.
   # Same probes targeting PUT (state mutation without DELETE permission)
   - method: "POST"
     path: "{{operation.path}}"
