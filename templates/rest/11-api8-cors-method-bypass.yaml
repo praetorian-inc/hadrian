@@ -20,11 +20,13 @@ info:
     Tests CORS preflight (OPTIONS) handling for overly permissive method
     exposure. Issues an OPTIONS request with Origin: https://example.com
     and Access-Control-Request-Method: DELETE, then inspects the response
-    headers. Findings:
+    headers. The matcher requires ALL of the following to fire (logical AND)
+    so that benign read-only or non-credentialed CORS configurations do not
+    produce false positives:
       - Access-Control-Allow-Origin echoing example.com or set to "*"
       - Access-Control-Allow-Methods including DELETE/PUT/PATCH
-      - Access-Control-Allow-Credentials: true paired with a wildcard or
-        reflected origin (browser-side credentialed cross-origin abuse)
+      - Access-Control-Allow-Credentials: true (browsers will not honor a
+        credentialed cross-origin request without this header)
     A permissive preflight lets attacker-controlled pages tamper with
     authenticated state via method-level CSRF.
   tags: ["http-method-tampering", "cors-bypass", "owasp", "owasp-api-top10", "api8", "misconfiguration"]
@@ -48,22 +50,25 @@ http:
       Origin: "https://example.com"
       Access-Control-Request-Method: "DELETE"
       Access-Control-Request-Headers: "authorization,content-type"
+    # All three signals must be present (condition: and) to flag.
+    # Compile-time flattening of per-block matchers (pkg/templates/compile.go)
+    # OR's top-level matcher entries, so this MUST be a single matcher block
+    # whose internal patterns are AND'd. Each pattern uses regex alternation
+    # to cover its allowed values:
+    #   1. Permissive Origin (wildcard or reflected example.com)
+    #   2. Destructive method advertised in Allow-Methods (DELETE/PUT/PATCH)
+    #   3. Allow-Credentials: true — required for the credentialed
+    #      cross-origin abuse the description claims to detect; without it
+    #      browsers will not send cookies/Authorization, so the finding is
+    #      not exploitable.
     matchers:
-      # Permissive origin: wildcard or reflection of attacker's Origin
       - type: regex
         part: header
+        condition: and
         regex:
-          - "(?i)access-control-allow-origin:\\s*\\*"
-          - "(?i)access-control-allow-origin:\\s*https://example\\.com"
-        condition: or
-      # Destructive methods allowed in preflight response
-      - type: regex
-        part: header
-        regex:
-          - "(?i)access-control-allow-methods:.*\\bDELETE\\b"
-          - "(?i)access-control-allow-methods:.*\\bPUT\\b"
-          - "(?i)access-control-allow-methods:.*\\bPATCH\\b"
-        condition: or
+          - "(?i)access-control-allow-origin:\\s*(\\*|https://example\\.com)"
+          - "(?i)access-control-allow-methods:.*\\b(DELETE|PUT|PATCH)\\b"
+          - "(?i)access-control-allow-credentials:\\s*true"
 
 detection:
   success_indicators:
