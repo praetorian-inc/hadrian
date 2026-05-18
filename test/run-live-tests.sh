@@ -101,7 +101,7 @@ DO_START=true
 
 # Track results per target using associative arrays
 declare -A STATUS FINDINGS DURATION
-for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie dvga grpc crapi; do
+for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie dvga grpc crapi crapi-planner; do
     STATUS["$_t"]="NOT_RUN"
     FINDINGS["$_t"]="0"
     DURATION["$_t"]="0"
@@ -212,6 +212,21 @@ extract_finding_count() {
         python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('stats',{}).get('findings',len(d.get('findings',[]))))" "$json_file" 2>/dev/null || echo "?"
     else
         echo "?"
+    fi
+}
+
+# detect_planner_provider — echoes the first available LLM provider
+# (openai | anthropic | ollama) or empty string if none is reachable.
+# Priority: OPENAI_API_KEY → anthropic → ollama probe → "".
+detect_planner_provider() {
+    if [ -n "${OPENAI_API_KEY:-}" ]; then
+        echo "openai"
+    elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+        echo "anthropic"
+    elif curl -sf -o /dev/null --max-time 2 "${OLLAMA_HOST:-http://localhost:11434}/api/tags"; then
+        echo "ollama"
+    else
+        echo ""
     fi
 }
 
@@ -745,6 +760,48 @@ EOF
     fi
 fi
 
+# ==== Test: crapi-planner ====
+# Runs the LLM-assisted planner against crAPI. Reuses the auth file and
+# spec from the preceding `crapi` block — no signup, no spec patching,
+# no extra cleanup. Gated on LLM provider availability: OpenAI key wins,
+# Anthropic key next, local ollama as fallback, otherwise SKIP cleanly.
+if echo "$TARGETS" | grep -q "crapi-planner"; then
+    log_header "Target 5: crapi-planner (REST + LLM planner)"
+
+    # Inherit crapi status — if crapi didn't produce CRAPI_AUTH_FILE /
+    # CRAPI_SPEC (because crapi wasn't in TARGETS, or it SKIPPED, or it
+    # ERRORED), we have nothing to plan against. SKIP rather than ERROR
+    # because the operator's choice of TARGETS, not a code fault, is the
+    # cause.
+    if [ "$(get_status crapi)" != "PASS" ] \
+            || [ -z "${CRAPI_AUTH_FILE:-}" ] || [ ! -f "${CRAPI_AUTH_FILE:-/nonexistent}" ] \
+            || [ -z "${CRAPI_SPEC:-}" ]      || [ ! -f "${CRAPI_SPEC:-/nonexistent}" ]; then
+        log_info "crapi-planner requires the crapi target to have run successfully first; skipping"
+        set_status "crapi-planner" "SKIP"
+    else
+        PLANNER_PROVIDER=$(detect_planner_provider)
+        if [ -z "$PLANNER_PROVIDER" ]; then
+            log_info "no LLM provider available (set OPENAI_API_KEY, ANTHROPIC_API_KEY, or run ollama), skipping crapi-planner"
+            set_status "crapi-planner" "SKIP"
+        else
+            log_info "Using LLM provider: ${PLANNER_PROVIDER}"
+            CRAPI_PLANNER_RESULT_FILE="${OUTPUT_DIR}/crapi-planner-${PLANNER_PROVIDER}-results.json"
+            run_hadrian "crapi-planner" test rest \
+                --api "$CRAPI_SPEC" \
+                --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
+                --auth "$CRAPI_AUTH_FILE" \
+                --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
+                --planner --planner-provider "$PLANNER_PROVIDER" \
+                --output json \
+                --output-file "$CRAPI_PLANNER_RESULT_FILE" \
+                $VERBOSE
+
+            set_findings "crapi-planner" "$(extract_finding_count "$CRAPI_PLANNER_RESULT_FILE")"
+            log_ok "crapi-planner: $(get_findings crapi-planner) findings in $(get_duration crapi-planner)s"
+        fi
+    fi
+fi
+
 # ==== Summary ====
 log_header "Test Summary"
 
@@ -761,7 +818,7 @@ ALL_TARGETS=""
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
     ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie"
 fi
-for extra in dvga grpc crapi; do
+for extra in dvga grpc crapi crapi-planner; do
     if echo "$TARGETS" | grep -q "${extra}"; then
         ALL_TARGETS="$ALL_TARGETS $extra"
     fi
