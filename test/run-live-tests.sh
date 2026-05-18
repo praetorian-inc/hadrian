@@ -698,7 +698,10 @@ if echo "$TARGETS" | grep -q "crapi"; then
             log_ok "crapi test videos uploaded"
 
             CRAPI_AUTH_FILE="${OUTPUT_DIR}/crapi-auth.yaml"
-            (umask 077; cat > "$CRAPI_AUTH_FILE" <<EOF
+            # See test-llm-planner.sh for the env-var-rather-than-inline-token
+            # rationale. Same fix applies here.
+            export CRAPI_ADMIN_TOKEN CRAPI_MECHANIC_TOKEN CRAPI_USER_TOKEN CRAPI_USER2_TOKEN
+            (umask 077; cat > "$CRAPI_AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 key_name: Authorization

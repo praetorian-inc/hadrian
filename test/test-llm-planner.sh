@@ -105,18 +105,18 @@ if ! crapi_setup_users "$CRAPI_URL"; then
     exit 1
 fi
 
-ADMIN_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_ADMIN_EMAIL"    "$CRAPI_PASSWORD")
-USER_TOKEN=$(crapi_login  "$CRAPI_URL" "$CRAPI_USER_EMAIL"     "$CRAPI_PASSWORD")
-USER2_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_USER2_EMAIL"    "$CRAPI_PASSWORD")
-MECH_TOKEN=$(crapi_login  "$CRAPI_URL" "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
+CRAPI_ADMIN_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_ADMIN_EMAIL"    "$CRAPI_PASSWORD")
+CRAPI_USER_TOKEN=$(crapi_login     "$CRAPI_URL" "$CRAPI_USER_EMAIL"     "$CRAPI_PASSWORD")
+CRAPI_USER2_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_USER2_EMAIL"    "$CRAPI_PASSWORD")
+CRAPI_MECHANIC_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
 
 # All four tokens must be acquired so role-specific templates (BFLA
 # admin-video-delete, mechanic workflows) run with the correct identity.
 # Previously this script mapped admin -> USER_TOKEN, which silently
 # degraded admin-scoped templates in the planner test to regular-user
 # credentials.
-if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER_TOKEN" ] \
-        || [ -z "$USER2_TOKEN" ] || [ -z "$MECH_TOKEN" ]; then
+if [ -z "$CRAPI_ADMIN_TOKEN" ] || [ -z "$CRAPI_USER_TOKEN" ] \
+        || [ -z "$CRAPI_USER2_TOKEN" ] || [ -z "$CRAPI_MECHANIC_TOKEN" ]; then
     log_fail "Failed to get crAPI tokens (admin/user1/user2/mechanic must all be non-empty)"
     exit 1
 fi
@@ -156,18 +156,24 @@ if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
 fi
 
 AUTH_FILE="${OUTPUT_DIR}/planner-auth.yaml"
-(umask 077; cat > "$AUTH_FILE" <<EOF
+# Export tokens as env vars so the YAML can reference them by name. The
+# YAML is emitted with a QUOTED heredoc terminator (`<<'EOF'`) so bash
+# does NOT substitute the ${...} text — hadrian's pkg/auth/auth.go
+# expands them via expandEnvSafe before detectHardcodedSecret fires,
+# which suppresses the SECURITY warning that fires on inline tokens.
+export CRAPI_ADMIN_TOKEN CRAPI_MECHANIC_TOKEN CRAPI_USER_TOKEN CRAPI_USER2_TOKEN
+(umask 077; cat > "$AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 roles:
   admin:
-    token: "${ADMIN_TOKEN}"
+    token: "${CRAPI_ADMIN_TOKEN}"
   mechanic:
-    token: "${MECH_TOKEN}"
+    token: "${CRAPI_MECHANIC_TOKEN}"
   user:
-    token: "${USER_TOKEN}"
+    token: "${CRAPI_USER_TOKEN}"
   user2:
-    token: "${USER2_TOKEN}"
+    token: "${CRAPI_USER2_TOKEN}"
   anonymous:
     token: ""
 EOF
