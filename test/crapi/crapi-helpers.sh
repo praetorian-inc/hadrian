@@ -167,3 +167,38 @@ crapi_patch_openapi_spec() {
     fi
     echo "$dst"
 }
+
+# crapi_resolve_spec <src_spec> <port> <cache_dir>
+#
+# Resolves the OpenAPI spec path for hadrian. Preference order:
+#   1. If $CRAPI_SPEC_FILE (from .live-test-config) exists AND its baked-in
+#      port matches <port>, echo it unchanged.
+#   2. Otherwise, patch <src_spec> into <cache_dir> via
+#      crapi_patch_openapi_spec and echo the new path.
+#
+# Echoes the resolved path on stdout. Logs to stderr.
+# Returns non-zero if the resolved path is empty or does not exist.
+crapi_resolve_spec() {
+    local src_spec="$1" port="$2" cache_dir="$3"
+    local resolved=""
+
+    # Anchor the port match on a non-digit / end-of-line boundary so
+    # CRAPI_PORT=889 doesn't accept a stale spec pinned to localhost:8895
+    # (substring match).
+    if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ] \
+            && grep -qE "localhost:${port}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
+        resolved="$CRAPI_SPEC_FILE"
+    else
+        if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
+            echo "[INFO] Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${port}; re-patching." >&2
+        fi
+        mkdir -p "$cache_dir"
+        resolved=$(crapi_patch_openapi_spec "$src_spec" "$port" "$cache_dir")
+    fi
+
+    if [ -z "$resolved" ] || [ ! -f "$resolved" ]; then
+        echo "crapi_resolve_spec: could not resolve spec (empty path or missing file)" >&2
+        return 1
+    fi
+    echo "$resolved"
+}

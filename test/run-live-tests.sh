@@ -721,42 +721,12 @@ EOF
 
             RESULT_FILE="${OUTPUT_DIR}/crapi-results.json"
 
-            # Prefer the spec patched at setup time (CRAPI_SPEC_FILE in
-            # .live-test-config), but only if its baked-in port matches
-            # the port we're about to test against. If the operator
-            # overrides CRAPI_PORT at runtime (e.g.
-            # `CRAPI_PORT=9999 ./run-live-tests.sh`), the cached spec
-            # will be pinned to the old port and silently mis-route
-            # every request — so re-patch in that case.
-            # When re-patching, write into the same SPEC_CACHE_DIR
-            # setup-live-targets.sh uses so the artifact lives alongside
-            # the cache rather than mixed into the JSON results dir.
             SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
-            CRAPI_SPEC=""
-            # Anchor the port match on a non-digit / end-of-line boundary
-            # so CRAPI_PORT=889 doesn't accept a stale spec pinned to
-            # localhost:8895 (substring match).
-            if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ] \
-                    && grep -qE "localhost:${CRAPI_PORT}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
-                CRAPI_SPEC="$CRAPI_SPEC_FILE"
-            else
-                if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
-                    log_info "Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${CRAPI_PORT}; re-patching."
-                fi
-                mkdir -p "$SPEC_CACHE_DIR"
-                CRAPI_SPEC=$(crapi_patch_openapi_spec \
+            if ! CRAPI_SPEC=$(crapi_resolve_spec \
                     "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
                     "$CRAPI_PORT" \
-                    "$SPEC_CACHE_DIR")
-                if [ "$CRAPI_PORT" != "$CRAPI_OPENAPI_SPEC_DEFAULT_PORT" ]; then
-                    log_info "Patched OpenAPI spec to use port $CRAPI_PORT"
-                fi
-            fi
-            # Guard against silent failure of crapi_patch_openapi_spec —
-            # an empty path here would pass `--api ""` to hadrian and
-            # produce an opaque downstream error.
-            if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
-                log_fail "Could not resolve crAPI OpenAPI spec (empty path or missing file)"
+                    "$SPEC_CACHE_DIR"); then
+                log_fail "Could not resolve crAPI OpenAPI spec"
                 set_status "crapi" "ERROR"
             else
                 run_hadrian "crapi" test rest \

@@ -124,34 +124,14 @@ log_ok "Tokens acquired"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Resolve the OpenAPI spec path. Prefer the patched copy that
-# setup-live-targets.sh wrote into .live-test-config, but only if its
-# baked-in port matches our current CRAPI_PORT — otherwise a runtime
-# CRAPI_PORT override against a stale config would silently mis-route.
-# When re-patching, write into the same SPEC_CACHE_DIR setup uses
-# (test/.live-test-cache/) so a planner-only run doesn't leave a cache
-# artifact in the .results directory.
+# Resolve the OpenAPI spec path. See crapi_resolve_spec for preference
+# rules (prefer cached if port matches, else re-patch).
 SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
-# Anchor the port match on a non-digit / end-of-line boundary to avoid
-# substring false-matches (e.g. CRAPI_PORT=889 vs localhost:8895).
-if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "$CRAPI_SPEC_FILE" ] \
-        && grep -qE "localhost:${CRAPI_PORT}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
-    CRAPI_SPEC="$CRAPI_SPEC_FILE"
-else
-    if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "$CRAPI_SPEC_FILE" ]; then
-        log_info "Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${CRAPI_PORT}; re-patching."
-    fi
-    mkdir -p "$SPEC_CACHE_DIR"
-    CRAPI_SPEC=$(crapi_patch_openapi_spec \
+if ! CRAPI_SPEC=$(crapi_resolve_spec \
         "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
         "$CRAPI_PORT" \
-        "$SPEC_CACHE_DIR")
-fi
-# Guard against silent failure of crapi_patch_openapi_spec (validation
-# branch returns 1 + empty stdout). An unchecked empty $CRAPI_SPEC would
-# pass `--api ""` to hadrian and produce an opaque downstream error.
-if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
-    log_fail "Could not resolve crAPI OpenAPI spec (empty path or missing file)"
+        "$SPEC_CACHE_DIR"); then
+    log_fail "Could not resolve crAPI OpenAPI spec"
     exit 1
 fi
 
