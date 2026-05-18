@@ -217,7 +217,7 @@ extract_finding_count() {
 
 # detect_planner_provider — echoes the first available LLM provider
 # (openai | anthropic | ollama) or empty string if none is reachable.
-# Priority: OPENAI_API_KEY → anthropic → ollama probe → "".
+# Priority: OPENAI_API_KEY → ANTHROPIC_API_KEY → ollama probe → "".
 detect_planner_provider() {
     if [ -n "${OPENAI_API_KEY:-}" ]; then
         echo "openai"
@@ -765,6 +765,14 @@ fi
 # spec from the preceding `crapi` block — no signup, no spec patching,
 # no extra cleanup. Gated on LLM provider availability: OpenAI key wins,
 # Anthropic key next, local ollama as fallback, otherwise SKIP cleanly.
+#
+# Note on the crapi-prefix substring match: the crapi block gate above
+# uses `grep -q "crapi"`, which also matches "crapi-planner". That is
+# intentional — the planner depends on the crapi block having produced
+# CRAPI_AUTH_FILE and CRAPI_SPEC, so `--targets crapi-planner` implicitly
+# runs the crapi block too. The STATUS[crapi]=="PASS" check below is the
+# actual safety gate; the substring match is the desired pre-requisite
+# coupling.
 if echo "$TARGETS" | grep -q "crapi-planner"; then
     log_header "Target 5: crapi-planner (REST + LLM planner)"
 
