@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/base64"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -384,10 +385,12 @@ func TestLoad_HardcodedSecretWarning(t *testing.T) {
 		},
 	}
 
+	const yamlTmpl = "method: %s\nlocation: header\nroles:\n  admin:\n    %s: %q\n"
+
 	for _, tc := range cases {
 		t.Run(tc.name+"/env_var_no_warning", func(t *testing.T) {
 			t.Setenv("HADRIAN_TEST_TOKEN", fixtureJWT)
-			yamlBody := "method: " + tc.yamlMethod + "\nlocation: header\nroles:\n  admin:\n    " + tc.yamlField + ": \"" + tc.envVarYAML + "\"\n"
+			yamlBody := fmt.Sprintf(yamlTmpl, tc.yamlMethod, tc.yamlField, tc.envVarYAML)
 			path := writeTempAuthYAML(t, yamlBody)
 
 			stderr := captureAuthStderr(t, func() {
@@ -402,7 +405,7 @@ func TestLoad_HardcodedSecretWarning(t *testing.T) {
 		})
 
 		t.Run(tc.name+"/inline_literal_warns", func(t *testing.T) {
-			yamlBody := "method: " + tc.yamlMethod + "\nlocation: header\nroles:\n  admin:\n    " + tc.yamlField + ": \"" + tc.inlineYAML + "\"\n"
+			yamlBody := fmt.Sprintf(yamlTmpl, tc.yamlMethod, tc.yamlField, tc.inlineYAML)
 			path := writeTempAuthYAML(t, yamlBody)
 
 			stderr := captureAuthStderr(t, func() {

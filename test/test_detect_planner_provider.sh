@@ -107,11 +107,14 @@ fi
 restore_env
 
 # ---------------------------------------------------------------------------
-# PE: empty-but-set OPENAI_API_KEY treated as not set (regression guard)
-# The helper uses [ -n "${OPENAI_API_KEY:-}" ] which treats both unset and
-# empty as "not set". This test guards against regressions where someone
-# changes to [ -n "${OPENAI_API_KEY-}" ] (no colon), which would silently
-# match empty-but-set.
+# PE: empty-but-set OPENAI_API_KEY / ANTHROPIC_API_KEY treated as no-credential.
+# The helper uses [ -n "${VAR:-}" ] (emptiness check) so empty strings are
+# rejected. This test guards against a future regression where the helper is
+# switched to a set-presence check ([ -v VAR ] or [ -n "${VAR+set}" ]) which
+# would incorrectly accept an exported-but-empty key as a valid credential.
+# Note: this scenario does NOT distinguish `${VAR:-}` from `${VAR-}`, since
+# both expand to "" when VAR is empty-but-set — the regression guard is
+# specifically against set-presence semantics, not against dropping the colon.
 # ---------------------------------------------------------------------------
 echo "PE: empty-but-set OPENAI_API_KEY treated as not set → empty"
 unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST

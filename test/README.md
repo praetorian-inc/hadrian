@@ -101,7 +101,7 @@ For each target, `run-live-tests.sh` automatically:
 
 | Target | Auth Setup |
 |--------|-----------|
-| vulnerable-api | Tests all 3 auth methods sequentially (see below) |
+| vulnerable-api | Tests all 4 auth methods sequentially (see below) |
 | dvga | Logs in as admin, creates private pastes for BOLA testing |
 | grpc-server | Uses pre-configured static tokens |
 | crapi | Creates 4 users (admin, user1, user2, mechanic), gets tokens, uploads test videos |
@@ -115,13 +115,14 @@ test paths share the same accounts and spec-patching logic.
 
 ### vulnerable-api Multi-Auth Testing
 
-The vulnerable-api is tested three times, once per authentication method:
+The vulnerable-api is tested four times, once per authentication method:
 
 | Sub-target | Auth Method | How It Works |
 |------------|------------|--------------|
 | vulnerable-api-bearer | Bearer JWT | Logs in as admin/user1/user2 to get JWT tokens, writes dynamic auth config |
 | vulnerable-api-apikey | API Key | Uses static API keys (`X-API-Key` header) |
 | vulnerable-api-basic | Basic Auth | Uses username/password (HTTP Basic) |
+| vulnerable-api-cookie | Cookie | Uses cookie session identifiers (configurable cookie name) |
 
 The server is restarted with each `AUTH_METHOD` and API data is reset between runs to ensure consistent results.
 
