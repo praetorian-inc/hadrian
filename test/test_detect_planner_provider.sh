@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=test/llm-helpers.sh
 . "${SCRIPT_DIR}/llm-helpers.sh"
 
-pass=0; fail=0
+pass=0; fail=0; skip=0
 
 assert_eq() {  # assert_eq <label> <expected> <actual>
     if [ "$2" = "$3" ]; then
@@ -27,6 +27,11 @@ assert_eq() {  # assert_eq <label> <expected> <actual>
         echo "  FAIL: $1 — expected [${2}], got [${3}]"
         fail=$((fail + 1))
     fi
+}
+
+assert_skip() {  # assert_skip <label> <reason>
+    echo "  SKIP: $1 — $2"
+    skip=$((skip + 1))
 }
 
 # Save caller's env so we can restore it between scenarios.
@@ -86,13 +91,19 @@ restore_env
 # ---------------------------------------------------------------------------
 # P5: OLLAMA_HOST unset → helper uses default http://localhost:11434
 # Exercises the ${OLLAMA_HOST:-http://localhost:11434} default fallback.
-# Assumes no local ollama is running on the test host (valid for CI/dev
-# sandboxes; may be flaky on a developer's box with ollama running).
+# If a local ollama is actually running on the default port (common on
+# developer machines), SKIP — the assertion can't distinguish "default
+# expansion happened correctly" from "ollama is up and responded".
 # ---------------------------------------------------------------------------
 echo "P5: OLLAMA_HOST unset → falls back to default localhost:11434 → empty (no local ollama)"
 unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
-out=$(detect_planner_provider 2>/dev/null || true)
-assert_eq "P5 OLLAMA_HOST default fallback (assumes no local ollama)" "" "$out"
+if curl -sf -o /dev/null --max-time 2 http://localhost:11434/api/tags 2>/dev/null; then
+    assert_skip "P5 OLLAMA_HOST default fallback" \
+        "local ollama detected on localhost:11434; default-fallback path produces 'ollama' instead of empty"
+else
+    out=$(detect_planner_provider 2>/dev/null || true)
+    assert_eq "P5 OLLAMA_HOST default fallback" "" "$out"
+fi
 restore_env
 
 # ---------------------------------------------------------------------------
@@ -147,10 +158,12 @@ srv.serve_forever()
 _P6_SERVER_PID=$!
 
 # Wait for the server to bind (max ~500ms); avoids the timing-fragile sleep 0.1.
+# Subshell + outer 2>/dev/null is the only form that reliably suppresses bash's
+# "connect: Connection refused" diagnostic on failed /dev/tcp attempts — the
+# exec-line `2>/dev/null` form leaks the message on some bash builds.
 OLLAMA_PORT="$FREE_PORT"
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if exec 3<>"/dev/tcp/127.0.0.1/${OLLAMA_PORT}" 2>/dev/null; then
-        exec 3<&-
+    if (exec 3<>"/dev/tcp/127.0.0.1/${OLLAMA_PORT}") 2>/dev/null; then
         break
     fi
     sleep 0.05
@@ -169,5 +182,9 @@ restore_env
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Results: $pass passed, $fail failed ==="
+if [ "$skip" -gt 0 ]; then
+    echo "=== Results: $pass passed, $fail failed, $skip skipped ==="
+else
+    echo "=== Results: $pass passed, $fail failed ==="
+fi
 exit $(( fail > 0 ? 1 : 0 ))
