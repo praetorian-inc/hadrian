@@ -96,7 +96,7 @@ echo "S4: substring guard — port=889 must not accept localhost:8895"
 export CRAPI_SPEC_FILE="$CACHED_8895"
 out=$(crapi_resolve_spec "$SRC_SPEC" 889 "${TMPDIR_ROOT}/cache-s4" 2>/dev/null); rc=$?
 assert_eq    "S4 exit 0"             "0"            "$rc"
-assert_neq   "S4 rejects stale cache" "$CACHED_8895" "$out"
+assert_eq    "S4 echoes patched path" "${TMPDIR_ROOT}/cache-s4/crapi-openapi-spec.json" "$out"
 
 # ---------------------------------------------------------------------------
 # S5: cached spec, port matches → idempotent (call twice, same path returned)
