@@ -115,8 +115,10 @@ restore_env
 # ---------------------------------------------------------------------------
 echo "PE: empty-but-set OPENAI_API_KEY treated as not set → empty"
 unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
-OPENAI_API_KEY="" ANTHROPIC_API_KEY="" OLLAMA_HOST="http://127.0.0.1:1" \
-    out=$(detect_planner_provider 2>/dev/null || true)
+export OPENAI_API_KEY=""
+export ANTHROPIC_API_KEY=""
+export OLLAMA_HOST="http://127.0.0.1:1"
+out=$(detect_planner_provider 2>/dev/null || true)
 assert_eq "PE empty-but-set OPENAI_API_KEY falls through" "" "$out"
 restore_env
 

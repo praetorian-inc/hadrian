@@ -190,7 +190,7 @@ crapi_resolve_spec() {
         resolved="$CRAPI_SPEC_FILE"
     else
         if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
-            echo "[INFO] Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${port}; re-patching." >&2
+            echo "[INFO] Cached spec at ${CRAPI_SPEC_FILE} does not match port=${port}; re-patching." >&2
         fi
         mkdir -p "$cache_dir"
         resolved=$(crapi_patch_openapi_spec "$src_spec" "$port" "$cache_dir")

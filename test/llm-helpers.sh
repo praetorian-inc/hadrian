@@ -1,15 +1,5 @@
 #!/usr/bin/env bash
-# =============================================================================
-# llm-helpers.sh
-#
-# Provider-agnostic LLM helpers for the live-test scripts. SOURCE THIS FILE —
-# do not execute it directly.
-#
-# Defines:
-#   detect_planner_provider — echoes the first available LLM provider
-#     (openai | anthropic | ollama) or empty string if none is reachable.
-#     Priority: OPENAI_API_KEY → ANTHROPIC_API_KEY → ollama probe → "".
-# =============================================================================
+# Provider-agnostic LLM helpers for the live-test scripts. SOURCE THIS FILE — do not execute directly.
 
 # detect_planner_provider — echoes the first available LLM provider
 # (openai | anthropic | ollama) or empty string if none is reachable.

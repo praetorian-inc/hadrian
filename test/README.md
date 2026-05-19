@@ -268,6 +268,7 @@ test/
   vulnerable-api/          # REST vulnerable API source + templates
   dvga/                    # GraphQL test config + templates
   grpc-server/             # gRPC server source + templates
+  llm-helpers.sh           # LLM provider detection helper
   crapi/                   # crAPI test config + templates
     crapi-helpers.sh       # Shared signup/login/spec-patch helpers
 ```
@@ -286,4 +287,5 @@ vulnerable-api-cookie     PASS       61           20s
 dvga                      PASS       6            3s
 grpc                      PASS       8            1s
 crapi                     PASS       26           37s
+crapi-planner             SKIP       0            0s
 ```

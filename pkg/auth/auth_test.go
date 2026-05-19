@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/base64"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -303,6 +304,7 @@ func TestDetectHardcodedSecret_EnvironmentVariable(t *testing.T) {
 
 const fixtureJWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 
+// NOTE: mutates global os.Stderr; tests using this helper must not call t.Parallel().
 func captureAuthStderr(t *testing.T, fn func()) string {
 	t.Helper()
 	old := os.Stderr
@@ -318,10 +320,9 @@ func captureAuthStderr(t *testing.T, fn func()) string {
 	if err := w.Close(); err != nil {
 		t.Fatalf("close pipe writer: %v", err)
 	}
-	var buf [4096]byte
-	n, _ := r.Read(buf[:])
+	out, _ := io.ReadAll(r)
 	_ = r.Close()
-	return string(buf[:n])
+	return string(out)
 }
 
 func writeTempAuthYAML(t *testing.T, body string) string {
@@ -333,54 +334,87 @@ func writeTempAuthYAML(t *testing.T, body string) string {
 	return p
 }
 
-// TestLoad_EnvVarTokenNoSecurityWarning is the regression guard for the bug
+// TestLoad_HardcodedSecretWarning is the regression guard for the bug
 // where detectHardcodedSecret ran on post-expansion values, causing every
 // ${VAR} env-var ref that resolved to a JWT-shaped string to trip the
-// hardcoded-token warning.
-func TestLoad_EnvVarTokenNoSecurityWarning(t *testing.T) {
-	t.Setenv("HADRIAN_TEST_TOKEN", fixtureJWT)
-	yamlBody := `method: bearer
-location: header
-roles:
-  admin:
-    token: "${HADRIAN_TEST_TOKEN}"
-`
-	path := writeTempAuthYAML(t, yamlBody)
-
-	var cfg *AuthConfig
-	stderr := captureAuthStderr(t, func() {
-		var err error
-		cfg, err = Load(path)
-		if err != nil {
-			t.Fatalf("Load returned error: %v", err)
-		}
-	})
-
-	if strings.Contains(stderr, "SECURITY: Role 'admin' has hardcoded token") {
-		t.Errorf("expected no hardcoded-token warning for ${VAR} ref; got stderr:\n%s", stderr)
+// hardcoded-secret warning. The test is parametrized over all four
+// credential fields (token, api_key, cookie, credentials) because auth.go
+// applies the same pre-expansion-capture fix to each of them.
+func TestLoad_HardcodedSecretWarning(t *testing.T) {
+	cases := []struct {
+		name        string
+		yamlMethod  string
+		yamlField   string // YAML key under the role
+		envVarYAML  string // value that is a ${VAR} reference
+		inlineYAML  string // value that is an inline JWT literal
+		warnSnippet string // substring expected in the SECURITY warning
+	}{
+		{
+			name:        "token",
+			yamlMethod:  "bearer",
+			yamlField:   "token",
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded token",
+		},
+		{
+			name:        "api_key",
+			yamlMethod:  "api_key",
+			yamlField:   "api_key",
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded API key",
+		},
+		{
+			name:        "cookie",
+			yamlMethod:  "cookie",
+			yamlField:   "cookie",
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded cookie",
+		},
+		{
+			name:       "credentials",
+			yamlMethod: "basic",
+			yamlField:  "credentials",
+			// credentials is a *string; a ${VAR} ref is safe.
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded credentials",
+		},
 	}
-	if got := cfg.Roles["admin"].Token; got != fixtureJWT {
-		t.Errorf("expected token to expand to JWT; got %q", got)
-	}
-}
 
-func TestLoad_InlineJWTStillWarns(t *testing.T) {
-	yamlBody := `method: bearer
-location: header
-roles:
-  admin:
-    token: "` + fixtureJWT + `"
-`
-	path := writeTempAuthYAML(t, yamlBody)
+	for _, tc := range cases {
+		t.Run(tc.name+"/env_var_no_warning", func(t *testing.T) {
+			t.Setenv("HADRIAN_TEST_TOKEN", fixtureJWT)
+			yamlBody := "method: " + tc.yamlMethod + "\nlocation: header\nroles:\n  admin:\n    " + tc.yamlField + ": \"" + tc.envVarYAML + "\"\n"
+			path := writeTempAuthYAML(t, yamlBody)
 
-	stderr := captureAuthStderr(t, func() {
-		if _, err := Load(path); err != nil {
-			t.Fatalf("Load returned error: %v", err)
-		}
-	})
+			stderr := captureAuthStderr(t, func() {
+				if _, err := Load(path); err != nil {
+					t.Fatalf("Load returned error: %v", err)
+				}
+			})
 
-	if !strings.Contains(stderr, "SECURITY: Role 'admin' has hardcoded token") {
-		t.Errorf("expected hardcoded-token warning for inline JWT; got stderr:\n%s", stderr)
+			if strings.Contains(stderr, "SECURITY: Role 'admin' "+tc.warnSnippet) {
+				t.Errorf("expected no %s warning for ${VAR} ref; got stderr:\n%s", tc.name, stderr)
+			}
+		})
+
+		t.Run(tc.name+"/inline_literal_warns", func(t *testing.T) {
+			yamlBody := "method: " + tc.yamlMethod + "\nlocation: header\nroles:\n  admin:\n    " + tc.yamlField + ": \"" + tc.inlineYAML + "\"\n"
+			path := writeTempAuthYAML(t, yamlBody)
+
+			stderr := captureAuthStderr(t, func() {
+				if _, err := Load(path); err != nil {
+					t.Fatalf("Load returned error: %v", err)
+				}
+			})
+
+			if !strings.Contains(stderr, "SECURITY: Role 'admin' "+tc.warnSnippet) {
+				t.Errorf("expected %s warning for inline literal; got stderr:\n%s", tc.name, stderr)
+			}
+		})
 	}
 }
 

@@ -754,10 +754,13 @@ EOF
 fi
 
 # ==== Test: crapi-planner ====
-# Runs the LLM-assisted planner against crAPI. Reuses the auth file and
-# spec from the preceding `crapi` block — no signup, no spec patching,
-# no extra cleanup. Gated on LLM provider availability: OpenAI key wins,
-# Anthropic key next, local ollama as fallback, otherwise SKIP cleanly.
+# Runs the LLM-assisted planner against crAPI. The crapi block always runs
+# first when "crapi-planner" is in TARGETS (because the grep -q "crapi"
+# gate matches the "crapi" substring of "crapi-planner"), so by the time
+# this block executes, CRAPI_AUTH_FILE and CRAPI_SPEC have already been
+# produced by that prior block — no additional signup, spec patching, or
+# cleanup is needed here. Gated on LLM provider availability: OpenAI key
+# wins, Anthropic key next, local ollama as fallback, otherwise SKIP cleanly.
 #
 # Note on the crapi-prefix substring match: the crapi block gate above
 # uses `grep -q "crapi"`, which also matches "crapi-planner". That is
