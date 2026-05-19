@@ -133,7 +133,7 @@ func Load(filePath string) (*AuthConfig, error) {
 
 		// Detect hardcoded secrets (credential security) — check the
 		// PRE-expansion value so a YAML containing "${TOKEN_VAR}" is
-		// recognised as a safe env-var ref instead of being flagged
+		// recognized as a safe env-var ref instead of being flagged
 		// after expansion resolves it to a literal JWT.
 		if detectHardcodedSecret(origToken) {
 			log.Warn("SECURITY: Role '%s' has hardcoded token. Use environment variables: ${TOKEN_VAR}", roleName)

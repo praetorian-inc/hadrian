@@ -129,46 +129,48 @@ restore_env
 # P6: one-shot HTTP server on a free local port → detect_planner_provider
 #     should succeed on the ollama curl probe and echo "ollama".
 #
-# Strategy: use python3 to bind to port 0 (OS assigns a free port), record
-# the assigned port, then start a minimal HTTP server that returns 200 OK on
-# GET /api/tags. A trap kills the server PID on exit.
+# Strategy: start a minimal HTTP server bound to port 0 (OS-assigned); the
+# server itself publishes its bound port to a tmpfile. Binding and port
+# publication happen in the SAME process, so there is no TOCTOU window
+# where another process could steal the port between discovery and bind.
 # ---------------------------------------------------------------------------
 echo "P6: local HTTP server returns 200 on /api/tags → echoes ollama"
 unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
 
-# Find a free port by binding to :0 and reading back getsockname.
-FREE_PORT=$(python3 -c "
-import socket
-s = socket.socket()
-s.bind(('127.0.0.1', 0))
-print(s.getsockname()[1])
-s.close()
-")
+_P6_PORT_FILE="$(mktemp)"
 
 # Start a persistent HTTP server in the background that serves 200 on any path.
+# The server binds to port 0, writes its actual port to "$1", then serves.
 # Uses serve_forever() (not handle_request()) so the /dev/tcp readiness probe
 # and the curl from detect_planner_provider can both be served without racing.
 # The process is explicitly killed after the assertion.
 python3 -c "
-import http.server, sys
+import http.server, pathlib, sys
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b'{}')
     def log_message(self, *a): pass
-srv = http.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H)
+srv = http.server.HTTPServer(('127.0.0.1', 0), H)
+pathlib.Path(sys.argv[1]).write_text(str(srv.server_port))
 srv.serve_forever()
-" "$FREE_PORT" &
+" "$_P6_PORT_FILE" &
 _P6_SERVER_PID=$!
 
-# Wait for the server to bind (max ~500ms); avoids the timing-fragile sleep 0.1.
+# Wait for the server to publish its port (max ~500ms).
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ -s "$_P6_PORT_FILE" ] && break
+    sleep 0.05
+done
+FREE_PORT="$(cat "$_P6_PORT_FILE")"
+
+# Wait for the server to accept connections (max ~500ms).
 # Subshell + outer 2>/dev/null is the only form that reliably suppresses bash's
 # "connect: Connection refused" diagnostic on failed /dev/tcp attempts — the
 # exec-line `2>/dev/null` form leaks the message on some bash builds.
-OLLAMA_PORT="$FREE_PORT"
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if (exec 3<>"/dev/tcp/127.0.0.1/${OLLAMA_PORT}") 2>/dev/null; then
+    if (exec 3<>"/dev/tcp/127.0.0.1/${FREE_PORT}") 2>/dev/null; then
         break
     fi
     sleep 0.05
@@ -181,6 +183,7 @@ assert_eq "P6 echoes ollama when server reachable" "ollama" "$out"
 # Explicit cleanup — do NOT use trap here to avoid clobbering any outer trap chain.
 kill "$_P6_SERVER_PID" 2>/dev/null
 wait "$_P6_SERVER_PID" 2>/dev/null || true
+rm -f "$_P6_PORT_FILE"
 restore_env
 
 # ---------------------------------------------------------------------------
