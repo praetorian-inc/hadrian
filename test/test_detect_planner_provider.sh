@@ -2,13 +2,14 @@
 # Unit test for detect_planner_provider. Sources llm-helpers.sh directly.
 # Run with: ./test/test_detect_planner_provider.sh
 #
-# Covers six scenarios for the four branches of detect_planner_provider:
-#   P1: only OPENAI_API_KEY set             → echoes "openai"
-#   P2: only ANTHROPIC_API_KEY set          → echoes "anthropic"
-#   P3: both OPENAI + ANTHROPIC set         → echoes "openai" (priority)
-#   P4: no keys, OLLAMA_HOST unreachable    → echoes "" (curl timeout path)
-#   P5: OLLAMA_HOST=http://127.0.0.1:1     → --max-time 2 fires → echoes ""
-#   P6: one-shot HTTP server on free port   → echoes "ollama" (reachable)
+# Covers seven checks for detect_planner_provider behavior:
+#   P1: only OPENAI_API_KEY set                                  → echoes "openai"
+#   P2: only ANTHROPIC_API_KEY set                               → echoes "anthropic"
+#   P3: both OPENAI + ANTHROPIC set                              → echoes "openai" (priority)
+#   P4: no keys, OLLAMA_HOST=http://127.0.0.1:1                  → echoes ""
+#   P5: OLLAMA_HOST unset (default localhost:11434)              → echoes "" (or SKIP if local ollama is running)
+#   PE: empty-but-set OPENAI/ANTHROPIC keys + unreachable ollama → echoes ""
+#   P6: one-shot HTTP server on free local port                  → echoes "ollama" (reachable)
 set -u  # NOT -e: we want to catch failed assertions and keep going.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
