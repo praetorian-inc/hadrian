@@ -40,15 +40,6 @@ assert_nonzero() {  # assert_nonzero <label> <exit_code>
     fi
 }
 
-assert_neq() {  # assert_neq <label> <unexpected> <actual>
-    if [ "$2" != "$3" ]; then
-        echo "  PASS: $1"
-        pass=$((pass + 1))
-    else
-        echo "  FAIL: $1 — expected value to differ from [$2], but got same"
-        fail=$((fail + 1))
-    fi
-}
 
 # ---------------------------------------------------------------------------
 # Fixtures

@@ -98,6 +98,49 @@ assert_eq "P5 echoes empty on timeout/refusal" "" "$out"
 restore_env
 
 # ---------------------------------------------------------------------------
+# P6: one-shot HTTP server on a free local port → detect_planner_provider
+#     should succeed on the ollama curl probe and echo "ollama".
+#
+# Strategy: use python3 to bind to port 0 (OS assigns a free port), record
+# the assigned port, then start a minimal HTTP server that returns 200 OK on
+# GET /api/tags. A trap kills the server PID on exit.
+# ---------------------------------------------------------------------------
+echo "P6: local HTTP server returns 200 on /api/tags → echoes ollama"
+unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
+
+# Find a free port by binding to :0 and reading back getsockname.
+FREE_PORT=$(python3 -c "
+import socket
+s = socket.socket()
+s.bind(('127.0.0.1', 0))
+print(s.getsockname()[1])
+s.close()
+")
+
+# Start a one-request HTTP server in the background that serves 200 on any path.
+python3 -c "
+import http.server, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b'{}')
+    def log_message(self, *a): pass
+srv = http.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H)
+srv.handle_request()
+" "$FREE_PORT" &
+_P6_SERVER_PID=$!
+trap 'kill "$_P6_SERVER_PID" 2>/dev/null; wait "$_P6_SERVER_PID" 2>/dev/null' EXIT
+
+# Give the server a moment to start.
+sleep 0.1
+
+export OLLAMA_HOST="http://127.0.0.1:${FREE_PORT}"
+out=$(detect_planner_provider)
+assert_eq "P6 echoes ollama when server reachable" "ollama" "$out"
+restore_env
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo ""
