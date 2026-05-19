@@ -78,6 +78,10 @@ GRPC_PORT="${GRPC_PORT:-$GRPC_DEFAULT_PORT}"
 # shellcheck source=test/crapi/crapi-helpers.sh
 . "${SCRIPT_DIR}/crapi/crapi-helpers.sh"
 
+# Provider-agnostic LLM helpers (detect_planner_provider).
+# shellcheck source=test/llm-helpers.sh
+. "${SCRIPT_DIR}/llm-helpers.sh"
+
 # CRAPI_PORT default tracks the helper's CRAPI_OPENAPI_SPEC_DEFAULT_PORT.
 CRAPI_PORT="${CRAPI_PORT:-$CRAPI_OPENAPI_SPEC_DEFAULT_PORT}"
 
@@ -218,20 +222,6 @@ extract_finding_count() {
     fi
 }
 
-# detect_planner_provider — echoes the first available LLM provider
-# (openai | anthropic | ollama) or empty string if none is reachable.
-# Priority: OPENAI_API_KEY → ANTHROPIC_API_KEY → ollama probe → "".
-detect_planner_provider() {
-    if [ -n "${OPENAI_API_KEY:-}" ]; then
-        echo "openai"
-    elif [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-        echo "anthropic"
-    elif curl -sf -o /dev/null --max-time 2 "${OLLAMA_HOST:-http://localhost:11434}/api/tags"; then
-        echo "ollama"
-    else
-        echo ""
-    fi
-}
 
 run_hadrian() {
     local name=$1

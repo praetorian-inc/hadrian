@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
-# Unit test for detect_planner_provider. Sources the helper directly from
-# run-live-tests.sh; no external framework required.
+# Unit test for detect_planner_provider. Sources llm-helpers.sh directly.
 # Run with: ./test/test_detect_planner_provider.sh
 #
-# Covers five scenarios for the four branches of detect_planner_provider:
+# Covers six scenarios for the four branches of detect_planner_provider:
 #   P1: only OPENAI_API_KEY set             → echoes "openai"
 #   P2: only ANTHROPIC_API_KEY set          → echoes "anthropic"
 #   P3: both OPENAI + ANTHROPIC set         → echoes "openai" (priority)
 #   P4: no keys, OLLAMA_HOST unreachable    → echoes "" (curl timeout path)
 #   P5: OLLAMA_HOST=http://127.0.0.1:1     → --max-time 2 fires → echoes ""
+#   P6: one-shot HTTP server on free port   → echoes "ollama" (reachable)
 set -u  # NOT -e: we want to catch failed assertions and keep going.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-RUN_LIVE="${SCRIPT_DIR}/run-live-tests.sh"
 
-# Extract and source only the detect_planner_provider function definition.
-# The sed range matches from the comment block through the closing brace so
-# we pick up the function body verbatim without sourcing the full script
-# (which would execute set -euo pipefail and attempt to run the test harness).
-source <(sed -n '/^detect_planner_provider() {/,/^}$/p' "$RUN_LIVE")
+# Source the helper directly — no sed extraction needed.
+# shellcheck source=test/llm-helpers.sh
+. "${SCRIPT_DIR}/llm-helpers.sh"
 
 pass=0; fail=0
 
