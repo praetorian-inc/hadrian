@@ -30,15 +30,19 @@ func TestNewClient_OllamaRunning(t *testing.T) {
 }
 
 func TestNewClient_NoProvider(t *testing.T) {
-	// Arrange
-	// No Ollama running
+	// Arrange — pin OLLAMA_HOST to a guaranteed-refused address so the
+	// auto-detection in NewClient cannot reach a real local ollama on the
+	// developer's machine. Without this guard the test fails on any host
+	// where ollama happens to be running on the default port.
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
 
 	// Act
 	client, err := NewClient(context.Background())
 
-	// Assert
-	assert.Error(t, err)
-	assert.Nil(t, client)
+	// Assert — require.* on the first two so a regression fails the test
+	// cleanly instead of panicking on the err.Error() dereference below.
+	require.Error(t, err)
+	require.Nil(t, client)
 	assert.Contains(t, err.Error(), "no LLM provider available")
 }
 
