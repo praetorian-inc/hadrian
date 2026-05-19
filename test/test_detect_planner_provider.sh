@@ -84,17 +84,29 @@ assert_eq "P4 echoes empty on curl failure" "" "$out"
 restore_env
 
 # ---------------------------------------------------------------------------
-# P5: OLLAMA_HOST=http://127.0.0.1:1, explicit --max-time 2 guard
-# Same as P4 but documents the --max-time timeout scenario explicitly.
-# Port 1 is guaranteed closed so connection is refused immediately (not
-# after 2 seconds), exercising the "curl returns non-zero" code path that
-# the --max-time guard is designed to handle.
+# P5: OLLAMA_HOST unset → helper uses default http://localhost:11434
+# Exercises the ${OLLAMA_HOST:-http://localhost:11434} default fallback.
+# Assumes no local ollama is running on the test host (valid for CI/dev
+# sandboxes; may be flaky on a developer's box with ollama running).
 # ---------------------------------------------------------------------------
-echo "P5: OLLAMA_HOST unreachable (port 1) → --max-time 2 guard fires → empty"
+echo "P5: OLLAMA_HOST unset → falls back to default localhost:11434 → empty (no local ollama)"
 unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
-export OLLAMA_HOST="http://127.0.0.1:1"
-out=$(detect_planner_provider)
-assert_eq "P5 echoes empty on timeout/refusal" "" "$out"
+out=$(detect_planner_provider 2>/dev/null || true)
+assert_eq "P5 OLLAMA_HOST default fallback (assumes no local ollama)" "" "$out"
+restore_env
+
+# ---------------------------------------------------------------------------
+# PE: empty-but-set OPENAI_API_KEY treated as not set (regression guard)
+# The helper uses [ -n "${OPENAI_API_KEY:-}" ] which treats both unset and
+# empty as "not set". This test guards against regressions where someone
+# changes to [ -n "${OPENAI_API_KEY-}" ] (no colon), which would silently
+# match empty-but-set.
+# ---------------------------------------------------------------------------
+echo "PE: empty-but-set OPENAI_API_KEY treated as not set → empty"
+unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
+OPENAI_API_KEY="" ANTHROPIC_API_KEY="" OLLAMA_HOST="http://127.0.0.1:1" \
+    out=$(detect_planner_provider 2>/dev/null || true)
+assert_eq "PE empty-but-set OPENAI_API_KEY falls through" "" "$out"
 restore_env
 
 # ---------------------------------------------------------------------------
@@ -117,7 +129,10 @@ print(s.getsockname()[1])
 s.close()
 ")
 
-# Start a one-request HTTP server in the background that serves 200 on any path.
+# Start a persistent HTTP server in the background that serves 200 on any path.
+# Uses serve_forever() (not handle_request()) so the /dev/tcp readiness probe
+# and the curl from detect_planner_provider can both be served without racing.
+# The process is explicitly killed after the assertion.
 python3 -c "
 import http.server, sys
 class H(http.server.BaseHTTPRequestHandler):
@@ -127,17 +142,27 @@ class H(http.server.BaseHTTPRequestHandler):
         self.wfile.write(b'{}')
     def log_message(self, *a): pass
 srv = http.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H)
-srv.handle_request()
+srv.serve_forever()
 " "$FREE_PORT" &
 _P6_SERVER_PID=$!
-trap 'kill "$_P6_SERVER_PID" 2>/dev/null; wait "$_P6_SERVER_PID" 2>/dev/null' EXIT
 
-# Give the server a moment to start.
-sleep 0.1
+# Wait for the server to bind (max ~500ms); avoids the timing-fragile sleep 0.1.
+OLLAMA_PORT="$FREE_PORT"
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if exec 3<>"/dev/tcp/127.0.0.1/${OLLAMA_PORT}" 2>/dev/null; then
+        exec 3<&-
+        break
+    fi
+    sleep 0.05
+done
 
 export OLLAMA_HOST="http://127.0.0.1:${FREE_PORT}"
 out=$(detect_planner_provider)
 assert_eq "P6 echoes ollama when server reachable" "ollama" "$out"
+
+# Explicit cleanup — do NOT use trap here to avoid clobbering any outer trap chain.
+kill "$_P6_SERVER_PID" 2>/dev/null
+wait "$_P6_SERVER_PID" 2>/dev/null || true
 restore_env
 
 # ---------------------------------------------------------------------------
