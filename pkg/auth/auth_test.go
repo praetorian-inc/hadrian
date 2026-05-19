@@ -301,6 +301,89 @@ func TestDetectHardcodedSecret_EnvironmentVariable(t *testing.T) {
 	}
 }
 
+const fixtureJWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+
+func captureAuthStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = old }()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	var buf [4096]byte
+	n, _ := r.Read(buf[:])
+	_ = r.Close()
+	return string(buf[:n])
+}
+
+func writeTempAuthYAML(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "auth.yaml")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatalf("write temp auth.yaml: %v", err)
+	}
+	return p
+}
+
+// TestLoad_EnvVarTokenNoSecurityWarning is the regression guard for the bug
+// where detectHardcodedSecret ran on post-expansion values, causing every
+// ${VAR} env-var ref that resolved to a JWT-shaped string to trip the
+// hardcoded-token warning.
+func TestLoad_EnvVarTokenNoSecurityWarning(t *testing.T) {
+	t.Setenv("HADRIAN_TEST_TOKEN", fixtureJWT)
+	yamlBody := `method: bearer
+location: header
+roles:
+  admin:
+    token: "${HADRIAN_TEST_TOKEN}"
+`
+	path := writeTempAuthYAML(t, yamlBody)
+
+	var cfg *AuthConfig
+	stderr := captureAuthStderr(t, func() {
+		var err error
+		cfg, err = Load(path)
+		if err != nil {
+			t.Fatalf("Load returned error: %v", err)
+		}
+	})
+
+	if strings.Contains(stderr, "SECURITY: Role 'admin' has hardcoded token") {
+		t.Errorf("expected no hardcoded-token warning for ${VAR} ref; got stderr:\n%s", stderr)
+	}
+	if got := cfg.Roles["admin"].Token; got != fixtureJWT {
+		t.Errorf("expected token to expand to JWT; got %q", got)
+	}
+}
+
+func TestLoad_InlineJWTStillWarns(t *testing.T) {
+	yamlBody := `method: bearer
+location: header
+roles:
+  admin:
+    token: "` + fixtureJWT + `"
+`
+	path := writeTempAuthYAML(t, yamlBody)
+
+	stderr := captureAuthStderr(t, func() {
+		if _, err := Load(path); err != nil {
+			t.Fatalf("Load returned error: %v", err)
+		}
+	})
+
+	if !strings.Contains(stderr, "SECURITY: Role 'admin' has hardcoded token") {
+		t.Errorf("expected hardcoded-token warning for inline JWT; got stderr:\n%s", stderr)
+	}
+}
+
 func TestGetAuth_Bearer(t *testing.T) {
 	config := &AuthConfig{
 		Method: "bearer",
