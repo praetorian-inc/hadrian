@@ -73,6 +73,7 @@ out=$(crapi_patch_openapi_spec "$SRC_DEFAULT" "$DEFAULT_PORT" "$dest_a1" 2>/dev/
 assert_eq    "A1 exit 0"          "0"          "$rc"
 assert_eq    "A1 echoes src path" "$SRC_DEFAULT" "$out"
 assert_file_absent "A1 no copy written" "${dest_a1}/crapi-openapi-spec.json"
+assert_eq "A1 no dest_dir created" "false" "$([ -e "$dest_a1" ] && echo true || echo false)"
 
 # ---------------------------------------------------------------------------
 # A2: target_port != default → patched copy at dest_dir/crapi-openapi-spec.json
