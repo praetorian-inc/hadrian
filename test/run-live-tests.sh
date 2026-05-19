@@ -17,7 +17,10 @@
 #
 # Options:
 #   --targets <list>      Comma-separated targets to test (default: all)
-#                         Valid: vulnerable-api,dvga,grpc,crapi
+#                         Valid: vulnerable-api,dvga,grpc,crapi,crapi-planner
+#                         crapi-planner is opt-in and requires an LLM credential
+#                         (OPENAI_API_KEY, ANTHROPIC_API_KEY, or running ollama);
+#                         it is SKIPped cleanly when no provider is available.
 #   --verbose             Enable verbose Hadrian output
 #   --no-build            Skip building hadrian and target binaries
 #   --no-start            Don't start/stop services (assume already running)

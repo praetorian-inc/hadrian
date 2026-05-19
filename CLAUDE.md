@@ -129,6 +129,10 @@ The `test/crapi/` directory contains a complete example for testing [OWASP crAPI
 
 # Tear down (volumes too — required for repeatable runs).
 ./test/setup-live-targets.sh --teardown
+
+# Optional: exercise the LLM planner against crAPI (opt-in target).
+# Auto-selects provider: OpenAI > Anthropic > ollama; SKIPs cleanly when none available.
+OPENAI_API_KEY=sk-... ./test/run-live-tests.sh --targets crapi,crapi-planner
 ```
 
 Note: upstream crAPI's compose default has shifted between 8888 and 8889 over time; `setup-live-targets.sh` auto-detects the current upstream port and patches the compose so hadrian's downstream code keeps using whatever you resolve. See `test/crapi/README.md` for the canonical user credentials, port-override env vars, and a manual fallback flow.

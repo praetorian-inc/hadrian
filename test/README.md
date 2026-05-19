@@ -55,6 +55,10 @@ The setup script handles:
 ./test/run-live-tests.sh --targets dvga
 ./test/run-live-tests.sh --targets crapi
 
+# Run crAPI + LLM planner (opt-in; requires OPENAI_API_KEY, ANTHROPIC_API_KEY,
+# or a running ollama instance — SKIPped cleanly when no provider is available).
+OPENAI_API_KEY=sk-... ./test/run-live-tests.sh --targets crapi,crapi-planner
+
 # Verbose output
 ./test/run-live-tests.sh --verbose
 
