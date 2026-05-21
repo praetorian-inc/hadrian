@@ -1,0 +1,110 @@
+# Template: HTTP Verb Tampering
+# Tests whether per-method authorization is enforced. Selects authenticated
+# endpoints and probes alternate HTTP methods with a lower-privilege
+# (attacker) token. If a method the attacker should NOT be able to invoke
+# returns a success status, the framework either lacks per-verb authz or
+# uses verb-agnostic middleware (e.g. session check on GET but no check on
+# DELETE) — both lead to privilege escalation.
+
+id: 09-api5-http-verb-tampering
+
+info:
+  name: "HTTP Verb Tampering - Per-Method Authorization Bypass"
+  category: "API5:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  description: |
+    Tests for HTTP verb tampering by sending alternate methods to the same
+    path with the attacker's (lower-privilege) credentials. Many frameworks
+    apply authorization only to documented verbs, so attackers can swap
+    GET → DELETE / POST → PUT / etc. to bypass access control or trigger
+    unintended state changes. Also sends a deliberately invalid verb to
+    surface method-confusion routing bugs (well-behaved servers return
+    400/405/501).
+  tags: ["http-method-tampering", "verb-tampering", "owasp", "owasp-api-top10", "api5", "authorization", "privilege-escalation"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Pick authenticated endpoints regardless of documented method. The runner
+# will issue one request per HTTP block below against each selected path,
+# substituting the operation's path.
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+# Attacker = lower privilege role, Victim = higher privilege.
+# Lower-priv attacker probing every verb tells us if the API treats verbs
+# inconsistently for that role.
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Each HTTP block re-issues the same path with a different method.
+# The path keeps the operation's documented value so we hit a real route.
+http:
+  - method: "GET"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    matchers:
+      - type: status
+        status: [200, 201, 202, 204]
+  - method: "POST"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 201, 202, 204]
+  - method: "PUT"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 201, 202, 204]
+  - method: "PATCH"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    body: "{}"
+    matchers:
+      - type: status
+        status: [200, 201, 202, 204]
+  - method: "DELETE"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    matchers:
+      - type: status
+        status: [200, 202, 204]
+  # Deliberately invalid verb — well-behaved servers return 400/405/501.
+  # A 2xx here is strong evidence of method-confusion routing.
+  - method: "FOO"
+    path: "{{operation.path}}"
+    matchers:
+      - type: status
+        status: [200, 201, 202, 204]
+
+# Detection: any 2xx from a verb the attacker shouldn't be authorized for
+# is the success indicator. 401/403/405 are the safe responses.
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: status_code
+      status_code: 201
+    - type: status_code
+      status_code: 202
+    - type: status_code
+      status_code: 204
+  failure_indicators:
+    - type: status_code
+      status_code: 401
+    - type: status_code
+      status_code: 403
+    - type: status_code
+      status_code: 405
+  vulnerability_pattern: "verb_swap_bypassed_authorization"
