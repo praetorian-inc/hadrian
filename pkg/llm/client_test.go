@@ -64,7 +64,12 @@ func TestIsOllamaRunning_ServerResponds(t *testing.T) {
 }
 
 func TestIsOllamaRunning_ServerNotResponding(t *testing.T) {
-	// Act - Try to connect to non-existent server
+	// Arrange — pin OLLAMA_HOST to a guaranteed-refused address so this test
+	// doesn't accidentally hit a real local ollama on the default port (same
+	// flake class as LAB-3638).
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+
+	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -163,23 +168,29 @@ func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
 
 	client, err := NewClientWithConfig(ctx, "http://localhost:99999", "llama3.2:latest", 180*time.Second, "")
 
-	// Assert
-	assert.Error(t, err)
-	assert.Nil(t, client)
+	// Assert — require.* on the first two so a regression fails the test
+	// cleanly instead of panicking on the err.Error() dereference below.
+	require.Error(t, err)
+	require.Nil(t, client)
 	assert.Contains(t, err.Error(), "not reachable")
 }
 
 func TestNewClientWithConfig_EmptyHostFallsBackToDefault(t *testing.T) {
-	_ = os.Unsetenv("OLLAMA_HOST")
+	// Pin OLLAMA_HOST to a guaranteed-refused address so the empty-host
+	// fallback in client.go:51 hits a refused destination instead of a real
+	// local ollama on the developer's machine (same flake class as LAB-3638).
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	client, err := NewClientWithConfig(ctx, "", "", 180*time.Second, "")
 
-	// Should try localhost:11434 and fail because Ollama isn't running
-	assert.Error(t, err)
-	assert.Nil(t, client)
+	// Should fall back through host -> OLLAMA_HOST -> default and fail because
+	// the pinned host is refused. require.* on the first two so a regression
+	// fails cleanly instead of panicking on err.Error() below.
+	require.Error(t, err)
+	require.Nil(t, client)
 	assert.Contains(t, err.Error(), "not reachable")
 }
 
