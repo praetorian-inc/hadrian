@@ -14,8 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// These integration tests parse the local .proto fixtures under test/grpc/.
+// They require no Docker or running gRPC server — parsing happens in-process.
+
 func TestIntegration_ParseSampleProto(t *testing.T) {
-	// Find test fixtures relative to repo root
 	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "sample.proto")
 
 	content, err := os.ReadFile(protoPath)
@@ -23,34 +25,29 @@ func TestIntegration_ParseSampleProto(t *testing.T) {
 
 	plugin := &GRPCPlugin{}
 
-	// Verify CanParse
 	assert.True(t, plugin.CanParse(content, "sample.proto"))
 
-	// Parse
 	spec, err := plugin.Parse(content)
 	require.NoError(t, err)
 	require.NotNil(t, spec)
 
-	// Verify services extracted
 	assert.Equal(t, "gRPC API", spec.Info.Title)
 
-	// Should have operations from both UserService and AdminService
-	// UserService: 5 methods, AdminService: 2 methods = 7 total
-	assert.GreaterOrEqual(t, len(spec.Operations), 7)
+	// sample.proto defines GreeterService with SayHello + GetProfile (2 methods).
+	assert.Equal(t, 2, len(spec.Operations))
 
-	// Find GetUser operation
-	var getUserOp *model.Operation
+	var getProfileOp *model.Operation
 	for _, op := range spec.Operations {
-		if strings.Contains(op.Path, "GetUser") {
-			getUserOp = op
+		if strings.Contains(op.Path, "GetProfile") {
+			getProfileOp = op
 			break
 		}
 	}
-	require.NotNil(t, getUserOp, "GetUser operation should exist")
+	require.NotNil(t, getProfileOp, "GetProfile operation should exist")
 
-	assert.Equal(t, "grpc", getUserOp.Protocol)
-	assert.Equal(t, "id", getUserOp.OwnerField)
-	assert.False(t, getUserOp.RequiresAuth, "GetUser should not require auth")
+	assert.Equal(t, "grpc", getProfileOp.Protocol)
+	// ProfileRequest has a user_id field → inferred as the owner field.
+	assert.Equal(t, "user_id", getProfileOp.OwnerField)
 }
 
 func TestIntegration_ParseComplexProto(t *testing.T) {
@@ -63,11 +60,9 @@ func TestIntegration_ParseComplexProto(t *testing.T) {
 	spec, err := plugin.Parse(content)
 	require.NoError(t, err)
 
-	// Should skip streaming method (StreamOrders)
-	// CreateOrder and GetOrder should be included = 2 operations
+	// Should skip the streaming method (StreamOrders); CreateOrder + GetOrder = 2.
 	assert.Equal(t, 2, len(spec.Operations))
 
-	// Verify CreateOrder has user_id as owner field
 	var createOrderOp *model.Operation
 	for _, op := range spec.Operations {
 		if strings.Contains(op.Path, "CreateOrder") {
@@ -77,12 +72,12 @@ func TestIntegration_ParseComplexProto(t *testing.T) {
 	}
 	require.NotNil(t, createOrderOp)
 
-	// Should have user_id as owner field
+	// CreateOrderRequest has user_id → owner field.
 	assert.Equal(t, "user_id", createOrderOp.OwnerField)
 }
 
 func TestIntegration_AuthRequirementInference(t *testing.T) {
-	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "sample.proto")
+	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "complex.proto")
 
 	content, err := os.ReadFile(protoPath)
 	require.NoError(t, err)
@@ -93,22 +88,14 @@ func TestIntegration_AuthRequirementInference(t *testing.T) {
 
 	authRequired := make(map[string]bool)
 	for _, op := range spec.Operations {
-		// Extract method name from path
 		parts := strings.Split(op.Path, "/")
 		methodName := parts[len(parts)-1]
 		authRequired[methodName] = op.RequiresAuth
 	}
 
-	// Read operations should not require auth
-	assert.False(t, authRequired["GetUser"])
-	assert.False(t, authRequired["ListUsers"])
-	assert.False(t, authRequired["GetSystemConfig"])
-
-	// Write operations should require auth
-	assert.True(t, authRequired["CreateUser"])
-	assert.True(t, authRequired["UpdateUser"])
-	assert.True(t, authRequired["DeleteUser"])
-	assert.True(t, authRequired["SetSystemConfig"])
+	// Read operation should not require auth; write/create operation should.
+	assert.False(t, authRequired["GetOrder"], "GetOrder (read) should not require auth")
+	assert.True(t, authRequired["CreateOrder"], "CreateOrder (write) should require auth")
 }
 
 func TestIntegration_OperationPaths(t *testing.T) {
@@ -121,14 +108,11 @@ func TestIntegration_OperationPaths(t *testing.T) {
 	spec, err := plugin.Parse(content)
 	require.NoError(t, err)
 
-	// Find specific operations and verify path format
 	pathsFound := make(map[string]bool)
 	for _, op := range spec.Operations {
 		pathsFound[op.Path] = true
 	}
 
-	// Verify expected paths exist
-	assert.True(t, pathsFound["/test.v1.UserService/GetUser"], "GetUser path")
-	assert.True(t, pathsFound["/test.v1.UserService/CreateUser"], "CreateUser path")
-	assert.True(t, pathsFound["/test.v1.AdminService/GetSystemConfig"], "GetSystemConfig path")
+	assert.True(t, pathsFound["/example.GreeterService/SayHello"], "SayHello path")
+	assert.True(t, pathsFound["/example.GreeterService/GetProfile"], "GetProfile path")
 }
