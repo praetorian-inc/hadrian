@@ -122,7 +122,7 @@ func newTestGRPCCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
 
 	// Output options
-	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
+	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown, sarif")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Output file path")
 	cmd.Flags().BoolVar(&config.Verbose, "verbose", false, "Verbose output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Dry run (don't execute tests)")
@@ -294,7 +294,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 	}
 
 	// Create reporter based on output format
-	rep, err := createReporter(config.Output, config.OutputFile, 0)
+	rep, err := createReporter(config.Output, config.OutputFile, 0, templateFiles)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
@@ -470,6 +470,7 @@ func buildGRPCFinding(tmpl *templates.CompiledTemplate, op *model.Operation, att
 
 	return &model.Finding{
 		ID:              tmpl.ID,
+		TemplateID:      tmpl.ID,
 		Category:        category,
 		Name:            tmpl.ID,
 		Severity:        severity,

@@ -118,7 +118,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
 
 	// Output options
-	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
+	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown, sarif")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Output file path")
 	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids-limit", 1, "Limit request IDs in output (0 = show all)")
 	cmd.Flags().BoolVar(&config.Verbose, "verbose", false, "Verbose output")
@@ -238,8 +238,22 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs, config.Verbose)
 
+	// Pre-load + compile templates for SARIF rule enrichment. runTemplateTests
+	// loads templates again on its own; double-loading is cheap and avoids
+	// reshaping the existing call structure.
+	var sarifTemplates []*templates.CompiledTemplate
+	if config.Output == "sarif" && config.TemplateDir != "" {
+		if raw, lerr := loadGraphQLTemplates(config.TemplateDir); lerr == nil {
+			for _, t := range raw {
+				if c, cerr := templates.Compile(t); cerr == nil {
+					sarifTemplates = append(sarifTemplates, c)
+				}
+			}
+		}
+	}
+
 	// Create reporter based on output format (using REST reporter pattern)
-	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
+	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit, sarifTemplates)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}

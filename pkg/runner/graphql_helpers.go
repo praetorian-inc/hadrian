@@ -351,6 +351,7 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 			// Create model.Finding using template ID as the name
 			finding := &model.Finding{
 				ID:              generateGraphQLID(),
+				TemplateID:      tmpl.ID,
 				Category:        tmpl.Info.Category,
 				Name:            tmpl.ID,
 				Description:     description,

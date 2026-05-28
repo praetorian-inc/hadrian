@@ -162,6 +162,7 @@ func createFinding(
 ) *model.Finding {
 	return &model.Finding{
 		ID:              generateFindingID(tmpl.ID, operation, attacker.Name),
+		TemplateID:      tmpl.ID,
 		Category:        tmpl.Info.Category,
 		Name:            tmpl.Info.Name,
 		Description:     fmt.Sprintf("Potential %s vulnerability detected", tmpl.Info.Category),
