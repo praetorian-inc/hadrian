@@ -153,7 +153,10 @@ func TestCreateReporter_SARIF(t *testing.T) {
 	dir := t.TempDir()
 	rep, err := createReporter("sarif", filepath.Join(dir, "out.sarif"), 1, nil)
 	require.NoError(t, err)
-	assert.NotNil(t, rep)
+	// Type-assert the concrete reporter; a regression returning a different
+	// implementation for "sarif" would otherwise still pass.
+	_, ok := rep.(*SARIFReporter)
+	require.True(t, ok, "createReporter(sarif) must return *SARIFReporter, got %T", rep)
 	assert.NoError(t, rep.Close())
 }
 

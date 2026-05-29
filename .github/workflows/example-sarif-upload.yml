@@ -41,7 +41,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.26"
+          # Match Hadrian's go.mod toolchain. `stable` follows the latest
+          # released Go minor (1.22+), which has consistently been the floor
+          # Hadrian compiles against.
+          go-version: "stable"
 
       - name: Install Hadrian
         run: go install github.com/praetorian-inc/hadrian/cmd/hadrian@latest

@@ -293,6 +293,12 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 		mutationExecutor = orchestrator.NewGRPCMutationExecutor(adapter)
 	}
 
+	// When emitting SARIF without any compiled templates, warn that rules will
+	// degrade to wiki-fallback metadata; this matches the GraphQL behavior.
+	if config.Output == "sarif" && len(templateFiles) == 0 {
+		log.Warn("SARIF: no templates loaded from %s — rules will use wiki fallback metadata", templateDir)
+	}
+
 	// Create reporter based on output format
 	rep, err := createReporter(config.Output, config.OutputFile, 0, templateFiles)
 	if err != nil {

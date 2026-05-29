@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/reporter"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
@@ -24,11 +25,26 @@ import (
 // Code Scanning uses these to deduplicate alerts across runs.
 
 const (
-	sarifVersion          = "2.1.0"
-	sarifSchema           = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"
+	sarifVersion = "2.1.0"
+	// sarifSchema points at the canonical SARIF v2.1.0 JSON Schema on the
+	// oasis-tcs/sarif-spec main branch — the old master/Schemata URL returns 404.
+	sarifSchema           = "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json"
 	hadrianInformationURI = "https://github.com/praetorian-inc/hadrian"
 	templateBaseURL       = "https://github.com/praetorian-inc/hadrian/blob/main/"
 	templateWikiURL       = "https://github.com/praetorian-inc/hadrian/wiki/Template-System"
+
+	// builtInTemplatePrefix gates templateHelpURI: only paths rooted at
+	// "templates/" map to the hadrian GitHub blob URL. A custom template at
+	// /home/user/my-templates/foo.yaml would otherwise match a naive substring
+	// search and produce a broken URL.
+	builtInTemplatePrefix = "templates/"
+
+	// fingerprintFieldSep separates identity fields when computing
+	// partialFingerprints. NUL is used because it cannot legitimately appear in
+	// any of the inputs (template IDs, HTTP methods, paths, role names) — joining
+	// with a printable delimiter risks collisions if a user-supplied field
+	// contains the delimiter.
+	fingerprintFieldSep = "\x00"
 )
 
 // SARIFReport is the top-level SARIF v2.1.0 document.
@@ -122,9 +138,15 @@ type SARIFLogicalLocation struct {
 // Templates passed at construction time are used to enrich the rules section
 // (full description, helpUri, tags). They are optional: if absent, rules are
 // derived from the findings themselves.
+//
+// Free-text content (Finding.Description, embedded response excerpts) is
+// passed through reporter.Redactor before being written so that tokens and
+// PII the scanned API returned cannot leak into a SARIF document that the
+// PR documents as upload-ready to GitHub Code Scanning.
 type SARIFReporter struct {
 	outputFile string
 	templates  map[string]*templates.CompiledTemplate
+	redactor   *reporter.Redactor
 }
 
 // NewSARIFReporter constructs a SARIFReporter. `tmpls` may be nil for callers
@@ -144,6 +166,7 @@ func NewSARIFReporter(outputFile string, tmpls []*templates.CompiledTemplate) (*
 	return &SARIFReporter{
 		outputFile: outputFile,
 		templates:  idx,
+		redactor:   reporter.NewRedactor(),
 	}, nil
 }
 
@@ -187,7 +210,7 @@ func (r *SARIFReporter) build(findings []*model.Finding) SARIFReport {
 			RuleID:              ruleID,
 			RuleIndex:           idx,
 			Level:               severityToSARIFLevel(f.Severity),
-			Message:             SARIFMessage{Text: buildResultMessage(f)},
+			Message:             SARIFMessage{Text: r.redactor.Redact(buildResultMessage(f))},
 			Locations:           buildLocations(f),
 			PartialFingerprints: buildPartialFingerprints(f),
 			Properties:          buildResultProperties(f),
@@ -268,8 +291,11 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 		}
 		tags = append(tags, tmpl.Info.Tags...)
 		rule.Properties = &SARIFRuleProperties{
-			Tags:      dedupeStrings(tags),
-			Precision: "high",
+			Tags: dedupeStrings(tags),
+			// Hadrian templates don't carry a per-rule precision signal today;
+			// "medium" is a conservative default that avoids overstating
+			// confidence to SARIF consumers (GitHub UI, Code Scanning APIs).
+			Precision: "medium",
 		}
 		return rule
 	}
@@ -290,8 +316,11 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 			tags = append(tags, sample.Category)
 		}
 		rule.Properties = &SARIFRuleProperties{
-			Tags:      dedupeStrings(tags),
-			Precision: "high",
+			Tags: dedupeStrings(tags),
+			// Hadrian templates don't carry a per-rule precision signal today;
+			// "medium" is a conservative default that avoids overstating
+			// confidence to SARIF consumers (GitHub UI, Code Scanning APIs).
+			Precision: "medium",
 		}
 	} else {
 		rule.HelpURI = templateWikiURL
@@ -299,17 +328,22 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 	return rule
 }
 
-// templateHelpURI returns a stable GitHub URL for built-in templates
-// (paths starting with "templates/"), and a fallback wiki URL otherwise.
+// templateHelpURI returns a stable GitHub URL for built-in templates and a
+// fallback wiki URL otherwise.
+//
+// A built-in template is identified by a FilePath rooted at "templates/"
+// (optionally prefixed with "./"). Earlier versions of this function matched
+// the substring "templates/" anywhere in the path, which produced broken URLs
+// for legitimate custom layouts like /home/user/my-templates/foo.yaml.
 func templateHelpURI(filePath string) string {
 	if filePath == "" {
 		return templateWikiURL
 	}
-	// Built-in templates ship under templates/{rest,graphql,grpc}/...
-	// Normalize Windows separators just in case.
-	normalized := strings.ReplaceAll(filePath, "\\", "/")
-	if i := strings.Index(normalized, "templates/"); i >= 0 {
-		return templateBaseURL + normalized[i:]
+	// Normalize Windows separators and strip a leading "./" so a built-in
+	// template loaded via the default relative path still matches.
+	normalized := strings.TrimPrefix(strings.ReplaceAll(filePath, "\\", "/"), "./")
+	if strings.HasPrefix(normalized, builtInTemplatePrefix) {
+		return templateBaseURL + normalized
 	}
 	return templateWikiURL
 }
@@ -358,6 +392,10 @@ func buildLocations(f *model.Finding) []SARIFLocation {
 //
 // Inputs are intentionally limited to stable identity fields. We deliberately
 // exclude timestamps, request IDs, response bodies, and LLM analysis output.
+//
+// Fields are joined with NUL (\x00) so that no user-controllable value can
+// shift the boundary between fields and produce a collision with a different
+// (template, endpoint, role) tuple.
 func buildPartialFingerprints(f *model.Finding) map[string]string {
 	parts := []string{
 		f.TemplateID,
@@ -366,7 +404,7 @@ func buildPartialFingerprints(f *model.Finding) map[string]string {
 		f.AttackerRole,
 		f.VictimRole,
 	}
-	h := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	h := sha256.Sum256([]byte(strings.Join(parts, fingerprintFieldSep)))
 	return map[string]string{
 		"primaryLocationHash/v1": hex.EncodeToString(h[:]),
 	}

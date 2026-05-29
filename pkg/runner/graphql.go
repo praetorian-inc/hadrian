@@ -240,15 +240,26 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	// Pre-load + compile templates for SARIF rule enrichment. runTemplateTests
 	// loads templates again on its own; double-loading is cheap and avoids
-	// reshaping the existing call structure.
+	// reshaping the existing call structure. The directory is resolved the same
+	// way runTemplateTests resolves it (via getTemplateDir), so a default-dir
+	// `--output sarif` run still produces enriched SARIF rules.
 	var sarifTemplates []*templates.CompiledTemplate
-	if config.Output == "sarif" && config.TemplateDir != "" {
-		if raw, lerr := loadGraphQLTemplates(config.TemplateDir); lerr == nil {
-			for _, t := range raw {
-				if c, cerr := templates.Compile(t); cerr == nil {
-					sarifTemplates = append(sarifTemplates, c)
-				}
+	if config.Output == "sarif" {
+		sarifDir := config.TemplateDir
+		if sarifDir == "" {
+			sarifDir = getTemplateDir("./templates/graphql")
+		}
+		raw, lerr := loadGraphQLTemplates(sarifDir)
+		if lerr != nil {
+			log.Warn("SARIF: failed to load templates from %s: %v — rules will use wiki fallback metadata", sarifDir, lerr)
+		}
+		for _, t := range raw {
+			c, cerr := templates.Compile(t)
+			if cerr != nil {
+				log.Warn("SARIF: failed to compile template %s: %v", t.ID, cerr)
+				continue
 			}
+			sarifTemplates = append(sarifTemplates, c)
 		}
 	}
 

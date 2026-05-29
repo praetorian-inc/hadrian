@@ -198,6 +198,34 @@ func TestSARIFReporter_PartialFingerprintsDifferWhenIdentityChanges(t *testing.T
 	}
 }
 
+// QUAL-006 / SEC-BE-002 regression test: two findings whose identity fields
+// would collide under a printable delimiter (e.g. "|") must still produce
+// distinct fingerprints. The NUL separator guarantees this.
+func TestSARIFReporter_PartialFingerprintsResistDelimiterCollision(t *testing.T) {
+	// Without NUL separation, both joins would collapse to:
+	//   "tpl|GET|/foo|attacker|"
+	// Two distinct (TemplateID, Endpoint) tuples can shift the boundary so
+	// joined strings match; assert their hashes differ regardless.
+	a := &model.Finding{
+		TemplateID:   "tpl",
+		Method:       "GET",
+		Endpoint:     "/foo|attacker|",
+		AttackerRole: "",
+		VictimRole:   "",
+	}
+	b := &model.Finding{
+		TemplateID:   "tpl",
+		Method:       "GET",
+		Endpoint:     "/foo",
+		AttackerRole: "attacker",
+		VictimRole:   "",
+	}
+	assert.NotEqual(t,
+		buildPartialFingerprints(a)["primaryLocationHash/v1"],
+		buildPartialFingerprints(b)["primaryLocationHash/v1"],
+		"delimiter-collision-resistant fingerprinting expected")
+}
+
 func TestSeverityToSARIFLevel(t *testing.T) {
 	cases := map[model.Severity]string{
 		model.SeverityCritical: "error",
@@ -214,18 +242,27 @@ func TestSeverityToSARIFLevel(t *testing.T) {
 
 func TestTemplateHelpURI(t *testing.T) {
 	cases := []struct {
+		name     string
 		filePath string
 		want     string
 	}{
-		{"", templateWikiURL},
-		{"templates/rest/01-api1-bola-read.yaml", templateBaseURL + "templates/rest/01-api1-bola-read.yaml"},
-		{"./templates/graphql/foo.yaml", templateBaseURL + "templates/graphql/foo.yaml"},
-		{"/abs/path/templates/grpc/bar.yaml", templateBaseURL + "templates/grpc/bar.yaml"},
-		{"/some/custom/path/my-template.yaml", templateWikiURL},
-		{"templates\\rest\\01-api1-bola-read.yaml", templateBaseURL + "templates/rest/01-api1-bola-read.yaml"},
+		{"empty path", "", templateWikiURL},
+		{"built-in rest", "templates/rest/01-api1-bola-read.yaml", templateBaseURL + "templates/rest/01-api1-bola-read.yaml"},
+		{"built-in graphql with leading ./", "./templates/graphql/foo.yaml", templateBaseURL + "templates/graphql/foo.yaml"},
+		{"built-in grpc with Windows separators", "templates\\rest\\01-api1-bola-read.yaml", templateBaseURL + "templates/rest/01-api1-bola-read.yaml"},
+		// QUAL-005 fix: absolute paths that contain "templates/" as a non-prefix
+		// segment must NOT be mapped to hadrian's GitHub blob — they are custom
+		// templates that live outside the built-in tree.
+		{"custom abs path with templates/ as a non-prefix segment", "/abs/path/templates/grpc/bar.yaml", templateWikiURL},
+		{"custom path with sub-templates dir", "/opt/work/sub-templates/api.yaml", templateWikiURL},
+		{"custom path with my-templates dir", "/home/user/my-templates/foo.yaml", templateWikiURL},
+		{"completely custom path", "/some/custom/path/my-template.yaml", templateWikiURL},
 	}
 	for _, tc := range cases {
-		assert.Equal(t, tc.want, templateHelpURI(tc.filePath), "filePath=%q", tc.filePath)
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, templateHelpURI(tc.filePath))
+		})
 	}
 }
 
@@ -369,6 +406,80 @@ func TestSARIFReporter_ReportFindingIsNoOp(t *testing.T) {
 	require.NoError(t, rep.GenerateReport(nil, &Stats{}))
 	doc := readSARIF(t, out)
 	assert.Empty(t, doc.Runs[0].Results, "ReportFinding must not mutate state")
+}
+
+// SARIF documents are documented as upload-ready to GitHub Code Scanning, so
+// any tokens / PII the scanned API returned in a Finding.Description must be
+// redacted before they reach the SARIF document. Counterpart to SEC-BE-001.
+func TestSARIFReporter_RedactsTokensInResultMessage(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "redacted.sarif")
+	rep, err := NewSARIFReporter(out, nil)
+	require.NoError(t, err)
+	leaky := sampleFinding()
+	leaky.Description = "response carried bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc.def and an email user@example.com"
+	require.NoError(t, rep.GenerateReport([]*model.Finding{leaky}, &Stats{}))
+	doc := readSARIF(t, out)
+	require.Len(t, doc.Runs[0].Results, 1)
+	msg := doc.Runs[0].Results[0].Message.Text
+	assert.NotContains(t, msg, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc.def", "JWT must be redacted")
+	assert.NotContains(t, msg, "user@example.com", "email must be redacted")
+}
+
+// QUAL-005 / SEC-BE: SARIF files may carry sensitive content, so the file
+// must be written with owner-only (0600) permissions.
+func TestSARIFReporter_WritesFileWith0600Mode(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "mode.sarif")
+	rep, err := NewSARIFReporter(out, nil)
+	require.NoError(t, err)
+	require.NoError(t, rep.GenerateReport([]*model.Finding{sampleFinding()}, &Stats{}))
+	info, err := os.Stat(out)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0600), info.Mode().Perm())
+}
+
+// Findings with no endpoint must still produce a syntactically valid SARIF
+// location — the spec requires an artifactLocation.uri.
+func TestSARIFReporter_HandlesEmptyEndpoint(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "noendpoint.sarif")
+	rep, err := NewSARIFReporter(out, nil)
+	require.NoError(t, err)
+	f := sampleFinding()
+	f.Endpoint = ""
+	require.NoError(t, rep.GenerateReport([]*model.Finding{f}, &Stats{}))
+	doc := readSARIF(t, out)
+	require.Len(t, doc.Runs[0].Results, 1)
+	require.Len(t, doc.Runs[0].Results[0].Locations, 1)
+	assert.Equal(t, "unknown", doc.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI)
+}
+
+// ruleFor has conditional branches for missing template description / sample
+// name. Both should emit a valid (if minimal) rule object.
+func TestSARIFReporter_RuleForEmptyBranches(t *testing.T) {
+	t.Run("template with empty description", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "tmpl-emptydesc.sarif")
+		tmpl := sampleTemplate("01-api1-bola-read")
+		tmpl.Info.Description = ""
+		rep, err := NewSARIFReporter(out, []*templates.CompiledTemplate{tmpl})
+		require.NoError(t, err)
+		require.NoError(t, rep.GenerateReport([]*model.Finding{sampleFinding()}, &Stats{}))
+		doc := readSARIF(t, out)
+		require.Len(t, doc.Runs[0].Tool.Driver.Rules, 1)
+		assert.Nil(t, doc.Runs[0].Tool.Driver.Rules[0].FullDescription, "empty template description should omit FullDescription")
+	})
+
+	t.Run("finding with empty Name and no template", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "nomatch.sarif")
+		rep, err := NewSARIFReporter(out, nil)
+		require.NoError(t, err)
+		f := sampleFinding()
+		f.Name = ""
+		f.Description = ""
+		require.NoError(t, rep.GenerateReport([]*model.Finding{f}, &Stats{}))
+		doc := readSARIF(t, out)
+		require.Len(t, doc.Runs[0].Tool.Driver.Rules, 1)
+		assert.Nil(t, doc.Runs[0].Tool.Driver.Rules[0].ShortDescription, "empty finding name should omit ShortDescription")
+		assert.Nil(t, doc.Runs[0].Tool.Driver.Rules[0].FullDescription, "empty finding description should omit FullDescription")
+	})
 }
 
 // readSARIF reads and parses a SARIF document, failing the test on any error.

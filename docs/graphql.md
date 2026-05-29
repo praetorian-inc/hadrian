@@ -38,7 +38,7 @@ Flags:
       --insecure               Skip TLS verification
       --rate-limit float       Rate limit in requests per second (default 5.0)
       --timeout int            Request timeout in seconds (default 30)
-      --output string          Output format: terminal, json, markdown (default "terminal")
+      --output string          Output format: terminal, json, markdown, sarif (default "terminal")
       --output-file string     Output file path
       --verbose                Verbose output
       --dry-run                Show what would be tested without executing
@@ -300,6 +300,16 @@ hadrian test graphql --target http://localhost:5013 --output json --output-file 
 ```bash
 hadrian test graphql --target http://localhost:5013 --output markdown --output-file report.md
 ```
+
+### SARIF (GitHub Code Scanning)
+
+GraphQL findings can be published to GitHub Code Scanning via SARIF v2.1.0:
+
+```bash
+hadrian test graphql --target http://localhost:5013 --output sarif --output-file report.sarif
+```
+
+The output validates against the SARIF v2.1.0 schema and carries stable `partialFingerprints` so re-running the scan does not produce duplicate alerts. See [Configuration → SARIF](configuration.md#sarif-github-code-scanning) for the full schema, helpUri behaviour, and an example GitHub Actions workflow.
 
 ## Proxy Support
 

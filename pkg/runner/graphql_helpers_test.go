@@ -353,6 +353,46 @@ func TestReportFindings_WithFindings(t *testing.T) {
 	reportFindings(findings)
 }
 
+// TestRunTemplateTests_PopulatesTemplateID drives runTemplateTests against a
+// server that matches the no-auth Broken Authentication template (status 200
+// + body containing "data" and "users") and asserts every produced finding
+// carries Finding.TemplateID = tmpl.ID. SARIF rule dedup depends on this.
+func TestRunTemplateTests_PopulatesTemplateID(t *testing.T) {
+	// Server returns a body that satisfies both matchers in
+	// 02-api2-broken-authentication.yaml ("data" + "users" + status 200).
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"users":[{"id":"1","username":"u","email":"e@x.test"}]}}`))
+	}))
+	defer server.Close()
+
+	// Filter to a single no-auth template so the test is deterministic and
+	// fast; this is the one that does NOT need auth + role config.
+	config := GraphQLConfig{
+		TemplateDir: "../../templates/graphql",
+		Templates:   []string{"graphql-broken-authentication"},
+		Timeout:     30,
+		Verbose:     false,
+	}
+
+	findings, _ := runTemplateTests(
+		context.Background(),
+		config,
+		server.URL,
+		server.Client(),
+		nil, // no auth needed for this template
+		nil, // reporter
+		nil, // customHeaders
+	)
+
+	require.NotEmpty(t, findings, "matching server should yield at least one finding")
+	for _, f := range findings {
+		assert.Equal(t, "graphql-broken-authentication", f.TemplateID,
+			"TemplateID must propagate from the matched template (regression risk: SARIF dedup collapses to hadrian.unknown)")
+	}
+}
+
 // TestRunTemplateTests_ReturnsTemplateCount tests that runTemplateTests returns the count of loaded templates
 func TestRunTemplateTests_ReturnsTemplateCount(t *testing.T) {
 	// Create a test server that returns a simple GraphQL response
