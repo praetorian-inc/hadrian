@@ -206,6 +206,11 @@ paths:
       security: [{bearerAuth: []}]
       parameters: [{name: id, in: path, required: true, schema: {type: string}}]
       responses: {"200": {description: OK}}
+    put:
+      summary: Update document by ID (no ownership check — BOLA write)
+      security: [{bearerAuth: []}]
+      parameters: [{name: id, in: path, required: true, schema: {type: string}}]
+      responses: {"200": {description: OK}}
   /api/admin/users:
     get:
       summary: List all users (admin only)

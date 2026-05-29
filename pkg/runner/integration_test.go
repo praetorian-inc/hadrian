@@ -87,6 +87,22 @@ func TestIntegration_BFLADetection(t *testing.T) {
 		"BFLA template should detect non-admin access to /api/admin/users; got %v", counts)
 }
 
+func TestIntegration_BOLAWriteDetection(t *testing.T) {
+	// PUT to /api/documents/{id} succeeds for a non-owner → BOLA write.
+	findings := runFixtureTemplates(t, "02-api1-bola-write")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API1:2023"],
+		"BOLA-write template should detect cross-user object modification; got %v", counts)
+}
+
+func TestIntegration_BOLADeleteDetection(t *testing.T) {
+	// DELETE to /api/orders/{id} succeeds for a non-owner → BOLA delete.
+	findings := runFixtureTemplates(t, "03-api1-bola-delete")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API1:2023"],
+		"BOLA-delete template should detect cross-user object deletion; got %v", counts)
+}
+
 // TestIntegration_NoRegression_AllTemplates runs the full REST template suite
 // against the fixture and asserts the detection rate has not regressed: each of
 // the core OWASP categories the fixture seeds must still produce findings.
