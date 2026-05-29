@@ -32,7 +32,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
-SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
 
 # Default ports. The script will pick these unless they're already in use,
 # in which case find_available_port walks forward until it finds a free one
@@ -105,7 +104,8 @@ if [ "$TEARDOWN" = true ]; then
     pkill -f "/vulnerable-rest-complex$" 2>/dev/null && log_ok "Stopped vulnerable-rest-complex" || true
 
     rm -f "$CONFIG_FILE"
-    rm -rf "$SPEC_CACHE_DIR"
+    # Remove any stale spec cache left by older versions of this script.
+    rm -rf "${SCRIPT_DIR}/.live-test-cache"
     log_ok "Removed config file and spec cache"
     echo ""
     exit 0

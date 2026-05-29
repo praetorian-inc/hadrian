@@ -747,7 +747,10 @@ func main() {
 	mux.Handle("/api/admin/reports", authMiddleware(adminMiddleware(http.HandlerFunc(handleAdminReports))))
 
 	handler := loggingMiddleware(mux)
-	addr := ":" + port
+	// Bind loopback only (matches vulnerable-graphql): this is an intentionally
+	// vulnerable target, so it must not be reachable off-host. All callers use
+	// http://localhost.
+	addr := "127.0.0.1:" + port
 	log.Printf("Starting vulnerable-rest-complex server on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, handler))
 }

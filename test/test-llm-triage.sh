@@ -122,12 +122,24 @@ roles:
 EOF
 )
 
+# Resolve the OpenAPI spec path. The target ships a static spec pinned to the
+# default port; if running on a non-default port, patch the server URL into a
+# copy so hadrian (which reads servers[0].url) targets the right port. Mirrors
+# test-llm-planner.sh.
+REST_COMPLEX_SPEC="${SCRIPT_DIR}/vulnerable-rest-complex/openapi.yaml"
+if [ "$REST_COMPLEX_PORT" != "8888" ]; then
+    REST_COMPLEX_SPEC="${OUTPUT_DIR}/triage-rest-complex-openapi.yaml"
+    sed "s|http://localhost:8888|http://localhost:${REST_COMPLEX_PORT}|g" \
+        "${SCRIPT_DIR}/vulnerable-rest-complex/openapi.yaml" > "$REST_COMPLEX_SPEC"
+    log_info "Patched OpenAPI spec to use port $REST_COMPLEX_PORT"
+fi
+
 # Run hadrian with LLM triage
 RESULT_FILE="${OUTPUT_DIR}/llm-triage-${PROVIDER}-results.json"
 log_info "Running hadrian with --llm-provider ${PROVIDER}..."
 
 "$HADRIAN_BIN" test rest \
-    --api "${SCRIPT_DIR}/vulnerable-rest-complex/openapi.yaml" \
+    --api "$REST_COMPLEX_SPEC" \
     --roles "${SCRIPT_DIR}/vulnerable-rest-complex/roles.yaml" \
     --auth "$AUTH_FILE" \
     --template-dir "${SCRIPT_DIR}/vulnerable-rest-complex/templates/owasp" \

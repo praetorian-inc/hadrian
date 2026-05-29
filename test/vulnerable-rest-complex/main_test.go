@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 // testServer creates an httptest.Server wired up to the same mux as main().
@@ -521,4 +523,54 @@ func TestConcurrentStoreAccess(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// --- Negative authentication paths (authMiddleware / validateJWT 401s) ---
+// These cover the branches that return 401: missing header, malformed token,
+// and a validly-signed token missing the customer_id claim (the comma-ok guard
+// in validateJWT must return an error rather than panic the handler goroutine).
+
+func rawGet(t *testing.T, srv *httptest.Server, path, authHeader string) int {
+	t.Helper()
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+	if authHeader != "" {
+		req.Header.Set("Authorization", authHeader)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s failed: %v", path, err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestAuth_NoHeaderRejected(t *testing.T) {
+	srv, cleanup := testServer(t)
+	defer cleanup()
+	if code := rawGet(t, srv, "/api/customers/1", ""); code != http.StatusUnauthorized {
+		t.Errorf("no Authorization header: expected 401, got %d", code)
+	}
+}
+
+func TestAuth_MalformedTokenRejected(t *testing.T) {
+	srv, cleanup := testServer(t)
+	defer cleanup()
+	if code := rawGet(t, srv, "/api/customers/1", "Bearer not-a-jwt"); code != http.StatusUnauthorized {
+		t.Errorf("garbage bearer token: expected 401, got %d", code)
+	}
+}
+
+func TestAuth_MissingCustomerIDClaimRejected(t *testing.T) {
+	srv, cleanup := testServer(t)
+	defer cleanup()
+	// Validly-signed token (correct secret) but WITHOUT a customer_id claim.
+	// Exercises the comma-ok guard in validateJWT — must 401, not panic.
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"role": "user"})
+	signed, err := tok.SignedString(jwtSecret)
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	if code := rawGet(t, srv, "/api/customers/1", "Bearer "+signed); code != http.StatusUnauthorized {
+		t.Errorf("token missing customer_id claim: expected 401, got %d", code)
+	}
 }
