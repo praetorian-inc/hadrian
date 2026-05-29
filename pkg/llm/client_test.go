@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -88,8 +87,7 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_ = os.Setenv("OLLAMA_HOST", server.URL)
-	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
+	t.Setenv("OLLAMA_HOST", server.URL)
 
 	// Act
 	ctx := context.Background()
@@ -101,8 +99,7 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 
 func TestIsOllamaRunning_WithCustomHostNotRunning(t *testing.T) {
 	// Arrange - Set custom host that doesn't exist
-	_ = os.Setenv("OLLAMA_HOST", "http://localhost:99999")
-	defer func() { _ = os.Unsetenv("OLLAMA_HOST") }()
+	t.Setenv("OLLAMA_HOST", "http://localhost:99999")
 
 	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -124,7 +121,7 @@ func TestNewClientWithConfig_WithOllamaHost(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_ = os.Unsetenv("OLLAMA_HOST")
+	t.Setenv("OLLAMA_HOST", "")
 
 	// Act
 	ctx := context.Background()
@@ -145,8 +142,8 @@ func TestNewClientWithConfig_WithEmptyModel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_ = os.Unsetenv("OLLAMA_HOST")
-	_ = os.Unsetenv("OLLAMA_MODEL")
+	t.Setenv("OLLAMA_HOST", "")
+	t.Setenv("OLLAMA_MODEL", "")
 
 	// Act
 	ctx := context.Background()
@@ -159,8 +156,10 @@ func TestNewClientWithConfig_WithEmptyModel(t *testing.T) {
 }
 
 func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
-	// Arrange
-	_ = os.Unsetenv("OLLAMA_HOST")
+	// Arrange — explicit unreachable host below; pin OLLAMA_HOST empty so a
+	// leaked ambient value can't interfere (host arg is non-empty so the env
+	// is not consulted, but keep isolation explicit and consistent).
+	t.Setenv("OLLAMA_HOST", "")
 
 	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -175,10 +174,15 @@ func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
 	assert.Contains(t, err.Error(), "not reachable")
 }
 
-func TestNewClientWithConfig_EmptyHostFallsBackToDefault(t *testing.T) {
-	// Pin OLLAMA_HOST to a guaranteed-refused address so the empty-host
-	// fallback in client.go:51 hits a refused destination instead of a real
-	// local ollama on the developer's machine (same flake class as LAB-3638).
+func TestNewClientWithConfig_EmptyHostFallsBackToOllamaHostEnv(t *testing.T) {
+	// Pin OLLAMA_HOST to a guaranteed-refused address. With an empty host arg,
+	// client.go:51 resolves the host from OLLAMA_HOST, so this exercises the
+	// env-var fallback branch (not the hardcoded localhost:11434 default at
+	// client.go:54, which is unreachable here precisely because OLLAMA_HOST is
+	// set). The default branch is intentionally left uncovered: it resolves to
+	// the flake-prone localhost:11434 and cannot be deterministically tested as
+	// a "not reachable" failure without overriding it. Same flake class as
+	// LAB-3638.
 	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -186,9 +190,9 @@ func TestNewClientWithConfig_EmptyHostFallsBackToDefault(t *testing.T) {
 
 	client, err := NewClientWithConfig(ctx, "", "", 180*time.Second, "")
 
-	// Should fall back through host -> OLLAMA_HOST -> default and fail because
-	// the pinned host is refused. require.* on the first two so a regression
-	// fails cleanly instead of panicking on err.Error() below.
+	// Empty host -> OLLAMA_HOST env -> refused, so NewClientWithConfig returns
+	// "not reachable". require.* on the first two so a regression fails cleanly
+	// instead of panicking on err.Error() below.
 	require.Error(t, err)
 	require.Nil(t, client)
 	assert.Contains(t, err.Error(), "not reachable")
