@@ -222,7 +222,6 @@ extract_finding_count() {
     fi
 }
 
-
 run_hadrian() {
     local name=$1
     shift
@@ -380,7 +379,12 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
             fi
             log_ok "Tokens acquired for admin, user1, user2"
 
-            (umask 077; cat > "$AUTH_FILE" <<EOF
+            # Emit ${VAR} env-var refs (single-quoted heredoc) rather than
+            # inline JWTs so hadrian's expandEnvSafe resolves them at load
+            # and detectHardcodedSecret does not flag them — same pattern as
+            # the crapi block. Keeps the harness free of SECURITY warnings.
+            export ADMIN_TOKEN USER1_TOKEN USER2_TOKEN
+            (umask 077; cat > "$AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 key_name: Authorization
@@ -556,7 +560,12 @@ if echo "$TARGETS" | grep -q "dvga"; then
                 log_ok "Created victim PII paste" || log_warn "Failed to create victim paste"
 
             DVGA_AUTH_FILE="${OUTPUT_DIR}/dvga-auth.yaml"
-            (umask 077; cat > "$DVGA_AUTH_FILE" <<EOF
+            # Emit ${VAR} env-var refs (single-quoted heredoc) rather than
+            # inline JWTs so hadrian's expandEnvSafe resolves them at load and
+            # detectHardcodedSecret does not flag them — same pattern as the
+            # crapi block. Keeps the harness free of SECURITY warnings.
+            export DVGA_ADMIN_TOKEN DVGA_OPERATOR_TOKEN
+            (umask 077; cat > "$DVGA_AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 key_name: Authorization

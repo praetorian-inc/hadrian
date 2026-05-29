@@ -259,6 +259,7 @@ test/
   setup-live-targets.sh    # One-time setup
   run-live-tests.sh        # End-to-end test runner
   test-llm-planner.sh      # LLM-planner regression tests
+  test_detect_planner_provider.sh  # Unit test for detect_planner_provider
   README.md                # This file
   .live-test-config        # Auto-generated port + path config (gitignored)
   .live-test-cache/        # Patched OpenAPI specs (gitignored)
@@ -272,6 +273,8 @@ test/
   llm-helpers.sh           # LLM provider detection helper
   crapi/                   # crAPI test config + templates
     crapi-helpers.sh       # Shared signup/login/spec-patch helpers
+    test_crapi_resolve_spec.sh        # Unit test for crapi_resolve_spec
+    test_crapi_patch_openapi_spec.sh  # Unit test for crapi_patch_openapi_spec
 ```
 
 ## Expected result
