@@ -99,10 +99,10 @@ done
 if [ "$TEARDOWN" = true ]; then
     log_header "Tearing Down Live Targets"
 
-    pkill -f "vulnerable-api$" 2>/dev/null && log_ok "Stopped vulnerable-api" || true
-    pkill -f "vulnerable-graphql$" 2>/dev/null && log_ok "Stopped vulnerable-graphql" || true
-    pkill -f "grpc-server$" 2>/dev/null && log_ok "Stopped grpc-server" || true
-    pkill -f "vulnerable-rest-complex$" 2>/dev/null && log_ok "Stopped vulnerable-rest-complex" || true
+    pkill -f "/vulnerable-api$" 2>/dev/null && log_ok "Stopped vulnerable-api" || true
+    pkill -f "/vulnerable-graphql$" 2>/dev/null && log_ok "Stopped vulnerable-graphql" || true
+    pkill -f "/grpc-server$" 2>/dev/null && log_ok "Stopped grpc-server" || true
+    pkill -f "/vulnerable-rest-complex$" 2>/dev/null && log_ok "Stopped vulnerable-rest-complex" || true
 
     rm -f "$CONFIG_FILE"
     rm -rf "$SPEC_CACHE_DIR"

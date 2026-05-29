@@ -112,9 +112,11 @@ func TestLoginInvalidCredentials(t *testing.T) {
 
 // TestPasteByIDReachableBOLA verifies paste(id:1) returns data regardless of
 // the calling user — this is the BOLA behaviour under test.
+// It also asserts that the returned paste's ownerId differs from the calling
+// user's id, proving cross-user access (not just that data returned).
 func TestPasteByIDReachableBOLA(t *testing.T) {
 	srv := setupTestServer(t)
-	// user2 owns paste 2 but can retrieve paste 1 (owned by user1) — BOLA
+	// user2 (id=3) reads paste 1, which is owned by user1 (id=2) — BOLA
 	tok := loginAndGetToken(t, srv, "user2", "user2pass")
 	resp := gqlDo(t, srv, `{ paste(id: 1) { id title ownerId } }`, tok)
 	data, ok := resp["data"].(map[string]interface{})
@@ -125,8 +127,14 @@ func TestPasteByIDReachableBOLA(t *testing.T) {
 	if !ok || paste == nil {
 		t.Fatalf("paste(id:1) returned nil for user2 — BOLA check failed: %v", data)
 	}
-	if paste["ownerId"] == nil {
-		t.Errorf("ownerId should be present, got: %v", paste)
+	// ownerId should be user1's id (2), not user2's id (3)
+	ownerID, _ := paste["ownerId"].(float64)
+	const user2ID = 3
+	if int(ownerID) == user2ID {
+		t.Errorf("BOLA check failed: paste ownerId=%v matches calling user id=%d (should be a different user)", ownerID, user2ID)
+	}
+	if int(ownerID) == 0 {
+		t.Errorf("ownerId should be non-zero, got: %v", paste)
 	}
 }
 
@@ -206,6 +214,8 @@ func TestHealthEndpoint(t *testing.T) {
 
 // TestUploadPastePathTraversal verifies that uploadPaste writes a file via
 // path traversal — intentional vulnerability.
+// It asserts the resolved path actually escaped the upload base dir and
+// registers a cleanup to remove the traversed file.
 func TestUploadPastePathTraversal(t *testing.T) {
 	srv := setupTestServer(t)
 	q := `mutation { uploadPaste(content: "pwned", filename: "../../../tmp/traversal-test.txt") { result filename } }`
@@ -226,6 +236,13 @@ func TestUploadPastePathTraversal(t *testing.T) {
 	if filename == "" {
 		t.Errorf("expected non-empty filename in response")
 	}
+	// Prove the written path actually escaped the upload base directory.
+	// filepath.Join collapses ".." so the resolved path will not start with uploadDir.
+	if strings.HasPrefix(filename, uploadDir) {
+		t.Errorf("path traversal did not escape upload dir: resolved %q is still under %q", filename, uploadDir)
+	}
+	// Clean up the escaped file so the test leaves no artifacts on disk.
+	t.Cleanup(func() { os.Remove(filename) }) //nolint:errcheck
 }
 
 // TestResetEndpoint verifies POST /api/reset restores seed data.
@@ -299,6 +316,69 @@ func TestCreatePasteStoresPaste(t *testing.T) {
 	data2 := resp2["data"].(map[string]interface{})
 	if data2["paste"] == nil {
 		t.Errorf("newly created paste (id 5) should be retrievable, got nil: %v", resp2)
+	}
+}
+
+// TestEditPasteBOLA verifies that attacker (user2) can edit a paste owned by
+// victim (user1) — the core BOLA edit vulnerability. It confirms the edit
+// persists when re-read as the victim.
+func TestEditPasteBOLA(t *testing.T) {
+	srv := setupTestServer(t)
+	// user2 is attacker; paste 3 is owned by user1 (victim) — distinct from paste 1 used by delete test
+	attackerToken := loginAndGetToken(t, srv, "user2", "user2pass")
+	victimToken := loginAndGetToken(t, srv, "user1", "user1pass")
+
+	// Attacker edits victim's paste 3
+	editResp := gqlDo(t, srv, `mutation { editPaste(id: 3, title: "BOLA_EDIT", content: "attacker modified") { paste { id title ownerId } } }`, attackerToken)
+	if editResp["errors"] != nil {
+		t.Fatalf("editPaste returned errors: %v", editResp["errors"])
+	}
+	editData := editResp["data"].(map[string]interface{})
+	ep, ok := editData["editPaste"].(map[string]interface{})
+	if !ok || ep["paste"] == nil {
+		t.Fatalf("editPaste did not return paste: %v", editData)
+	}
+
+	// Victim re-reads paste 3 — change must persist
+	verifyResp := gqlDo(t, srv, `{ paste(id: 3) { id title ownerId } }`, victimToken)
+	verifyData := verifyResp["data"].(map[string]interface{})
+	paste, ok := verifyData["paste"].(map[string]interface{})
+	if !ok || paste == nil {
+		t.Fatalf("paste(id:3) not found after edit: %v", verifyData)
+	}
+	if paste["title"] != "BOLA_EDIT" {
+		t.Errorf("BOLA edit did not persist: expected title=BOLA_EDIT, got %v", paste["title"])
+	}
+	// Confirm cross-user: paste owner is user1 (id=2), not attacker user2 (id=3)
+	ownerID, _ := paste["ownerId"].(float64)
+	const user2ID = 3
+	if int(ownerID) == user2ID {
+		t.Errorf("ownerId should be victim's (user1=2), not attacker's (user2=3), got %v", ownerID)
+	}
+}
+
+// TestDeleteAllPastesBFLA verifies that a low-privilege user (user2) can call
+// deleteAllPastes — the BFLA vector for bulk deletion without authorisation.
+func TestDeleteAllPastesBFLA(t *testing.T) {
+	srv := setupTestServer(t)
+	attackerToken := loginAndGetToken(t, srv, "user2", "user2pass")
+
+	// Low-privilege user calls the admin-only deleteAllPastes
+	resp := gqlDo(t, srv, `{ deleteAllPastes }`, attackerToken)
+	if resp["errors"] != nil {
+		t.Fatalf("deleteAllPastes returned errors: %v", resp["errors"])
+	}
+	data := resp["data"].(map[string]interface{})
+	if data["deleteAllPastes"] != true {
+		t.Errorf("BFLA deleteAllPastes should return true, got: %v", data["deleteAllPastes"])
+	}
+
+	// All pastes must be gone
+	listResp := gqlDo(t, srv, `{ pastes { id } }`, attackerToken)
+	listData := listResp["data"].(map[string]interface{})
+	pasteList, _ := listData["pastes"].([]interface{})
+	if len(pasteList) != 0 {
+		t.Errorf("expected empty pastes after deleteAllPastes, got %d entries", len(pasteList))
 	}
 }
 

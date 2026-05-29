@@ -283,6 +283,7 @@ hadrian test rest \
   --api test/vulnerable-rest-complex/openapi.yaml \
   --roles test/vulnerable-rest-complex/roles.yaml \
   --auth test/vulnerable-rest-complex/auth-bearer.yaml \
+  --template-dir test/vulnerable-rest-complex/templates/owasp \
   --output json \
   --output-file report.json
 ```

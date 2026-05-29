@@ -240,7 +240,7 @@ Add a new assertion when you change any of: the safety regex in
 
 ## Directory Structure
 
-```
+```text
 test/
   setup-live-targets.sh    # One-time build/setup
   run-live-tests.sh        # End-to-end test runner
@@ -265,7 +265,7 @@ test/
 After running the e2e test shell script, you will see a table similar to the
 following (run in a devcontainer with no Docker daemon):
 
-```
+```text
 TARGET                      STATUS     FINDINGS     DURATION
 --------------------------- ---------- ------------ ----------
 vulnerable-api-bearer       PASS       61           20s

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 )
 
@@ -126,16 +127,16 @@ func TestLoginReturnsJWT(t *testing.T) {
 	}
 }
 
-// TestBOLA_CustomerCrossTenant verifies that user2 (lower priv, ID 3) can read
-// user1's customer record (ID 2) including the sensitive ssn field.
-// This is the BOLA + excessive-data-exposure vulnerability.
+// TestBOLA_CustomerCrossTenant verifies that user2 (ID 3) can read user1's customer record
+// (ID 2) including the sensitive ssn field. Also asserts the returned record belongs to a
+// DIFFERENT tenant (customer_id != attacker's own id), proving cross-tenant access.
 func TestBOLA_CustomerCrossTenant(t *testing.T) {
 	srv, cleanup := testServer(t)
 	defer cleanup()
 
+	// user2 has ID 3; read user1's record (ID 2) — different tenant
 	user2Token := loginToken(t, srv, "user2", "user2pass")
 
-	// user2 reads user1's customer record (id=2) — should succeed (BOLA)
 	resp := authGet(t, srv, "/api/customers/2", user2Token)
 	defer resp.Body.Close()
 
@@ -146,9 +147,17 @@ func TestBOLA_CustomerCrossTenant(t *testing.T) {
 	var result map[string]interface{}
 	json.NewDecoder(resp.Body).Decode(&result)
 
-	// BOLA confirmed: user2 read user1's data
+	// BOLA confirmed: resource id must be present
 	if _, ok := result["id"]; !ok {
 		t.Fatal("expected id field in response")
+	}
+
+	// Cross-tenant assertion: the returned record belongs to a different customer than user2.
+	// user2 is ID 3; the record we fetched is ID 2 (user1).
+	returnedID := int(result["id"].(float64))
+	const attackerID = 3 // user2's own ID
+	if returnedID == attackerID {
+		t.Fatalf("expected cross-tenant access (returned id %d == attacker id %d — not BOLA)", returnedID, attackerID)
 	}
 
 	// Excessive data exposure: ssn must be present
@@ -252,14 +261,15 @@ func TestAdminReports_AllowedForAdmin(t *testing.T) {
 	}
 }
 
-// TestBOLA_VehicleRead verifies cross-tenant vehicle read (BOLA).
+// TestBOLA_VehicleRead verifies cross-tenant vehicle read (BOLA). Also asserts that the
+// returned vehicle belongs to a different customer (customer_id != attacker's own id).
 func TestBOLA_VehicleRead(t *testing.T) {
 	srv, cleanup := testServer(t)
 	defer cleanup()
 
+	// user2 is customer ID 3; vehicle ID 2 belongs to customer ID 2 (user1)
 	user2Token := loginToken(t, srv, "user2", "user2pass")
 
-	// user2 reads user1's vehicle (id=2)
 	resp := authGet(t, srv, "/api/vehicles/2", user2Token)
 	defer resp.Body.Close()
 
@@ -270,6 +280,14 @@ func TestBOLA_VehicleRead(t *testing.T) {
 	json.NewDecoder(resp.Body).Decode(&result)
 	if result["vin"] == nil {
 		t.Fatal("expected vin in response")
+	}
+
+	// Cross-tenant assertion: the vehicle's owner must differ from the attacker.
+	// user2 is customer ID 3; vehicle 2 is owned by customer ID 2.
+	ownerID := int(result["customer_id"].(float64))
+	const attackerID = 3 // user2's own customer ID
+	if ownerID == attackerID {
+		t.Fatalf("expected cross-tenant access (vehicle owner_id %d == attacker_id %d — not BOLA)", ownerID, attackerID)
 	}
 }
 
@@ -347,6 +365,88 @@ func TestCheckOTP_NoRateLimit(t *testing.T) {
 	}
 }
 
+// TestBOLA_OrderRead verifies that user2 (customer ID 3) can read an order belonging to
+// user1 (customer ID 2) via GET /api/orders/{id}, proving cross-tenant BOLA on orders.
+func TestBOLA_OrderRead(t *testing.T) {
+	srv, cleanup := testServer(t)
+	defer cleanup()
+
+	// user2 is customer ID 3; order ID 2 belongs to customer ID 2 (user1)
+	user2Token := loginToken(t, srv, "user2", "user2pass")
+
+	resp := authGet(t, srv, "/api/orders/2", user2Token)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 for cross-tenant order read (BOLA), got %d", resp.StatusCode)
+	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	// Cross-tenant assertion: order's customer_id must differ from the attacker.
+	ownerID := int(result["customer_id"].(float64))
+	const attackerID = 3 // user2's own customer ID
+	if ownerID == attackerID {
+		t.Fatalf("expected cross-tenant access (order owner_id %d == attacker_id %d — not BOLA)", ownerID, attackerID)
+	}
+
+	// Sensitive field exposure: card_last4 must be present
+	card, _ := result["card_last4"].(string)
+	if card == "" {
+		t.Fatal("expected card_last4 in order response (sensitive data exposed)")
+	}
+}
+
+// TestMassAssignment_Order verifies that POST /api/orders honors an injected customer_id
+// and an injected price from the request body (mass-assignment vulnerability).
+func TestMassAssignment_Order(t *testing.T) {
+	srv, cleanup := testServer(t)
+	defer cleanup()
+
+	// user2 creates an order but injects victim's customer_id and an arbitrary price
+	user2Token := loginToken(t, srv, "user2", "user2pass")
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"item":        "Injected Item",
+		"customer_id": 2,       // user1's ID — mass assignment
+		"price":       0.01,    // attacker-controlled price
+		"status":      "completed", // attacker-controlled status
+	})
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/orders", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+user2Token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 for order creation, got %d", resp.StatusCode)
+	}
+	var result map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&result)
+
+	// Mass assignment — customer_id must be honored from body (not from the JWT)
+	gotCustomerID := int(result["customer_id"].(float64))
+	if gotCustomerID != 2 {
+		t.Fatalf("expected customer_id=2 (mass assignment), got %d", gotCustomerID)
+	}
+
+	// Mass assignment — price must be honored from body
+	gotPrice := result["price"].(float64)
+	if gotPrice != 0.01 {
+		t.Fatalf("expected price=0.01 (mass assignment), got %f", gotPrice)
+	}
+
+	// Mass assignment — status must be honored from body
+	gotStatus, _ := result["status"].(string)
+	if gotStatus != "completed" {
+		t.Fatalf("expected status=completed (mass assignment), got %q", gotStatus)
+	}
+}
+
 // TestBFLA_ServiceRequest verifies that a non-mechanic user can submit a service request.
 func TestBFLA_ServiceRequest(t *testing.T) {
 	srv, cleanup := testServer(t)
@@ -377,4 +477,48 @@ func TestBFLA_ServiceRequest(t *testing.T) {
 	if result["report_id"] == nil {
 		t.Fatal("expected report_id in response")
 	}
+}
+
+// TestConcurrentStoreAccess exercises the in-memory store from multiple goroutines
+// simultaneously. Run with -race to verify no data races on the global slices.
+// It drives GET reads and POST /api/reset concurrently so the race detector can
+// observe any unsynchronised access.
+func TestConcurrentStoreAccess(t *testing.T) {
+	srv, cleanup := testServer(t)
+	defer cleanup()
+
+	user1Token := loginToken(t, srv, "user1", "user1pass")
+	user2Token := loginToken(t, srv, "user2", "user2pass")
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			if i%3 == 0 {
+				// Writer: reset the store
+				http.Post(srv.URL+"/api/reset", "application/json", nil) //nolint:errcheck
+			} else if i%3 == 1 {
+				// Reader: GET vehicle
+				req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/vehicles/1", nil)
+				req.Header.Set("Authorization", "Bearer "+user1Token)
+				resp, err := http.DefaultClient.Do(req)
+				if err == nil {
+					resp.Body.Close()
+				}
+			} else {
+				// Reader: GET customer cross-tenant
+				req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/customers/2", nil)
+				req.Header.Set("Authorization", "Bearer "+user2Token)
+				resp, err := http.DefaultClient.Do(req)
+				if err == nil {
+					resp.Body.Close()
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }

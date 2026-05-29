@@ -331,7 +331,7 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
 
         if [ "$DO_START" = true ]; then
             # Kill any existing instance
-            pkill -f "vulnerable-api$" 2>/dev/null || true
+            pkill -f "/vulnerable-api$" 2>/dev/null || true
             sleep 1
 
             log_info "Starting vulnerable-api on port $VULN_API_PORT (auth: ${auth_method})..."
@@ -469,7 +469,7 @@ if echo "$TARGETS" | grep -q "vulnerable-graphql"; then
     log_header "Target 2: vulnerable-graphql (GraphQL)"
 
     if [ "$DO_START" = true ]; then
-        pkill -f "vulnerable-graphql$" 2>/dev/null || true
+        pkill -f "/vulnerable-graphql$" 2>/dev/null || true
         sleep 1
 
         log_info "Starting vulnerable-graphql on port $VULN_GRAPHQL_PORT..."
@@ -559,7 +559,7 @@ if echo "$TARGETS" | grep -q "grpc"; then
     log_header "Target 3: grpc-server (gRPC)"
 
     if [ "$DO_START" = true ]; then
-        pkill -f "grpc-server$" 2>/dev/null || true
+        pkill -f "/grpc-server$" 2>/dev/null || true
         sleep 1
 
         log_info "Starting grpc-server on port $GRPC_PORT..."
@@ -601,7 +601,7 @@ if echo "$TARGETS" | grep -q "vulnerable-rest-complex"; then
     log_header "Target 4: vulnerable-rest-complex (REST)"
 
     if [ "$DO_START" = true ]; then
-        pkill -f "vulnerable-rest-complex$" 2>/dev/null || true
+        pkill -f "/vulnerable-rest-complex$" 2>/dev/null || true
         sleep 1
 
         log_info "Starting vulnerable-rest-complex on port $VULN_REST_COMPLEX_PORT..."

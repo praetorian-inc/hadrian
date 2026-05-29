@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -72,6 +73,7 @@ type Dashboard struct {
 // -----------------------------------------------------------------------
 
 var (
+	mu              sync.Mutex // guards customers, vehicles, orders, serviceRequests
 	customers       []Customer
 	vehicles        []Vehicle
 	orders          []Order
@@ -145,6 +147,8 @@ func validateJWT(tokenString string) (*Customer, error) {
 		return nil, fmt.Errorf("invalid claims")
 	}
 	customerID := int(claims["customer_id"].(float64))
+	mu.Lock()
+	defer mu.Unlock()
 	for _, c := range customers {
 		if c.ID == customerID {
 			return &c, nil
@@ -154,6 +158,8 @@ func validateJWT(tokenString string) (*Customer, error) {
 }
 
 func findCustomerByCredentials(username, password string) *Customer {
+	mu.Lock()
+	defer mu.Unlock()
 	for _, c := range customers {
 		if c.Username == username && c.Password == password {
 			return &c
@@ -244,7 +250,9 @@ func handleReset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	mu.Lock()
 	initData()
+	mu.Unlock()
 	log.Printf("Data store reset to initial state")
 	jsonResponse(w, map[string]string{
 		"message":   "Data store reset to initial state",
@@ -334,6 +342,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Find this customer's vehicle and order IDs
+	mu.Lock()
 	vehicleID := 0
 	for _, v := range vehicles {
 		if v.CustomerID == c.ID {
@@ -348,6 +357,7 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
+	mu.Unlock()
 
 	// EXCESSIVE DATA EXPOSURE: returns ssn, payment_card, and role in the dashboard
 	jsonResponse(w, Dashboard{
@@ -372,18 +382,25 @@ func handleCustomer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, c := range customers {
+	mu.Lock()
+	var found *Customer
+	for i, c := range customers {
 		if c.ID == id {
-			if r.Method != http.MethodGet {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-			// BOLA VULNERABILITY: No ownership check!
-			// EXCESSIVE DATA EXPOSURE: Returns ssn, payment_card, role to any authenticated user.
-			log.Printf("[BOLA] Customer data exposure: Customer ID %d accessed by another user", id)
-			jsonResponse(w, c, http.StatusOK)
+			found = &customers[i]
+			break
+		}
+	}
+	mu.Unlock()
+	if found != nil {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		// BOLA VULNERABILITY: No ownership check!
+		// EXCESSIVE DATA EXPOSURE: Returns ssn, payment_card, role to any authenticated user.
+		log.Printf("[BOLA] Customer data exposure: Customer ID %d accessed by another user", id)
+		jsonResponse(w, *found, http.StatusOK)
+		return
 	}
 	http.Error(w, "Not found", http.StatusNotFound)
 }
@@ -400,58 +417,71 @@ func handleVehicle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	mu.Lock()
+	idx := -1
 	for i, v := range vehicles {
 		if v.ID == id {
-			switch r.Method {
-			case http.MethodGet:
-				// BOLA VULNERABILITY: No ownership check!
-				// Any authenticated customer can read any vehicle (vin, location).
-				log.Printf("[BOLA] Vehicle read: Vehicle ID %d accessed", id)
-				jsonResponse(w, v, http.StatusOK)
-
-			case http.MethodPut:
-				var updates map[string]interface{}
-				if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
-					http.Error(w, "Invalid request", http.StatusBadRequest)
-					return
-				}
-				// MASS ASSIGNMENT VULNERABILITY: honors id, customer_id, owner_id from body.
-				// An attacker can inject a victim's vehicle ID or reassign ownership.
-				log.Printf("[MASS-ASSIGNMENT] Vehicle update with body fields: %v", updates)
-				if val, ok := updates["id"]; ok {
-					if fv, ok := val.(float64); ok {
-						vehicles[i].ID = int(fv)
-					}
-				}
-				if val, ok := updates["customer_id"]; ok {
-					if fv, ok := val.(float64); ok {
-						vehicles[i].CustomerID = int(fv)
-					}
-				}
-				if val, ok := updates["owner_id"]; ok {
-					if fv, ok := val.(float64); ok {
-						vehicles[i].CustomerID = int(fv)
-					}
-				}
-				if val, ok := updates["vin"]; ok {
-					if sv, ok := val.(string); ok {
-						vehicles[i].VIN = sv
-					}
-				}
-				if val, ok := updates["location"]; ok {
-					if sv, ok := val.(string); ok {
-						vehicles[i].Location = sv
-					}
-				}
-				jsonResponse(w, vehicles[i], http.StatusOK)
-
-			default:
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-			return
+			idx = i
+			break
 		}
 	}
-	http.Error(w, "Not found", http.StatusNotFound)
+	if idx < 0 {
+		mu.Unlock()
+		http.Error(w, "Not found", http.StatusNotFound)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		// BOLA VULNERABILITY: No ownership check!
+		// Any authenticated customer can read any vehicle (vin, location).
+		v := vehicles[idx]
+		mu.Unlock()
+		log.Printf("[BOLA] Vehicle read: Vehicle ID %d accessed", id)
+		jsonResponse(w, v, http.StatusOK)
+
+	case http.MethodPut:
+		var updates map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+			mu.Unlock()
+			http.Error(w, "Invalid request", http.StatusBadRequest)
+			return
+		}
+		// MASS ASSIGNMENT VULNERABILITY: honors id, customer_id, owner_id from body.
+		// An attacker can inject a victim's vehicle ID or reassign ownership.
+		log.Printf("[MASS-ASSIGNMENT] Vehicle update with body fields: %v", updates)
+		if val, ok := updates["id"]; ok {
+			if fv, ok := val.(float64); ok {
+				vehicles[idx].ID = int(fv)
+			}
+		}
+		if val, ok := updates["customer_id"]; ok {
+			if fv, ok := val.(float64); ok {
+				vehicles[idx].CustomerID = int(fv)
+			}
+		}
+		if val, ok := updates["owner_id"]; ok {
+			if fv, ok := val.(float64); ok {
+				vehicles[idx].CustomerID = int(fv)
+			}
+		}
+		if val, ok := updates["vin"]; ok {
+			if sv, ok := val.(string); ok {
+				vehicles[idx].VIN = sv
+			}
+		}
+		if val, ok := updates["location"]; ok {
+			if sv, ok := val.(string); ok {
+				vehicles[idx].Location = sv
+			}
+		}
+		v := vehicles[idx]
+		mu.Unlock()
+		jsonResponse(w, v, http.StatusOK)
+
+	default:
+		mu.Unlock()
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 // -----------------------------------------------------------------------
@@ -470,6 +500,8 @@ func handleOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := getCustomer(r)
+
+	mu.Lock()
 	newOrder := Order{
 		ID:         len(orders) + 1,
 		CustomerID: c.ID,
@@ -505,6 +537,7 @@ func handleOrders(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[MASS-ASSIGNMENT] Order created with body fields: customer_id=%d status=%s price=%f", newOrder.CustomerID, newOrder.Status, newOrder.Price)
 	orders = append(orders, newOrder)
+	mu.Unlock()
 	jsonResponse(w, newOrder, http.StatusCreated)
 }
 
@@ -516,18 +549,25 @@ func handleOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, o := range orders {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	mu.Lock()
+	var found *Order
+	for i, o := range orders {
 		if o.ID == id {
-			if r.Method != http.MethodGet {
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-				return
-			}
-			// BOLA VULNERABILITY: No ownership check!
-			// Any authenticated customer can read any order (amount, card_last4).
-			log.Printf("[BOLA] Order read: Order ID %d accessed", id)
-			jsonResponse(w, o, http.StatusOK)
-			return
+			found = &orders[i]
+			break
 		}
+	}
+	mu.Unlock()
+	if found != nil {
+		// BOLA VULNERABILITY: No ownership check!
+		// Any authenticated customer can read any order (amount, card_last4).
+		log.Printf("[BOLA] Order read: Order ID %d accessed", id)
+		jsonResponse(w, *found, http.StatusOK)
+		return
 	}
 	http.Error(w, "Not found", http.StatusNotFound)
 }
@@ -561,6 +601,7 @@ func handleServiceRequest(w http.ResponseWriter, r *http.Request) {
 	// BFLA VULNERABILITY: We should check c.Role == "mechanic" but we don't.
 	log.Printf("[BFLA] Service request submitted by %s (role: %s) — mechanic-only endpoint!", c.Username, c.Role)
 
+	mu.Lock()
 	sr := ServiceRequest{
 		ID:         len(serviceRequests) + 1,
 		CustomerID: c.ID,
@@ -569,6 +610,7 @@ func handleServiceRequest(w http.ResponseWriter, r *http.Request) {
 		ReportID:   fmt.Sprintf("RPT-%05d", len(serviceRequests)+1),
 	}
 	serviceRequests = append(serviceRequests, sr)
+	mu.Unlock()
 	jsonResponse(w, sr, http.StatusOK)
 }
 
@@ -595,12 +637,19 @@ func handleAdminDeleteVehicle(w http.ResponseWriter, r *http.Request) {
 	// BFLA VULNERABILITY: We should check c.Role == "admin" but we don't.
 	log.Printf("[BFLA] Admin delete vehicle ID %d by %s (role: %s) — admin-only endpoint!", id, c.Username, c.Role)
 
+	mu.Lock()
+	found := false
 	for i, v := range vehicles {
 		if v.ID == id {
 			vehicles = append(vehicles[:i], vehicles[i+1:]...)
-			w.WriteHeader(http.StatusOK)
-			return
+			found = true
+			break
 		}
+	}
+	mu.Unlock()
+	if found {
+		w.WriteHeader(http.StatusOK)
+		return
 	}
 	http.Error(w, "Not found", http.StatusNotFound)
 }
@@ -612,9 +661,13 @@ func handleAdminReports(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	mu.Lock()
+	reports := make([]ServiceRequest, len(serviceRequests))
+	copy(reports, serviceRequests)
+	mu.Unlock()
 	jsonResponse(w, map[string]interface{}{
-		"reports": serviceRequests,
-		"total":   len(serviceRequests),
+		"reports": reports,
+		"total":   len(reports),
 	}, http.StatusOK)
 }
 

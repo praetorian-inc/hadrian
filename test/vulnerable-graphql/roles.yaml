@@ -46,4 +46,6 @@ endpoints:
       - users
       - me
       - createUser
+      - deleteUser
+      - promoteUser
       - login

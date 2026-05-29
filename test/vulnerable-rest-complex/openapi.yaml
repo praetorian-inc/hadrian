@@ -526,29 +526,25 @@ components:
           type: string
           example: "RPT-00001"
 
-    Error:
-      type: object
-      properties:
-        error:
-          type: string
-          example: resource not found
-
   responses:
     Unauthorized:
       description: Authentication required
       content:
-        application/json:
+        text/plain:
           schema:
-            $ref: '#/components/schemas/Error'
+            type: string
+            example: Unauthorized
     Forbidden:
       description: Insufficient permissions
       content:
-        application/json:
+        text/plain:
           schema:
-            $ref: '#/components/schemas/Error'
+            type: string
+            example: Forbidden
     NotFound:
       description: Resource not found
       content:
-        application/json:
+        text/plain:
           schema:
-            $ref: '#/components/schemas/Error'
+            type: string
+            example: Not found

@@ -50,9 +50,10 @@ var uploadDir string
 
 // Seed data stores (in-memory, reset-capable).
 var (
-	mu     sync.Mutex
-	pastes []Paste
-	users  []UserRecord
+	mu          sync.Mutex
+	pastes      []Paste
+	users       []UserRecord
+	nextPasteID int // monotonic counter; avoids ID collision after deletes
 )
 
 // ============================================================================
@@ -96,13 +97,17 @@ func initData() {
 		{ID: 3, Username: "user2", Password: "user2pass", Role: "user"},
 	}
 
-	// Seed pastes. Paste 1 is owned by user1 (id 2), paste 2 by user2 (id 3).
+	// Seed pastes.
+	// user1 (id=2) owns pastes 1 and 3; user2 (id=3) owns paste 2; admin (id=1) owns paste 4.
+	// BOLA templates use paste 1 (delete) and paste 3 (edit) — both victim-owned, distinct.
 	pastes = []Paste{
 		{ID: 1, Title: "User1 Private Paste", Content: "Secret content owned by user1", Public: false, UserAgent: "Mozilla/5.0", IPAddr: "127.0.0.1", OwnerID: 2, Burn: false},
 		{ID: 2, Title: "User2 Private Paste", Content: "Secret content owned by user2", Public: false, UserAgent: "Mozilla/5.0", IPAddr: "127.0.0.1", OwnerID: 3, Burn: false},
-		{ID: 3, Title: "Public Paste Alpha", Content: "Publicly visible content", Public: true, UserAgent: "curl/7.0", IPAddr: "10.0.0.1", OwnerID: 1, Burn: false},
+		{ID: 3, Title: "User1 Second Paste", Content: "Another secret owned by user1", Public: false, UserAgent: "Mozilla/5.0", IPAddr: "127.0.0.1", OwnerID: 2, Burn: false},
 		{ID: 4, Title: "Public Paste Beta", Content: "More publicly visible content", Public: true, UserAgent: "curl/7.0", IPAddr: "10.0.0.2", OwnerID: 1, Burn: false},
 	}
+	// Initialise monotonic counter to max seed ID + 1
+	nextPasteID = 5
 }
 
 // ============================================================================
@@ -141,7 +146,11 @@ func parseJWT(tokenString string) *UserRecord {
 	if !ok {
 		return nil
 	}
-	userID := int(claims["user_id"].(float64))
+	uidF, ok2 := claims["user_id"].(float64)
+	if !ok2 {
+		return nil
+	}
+	userID := int(uidF)
 	mu.Lock()
 	defer mu.Unlock()
 	for i := range users {
@@ -269,6 +278,9 @@ var userObjectType = graphql.NewObject(graphql.ObjectConfig{
 					return nil, nil
 				}
 				if cap, _ := p.Args["capitalize"].(bool); cap {
+					if len(u.Username) == 0 {
+						return "", nil
+					}
 					return strings.ToUpper(u.Username[:1]) + u.Username[1:], nil
 				}
 				return u.Username, nil
@@ -545,7 +557,7 @@ func buildSchema() (graphql.Schema, error) {
 					ipAddr, _ := p.Context.Value(contextKey("remote_addr")).(string)
 					mu.Lock()
 					newPaste := Paste{
-						ID:        len(pastes) + 1,
+						ID:        nextPasteID,
 						Title:     stringArg(p, "title"),
 						Content:   stringArg(p, "content"),
 						Public:    boolArg(p, "public"),
@@ -554,6 +566,7 @@ func buildSchema() (graphql.Schema, error) {
 						IPAddr:    ipAddr,
 						OwnerID:   ownerID,
 					}
+					nextPasteID++
 					pastes = append(pastes, newPaste)
 					mu.Unlock()
 					return map[string]interface{}{"paste": newPaste}, nil
@@ -858,7 +871,7 @@ func main() {
 	fmt.Println("===========================================")
 	fmt.Println()
 
-	addr := ":" + port
+	addr := "127.0.0.1:" + port
 	log.Printf("Listening on %s", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))
 }

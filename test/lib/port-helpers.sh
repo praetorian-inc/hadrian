@@ -27,8 +27,7 @@
 #
 # Sourced by:
 #   - test/setup-live-targets.sh
-#   - test/run-live-tests.sh
-#   - test/test-llm-planner.sh
+#   - test/regression/lab-2750-regression-tests.sh
 # =============================================================================
 
 # port_in_use <port>

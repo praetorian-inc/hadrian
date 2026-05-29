@@ -25,8 +25,8 @@ PORT=9000 ./vulnerable-rest-complex
 | user2      | user2pass  | user     | 3  |
 | mechanic1  | mech1pass  | mechanic | 4  |
 
-`user1` is the **victim** (higher privilege, level 50).
-`user2` is the **attacker** (lower privilege, level 5).
+`user1` (ID 2, role `user`) is the **victim**.
+`user2` (ID 3, role `user`) is the **attacker**.
 
 ## Endpoints
 

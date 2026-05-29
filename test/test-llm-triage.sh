@@ -90,11 +90,12 @@ rest_complex_login() {
         python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo ""
 }
 
+ADMIN_TOKEN=$(rest_complex_login "admin" "admin123")
 USER_TOKEN=$(rest_complex_login "user1" "user1pass")
 USER2_TOKEN=$(rest_complex_login "user2" "user2pass")
 MECH_TOKEN=$(rest_complex_login "mechanic1" "mech1pass")
 
-if [ -z "$USER_TOKEN" ] || [ -z "$USER2_TOKEN" ] || [ -z "$MECH_TOKEN" ]; then
+if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER_TOKEN" ] || [ -z "$USER2_TOKEN" ] || [ -z "$MECH_TOKEN" ]; then
     log_fail "Failed to get vulnerable-rest-complex tokens (see test/vulnerable-rest-complex/README.md)"
     exit 1
 fi
@@ -109,7 +110,7 @@ method: bearer
 location: header
 roles:
   admin:
-    token: "${USER_TOKEN}"
+    token: "${ADMIN_TOKEN}"
   mechanic:
     token: "${MECH_TOKEN}"
   user1:

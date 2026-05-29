@@ -16,8 +16,8 @@ build: ## Build the vulnerable-rest-complex binary
 run: build ## Run the server on PORT (default 8888)
 	PORT=$(PORT) ./vulnerable-rest-complex
 
-test: ## Run unit tests
-	GOWORK=off go test -v ./...
+test: ## Run unit tests with race detection
+	GOWORK=off go test -race -v ./...
 
 clean: ## Remove build artifacts
 	rm -f vulnerable-rest-complex

@@ -104,10 +104,13 @@ echo "=== LAB-2750: vulnerable-graphql runs WITHOUT --skip-builtin-checks ==="
 # The in-house GraphQL target deliberately enables introspection and applies
 # no depth/alias limits so the built-in checks (introspection, alias-DoS,
 # field duplication) fire. The old DVGA flow skipped them.
+# Scope the scan to the run_hadrian "vulnerable-graphql" invocation block only
+# (a backslash-continued command), so a --skip-builtin-checks added to a later
+# target can't be mis-attributed to the graphql check.
 if awk '
-    /test graphql/ { flag=1 }
-    flag && /--skip-builtin-checks/ { found=1 }
-    flag && /run_hadrian "vulnerable-graphql"/ { flag=1 }
+    /run_hadrian "vulnerable-graphql"/ { inblock=1 }
+    inblock && /--skip-builtin-checks/ { found=1 }
+    inblock && !/\\[[:space:]]*$/ { inblock=0 }
     END { exit found ? 1 : 0 }
 ' test/run-live-tests.sh; then
     pass "graphql target invocation does not pass --skip-builtin-checks"
