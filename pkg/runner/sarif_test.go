@@ -416,13 +416,51 @@ func TestSARIFReporter_RedactsTokensInResultMessage(t *testing.T) {
 	rep, err := NewSARIFReporter(out, nil)
 	require.NoError(t, err)
 	leaky := sampleFinding()
-	leaky.Description = "response carried bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc.def and an email user@example.com"
+	leaky.Description = "response carried bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc and an email user@example.com"
 	require.NoError(t, rep.GenerateReport([]*model.Finding{leaky}, &Stats{}))
 	doc := readSARIF(t, out)
 	require.Len(t, doc.Runs[0].Results, 1)
 	msg := doc.Runs[0].Results[0].Message.Text
-	assert.NotContains(t, msg, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc.def", "JWT must be redacted")
+	assert.NotContains(t, msg, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc", "JWT must be redacted")
 	assert.NotContains(t, msg, "user@example.com", "email must be redacted")
+}
+
+// SEC-BE: the rule fallback path (ruleFor when no compiled template matches —
+// hit by every GraphQL non-template finding) also writes Finding.Description
+// into rule.FullDescription. Without redaction there, the result-message
+// redaction would be bypassed for any consumer that inspects rule metadata.
+func TestSARIFReporter_RedactsTokensInRuleFullDescription_Fallback(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "rule-redact.sarif")
+	rep, err := NewSARIFReporter(out, nil) // no compiled templates → fallback branch
+	require.NoError(t, err)
+	leaky := sampleFinding()
+	leaky.TemplateID = "bola" // matches GraphQL non-template scanner shape
+	leaky.Description = "BOLA detected: victim id user@example.com via token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc"
+	require.NoError(t, rep.GenerateReport([]*model.Finding{leaky}, &Stats{}))
+	doc := readSARIF(t, out)
+	require.Len(t, doc.Runs[0].Tool.Driver.Rules, 1)
+	require.NotNil(t, doc.Runs[0].Tool.Driver.Rules[0].FullDescription, "fallback rule should still emit FullDescription")
+	rdesc := doc.Runs[0].Tool.Driver.Rules[0].FullDescription.Text
+	assert.NotContains(t, rdesc, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc", "JWT in fallback rule FullDescription must be redacted")
+	assert.NotContains(t, rdesc, "user@example.com", "email in fallback rule FullDescription must be redacted")
+}
+
+// Same redaction guarantee on the template-known path. Less critical because
+// template descriptions are author-controlled YAML, but a regression that
+// reintroduces a raw assignment should still fail.
+func TestSARIFReporter_RedactsTokensInRuleFullDescription_TemplatePath(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "tmpl-rule-redact.sarif")
+	tmpl := sampleTemplate("01-api1-bola-read")
+	tmpl.Info.Description = "Tests for bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc leakage to user@example.com"
+	rep, err := NewSARIFReporter(out, []*templates.CompiledTemplate{tmpl})
+	require.NoError(t, err)
+	require.NoError(t, rep.GenerateReport([]*model.Finding{sampleFinding()}, &Stats{}))
+	doc := readSARIF(t, out)
+	require.Len(t, doc.Runs[0].Tool.Driver.Rules, 1)
+	require.NotNil(t, doc.Runs[0].Tool.Driver.Rules[0].FullDescription)
+	rdesc := doc.Runs[0].Tool.Driver.Rules[0].FullDescription.Text
+	assert.NotContains(t, rdesc, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc")
+	assert.NotContains(t, rdesc, "user@example.com")
 }
 
 // QUAL-005 / SEC-BE: SARIF files may carry sensitive content, so the file

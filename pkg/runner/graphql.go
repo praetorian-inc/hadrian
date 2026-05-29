@@ -238,33 +238,24 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs, config.Verbose)
 
-	// Pre-load + compile templates for SARIF rule enrichment. runTemplateTests
-	// loads templates again on its own; double-loading is cheap and avoids
-	// reshaping the existing call structure. The directory is resolved the same
-	// way runTemplateTests resolves it (via getTemplateDir), so a default-dir
-	// `--output sarif` run still produces enriched SARIF rules.
-	var sarifTemplates []*templates.CompiledTemplate
-	if config.Output == "sarif" {
-		sarifDir := config.TemplateDir
-		if sarifDir == "" {
-			sarifDir = getTemplateDir("./templates/graphql")
-		}
-		raw, lerr := loadGraphQLTemplates(sarifDir)
-		if lerr != nil {
-			log.Warn("SARIF: failed to load templates from %s: %v — rules will use wiki fallback metadata", sarifDir, lerr)
-		}
-		for _, t := range raw {
-			c, cerr := templates.Compile(t)
-			if cerr != nil {
-				log.Warn("SARIF: failed to compile template %s: %v", t.ID, cerr)
-				continue
-			}
-			sarifTemplates = append(sarifTemplates, c)
-		}
+	// Load + compile GraphQL templates once and feed the same slice to both
+	// the reporter (for SARIF rule enrichment) and the test executor. Avoids
+	// the previous double-load and guarantees the SARIF rules section matches
+	// the templates actually exercised at runtime.
+	gqlTemplateDir := config.TemplateDir
+	if gqlTemplateDir == "" {
+		gqlTemplateDir = getTemplateDir("./templates/graphql")
+	}
+	compiledTemplates, lerr := loadAndCompileGraphQLTemplates(gqlTemplateDir, config.Templates)
+	if lerr != nil {
+		// Treat as non-fatal: the GraphQL command runs scanner-based checks
+		// even when no templates are available. Surface so the operator can
+		// see why the SARIF rules section is empty.
+		log.Warn("GraphQL: failed to load templates from %s: %v", gqlTemplateDir, lerr)
 	}
 
 	// Create reporter based on output format (using REST reporter pattern)
-	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit, sarifTemplates)
+	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit, compiledTemplates)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
@@ -272,7 +263,7 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint
-	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders)
+	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders, compiledTemplates)
 
 	// Compute unified LLM-enabled flag (same logic as REST command)
 	graphqlLLMEnabled := hasLLMConfig() || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMHost != "" || config.LLMModel != "" || config.LLMTriageClient != nil

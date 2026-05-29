@@ -384,6 +384,7 @@ func TestRunTemplateTests_PopulatesTemplateID(t *testing.T) {
 		nil, // no auth needed for this template
 		nil, // reporter
 		nil, // customHeaders
+		nil, // preloaded — fall back to internal load+filter+compile
 	)
 
 	require.NotEmpty(t, findings, "matching server should yield at least one finding")
@@ -418,6 +419,7 @@ func TestRunTemplateTests_ReturnsTemplateCount(t *testing.T) {
 		nil,
 		nil, // reporter
 		nil, // customHeaders
+		nil, // preloaded — fall back to internal load
 	)
 
 	// Verify findings are returned (may be 0 if no templates match)
@@ -463,6 +465,7 @@ func TestRunSecurityChecks_NoTemplates(t *testing.T) {
 		nil,
 		nil, // No reporter for this test
 		nil, // customHeaders
+		nil, // preloaded
 	)
 
 	// Verify findings are returned

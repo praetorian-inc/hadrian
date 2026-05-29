@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
@@ -202,9 +203,12 @@ func (r *SARIFReporter) build(findings []*model.Finding) SARIFReport {
 		}
 		idx, ok := ruleIndex[ruleID]
 		if !ok {
-			// Should not happen — buildRules covers every TemplateID present
-			// in findings — but guard against panics.
-			idx = 0
+			// buildRules walks the same finding set, so this branch indicates
+			// an invariant violation (refactor regression, future loader bug,
+			// concurrent mutation). Surface it rather than silently emitting a
+			// SARIF result that points at the wrong rule.
+			log.Warn("SARIF: dropping finding with ruleID %q — no matching entry in driver.rules (invariant violation)", ruleID)
+			continue
 		}
 		results = append(results, SARIFResult{
 			RuleID:              ruleID,
@@ -279,7 +283,10 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 	if tmpl, ok := r.templates[id]; ok {
 		rule.ShortDescription = &SARIFMessage{Text: tmpl.Info.Name}
 		if tmpl.Info.Description != "" {
-			rule.FullDescription = &SARIFMessage{Text: tmpl.Info.Description}
+			// Built-in template descriptions are author-controlled YAML, so
+			// PII contamination is unlikely — but the redactor is cheap and
+			// keeps the rule-description path symmetric with the result path.
+			rule.FullDescription = &SARIFMessage{Text: r.redactor.Redact(tmpl.Info.Description)}
 		}
 		rule.HelpURI = templateHelpURI(tmpl.FilePath)
 		rule.DefaultConfiguration = &SARIFConfiguration{
@@ -305,7 +312,12 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 			rule.ShortDescription = &SARIFMessage{Text: sample.Name}
 		}
 		if sample.Description != "" {
-			rule.FullDescription = &SARIFMessage{Text: sample.Description}
+			// Fallback rule path is the one the GraphQL non-template scanner
+			// hits (TemplateIDs like "bola"/"bfla"/"introspection-disclosure"
+			// have no compiled-template entry). CheckBOLA et al. embed
+			// response-derived victim IDs in Description, so redaction here
+			// is the actual leak fix — not just defense-in-depth.
+			rule.FullDescription = &SARIFMessage{Text: r.redactor.Redact(sample.Description)}
 		}
 		rule.HelpURI = templateWikiURL
 		rule.DefaultConfiguration = &SARIFConfiguration{
