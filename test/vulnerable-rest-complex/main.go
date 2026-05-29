@@ -146,7 +146,14 @@ func validateJWT(tokenString string) (*Customer, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid claims")
 	}
-	customerID := int(claims["customer_id"].(float64))
+	// Guard the claim cast (comma-ok) — a validly-signed token with a missing
+	// or non-numeric customer_id must error, not panic the handler goroutine.
+	// Mirrors the guard in vulnerable-graphql's parseJWT.
+	cidF, ok := claims["customer_id"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("invalid customer_id claim")
+	}
+	customerID := int(cidF)
 	mu.Lock()
 	defer mu.Unlock()
 	for _, c := range customers {

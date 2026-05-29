@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -396,4 +397,42 @@ func TestPromoteUserBFLA(t *testing.T) {
 	if !ok || pu["username"] != "user2" {
 		t.Fatalf("BFLA promoteUser should succeed for a non-admin caller, got: %v", data)
 	}
+}
+
+// TestConcurrentGraphQLAccess exercises the mutex-guarded in-memory store from
+// multiple goroutines simultaneously (paste reads, createPaste writes, and a
+// reset via /api/reset). Run with -race to verify there are no data races on
+// the global pastes/users slices. The helper is goroutine-safe (no t.Fatalf
+// off the main goroutine).
+func TestConcurrentGraphQLAccess(t *testing.T) {
+	srv := setupTestServer(t)
+	tok := loginAndGetToken(t, srv, "user2", "user2pass")
+
+	post := func(query string) {
+		body, _ := json.Marshal(map[string]string{"query": query})
+		req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+tok)
+		srv.ServeHTTP(httptest.NewRecorder(), req)
+	}
+
+	const goroutines = 12
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			switch i % 3 {
+			case 0:
+				post(`{ paste(id: 1) { id ownerId } }`)
+			case 1:
+				post(`mutation { createPaste(title: "c", content: "x", public: true) { paste { id } } }`)
+			default:
+				rr := httptest.NewRecorder()
+				srv.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/api/reset", nil))
+			}
+		}()
+	}
+	wg.Wait()
 }

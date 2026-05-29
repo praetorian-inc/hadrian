@@ -30,10 +30,11 @@ deps:
 	go mod download
 	go mod tidy
 
-# Run unit tests
+# Run unit tests (with the race detector — the in-memory store is mutex-guarded
+# and exercised concurrently by TestConcurrentGraphQLAccess).
 test:
 	@echo "Running tests..."
-	go test -v ./...
+	go test -race -v ./...
 
 # Help
 help:
