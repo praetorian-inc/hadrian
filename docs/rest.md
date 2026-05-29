@@ -233,28 +233,38 @@ test_phases:
 
 The `store_response_fields` directive uses JSON path expressions to extract values from responses. These paths only support **dot-separated object key traversal** (e.g., `data.user.id`). Array indexing, keys containing dots, and nested arrays are not supported.
 
-## Example: Testing crAPI
+## Example: Testing vulnerable-rest-complex
 
-[crAPI (OWASP Completely Ridiculous API)](https://github.com/OWASP/crAPI) is an intentionally vulnerable API for testing.
+`test/vulnerable-rest-complex/` is an in-house, intentionally vulnerable
+multi-resource REST target shipped with Hadrian. It is a self-contained Go
+binary (no Docker required) that mirrors the role OWASP crAPI used to play in
+the live-test harness: customers, vehicles, mechanics, and orders with
+cross-tenant BOLA, BFLA, mass-assignment, excessive data exposure, and an
+unthrottled OTP endpoint.
 
-### Setup crAPI
+### Run the target
 
 ```bash
-git clone https://github.com/OWASP/crAPI.git && cd crAPI/deploy/docker && docker-compose up -d
-# crAPI runs at http://localhost:8888
+# Build + run on port 8888
+(cd test/vulnerable-rest-complex && go build -o vulnerable-rest-complex . && PORT=8888 ./vulnerable-rest-complex)
+# The API is at http://localhost:8888 (POST /api/auth/login for a JWT)
 ```
 
 ### Run Hadrian
 
 ```bash
 hadrian test rest \
-  --api test/crapi/crapi-openapi-spec.json \
-  --roles test/crapi/roles.yaml \
-  --auth test/crapi/auth.yaml \
+  --api test/vulnerable-rest-complex/openapi.yaml \
+  --roles test/vulnerable-rest-complex/roles.yaml \
+  --auth test/vulnerable-rest-complex/auth-bearer.yaml \
+  --template-dir test/vulnerable-rest-complex/templates/owasp \
   --verbose
 ```
 
-For complete crAPI setup including user registration and token generation, see [crAPI Tutorial](../test/crapi/README.md).
+For the full end-to-end flow with automatic token acquisition, run
+`./test/setup-live-targets.sh && ./test/run-live-tests.sh`. See
+[test/vulnerable-rest-complex/README.md](../test/vulnerable-rest-complex/README.md)
+for seeded users and endpoint details.
 
 ## Troubleshooting
 

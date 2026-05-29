@@ -115,32 +115,44 @@ Built-in safeguards in `pkg/runner/ratelimit_client.go`:
 - Reactive backoff on 429/503 responses via `RateLimitingClient`
 - Audit logging to `.hadrian/audit.log`
 
-## Testing with crAPI
+## Live Test Targets
 
-The `test/crapi/` directory contains a complete example for testing [OWASP crAPI](https://github.com/OWASP/crAPI), an intentionally vulnerable API. The supported flow is the wrapper scripts under `test/`:
+The `test/` directory ships four in-house vulnerable targets, each a self-contained
+Go binary with its own `go.mod` (no Docker daemon, image pull, or repo clone required —
+the full suite runs in a fresh devcontainer):
+
+| Target | Protocol | Replaces | Covers |
+|--------|----------|----------|--------|
+| `vulnerable-api` | REST | — | BOLA, broken auth (bearer/apikey/basic/cookie) |
+| `vulnerable-graphql` | GraphQL | DVGA (Docker) | introspection, BOLA, BFLA, alias-DoS, field-duplication, error disclosure, command injection, path traversal |
+| `grpc-server` | gRPC | — | BOLA, BFLA, metadata injection |
+| `vulnerable-rest-complex` | REST | OWASP crAPI (Docker) | cross-tenant BOLA, BFLA, mass-assignment, excessive data exposure, no-rate-limit OTP (customers/vehicles/mechanics/orders) |
+
+The supported flow is the wrapper scripts under `test/`:
 
 ```bash
-# One-time setup: clones crAPI, patches its compose to bind 8888,
-# starts the stack, signs up canonical users, writes .live-test-config.
-./test/setup-live-targets.sh --targets crapi
+# One-time setup: builds hadrian + the four Go target binaries, writes .live-test-config.
+./test/setup-live-targets.sh
 
-# Run hadrian against the prepared target.
-./test/run-live-tests.sh --targets crapi
+# Run hadrian against every target (or pass --targets to subset).
+./test/run-live-tests.sh
 
-# Tear down (volumes too — required for repeatable runs).
+# Stop any running target processes and remove the generated config.
 ./test/setup-live-targets.sh --teardown
 ```
 
-Note: upstream crAPI's compose default has shifted between 8888 and 8889 over time; `setup-live-targets.sh` auto-detects the current upstream port and patches the compose so hadrian's downstream code keeps using whatever you resolve. See `test/crapi/README.md` for the canonical user credentials, port-override env vars, and a manual fallback flow.
-
-Programmatic invocation (without the wrapper):
+Programmatic invocation (without the wrapper), e.g. the crAPI-shape REST target:
 ```bash
-HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
-  --api test/crapi/crapi-openapi-spec.json \
-  --roles test/crapi/roles.yaml \
-  --auth test/crapi/auth.yaml \
+./hadrian test rest \
+  --api test/vulnerable-rest-complex/openapi.yaml \
+  --roles test/vulnerable-rest-complex/roles.yaml \
+  --auth test/vulnerable-rest-complex/auth-bearer.yaml \
+  --template-dir test/vulnerable-rest-complex/templates/owasp \
   --verbose
 ```
+
+Generic port helpers shared by all targets live in `test/lib/port-helpers.sh`.
+A Docker-free regression harness lives at `test/regression/lab-2750-regression-tests.sh`.
 
 ## LLM-Assisted Planner
 

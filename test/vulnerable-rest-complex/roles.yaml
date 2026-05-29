@@ -1,0 +1,83 @@
+# Hadrian roles configuration for vulnerable-rest-complex
+# Defines permissions for each role using <action>:<object>:<scope> format
+
+roles:
+  - name: admin
+    level: 100          # Highest privilege
+    permissions:
+      - "*:*:all"           # Full access to everything
+
+  - name: user1
+    level: 50           # Higher user privilege (victim role)
+    permissions:
+      - "read:customers:own"
+      - "write:customers:own"
+      - "read:vehicles:own"
+      - "write:vehicles:own"
+      - "delete:vehicles:own"
+      - "read:orders:own"
+      - "write:orders:own"
+      - "delete:orders:own"
+      - "read:mechanics:own"
+      - "write:mechanics:own"
+
+  - name: user2
+    level: 5            # Lower user privilege (attacker role for BOLA/BFLA tests)
+    permissions:
+      - "read:customers:own"
+      - "write:customers:own"
+      - "read:vehicles:own"
+      - "write:vehicles:own"
+      - "delete:vehicles:own"
+      - "read:orders:own"
+      - "write:orders:own"
+      - "delete:orders:own"
+      - "read:mechanics:own"
+      - "write:mechanics:own"
+
+  - name: mechanic
+    level: 30           # Mechanic privilege
+    permissions:
+      - "read:vehicles:all"
+      - "write:mechanics:all"
+      - "read:mechanics:all"
+      - "read:customers:own"
+      - "read:orders:own"
+
+  - name: anonymous
+    level: 0            # Lowest privilege (empty credentials)
+    permissions: []
+
+  - name: no_header
+    level: 0            # Lowest privilege (no auth header at all)
+    permissions: []
+
+# Valid objects in this API
+objects:
+  - customers
+  - vehicles
+  - orders
+  - mechanics
+  - admin
+
+# Endpoint to object mapping for BOLA detection
+endpoints:
+  - path: /api/customers/{id}
+    object: customers
+    owner_field: id
+
+  - path: /api/vehicles/{id}
+    object: vehicles
+    owner_field: customer_id
+
+  - path: /api/orders/{id}
+    object: orders
+    owner_field: customer_id
+
+  - path: /api/mechanic/service-requests
+    object: mechanics
+    owner_field: customer_id
+
+  - path: /api/admin/vehicles/{id}
+    object: admin
+    owner_field: customer_id

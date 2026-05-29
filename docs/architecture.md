@@ -280,15 +280,15 @@ Hadrian includes templates for OWASP API Top 10 vulnerabilities:
 
 ```bash
 hadrian test rest \
-  --api crapi-openapi.yaml \
-  --roles crapi-roles.yaml \
-  --auth crapi-auth.yaml \
+  --api test/vulnerable-rest-complex/openapi.yaml \
+  --roles test/vulnerable-rest-complex/roles.yaml \
+  --auth test/vulnerable-rest-complex/auth-bearer.yaml \
   --output json \
   --output-file report.json
 ```
 
 This command:
-1. Loads the crAPI OpenAPI spec
+1. Loads the OpenAPI spec
 2. Loads role definitions and auth tokens
 3. Tests cross-role access for each matching endpoint
 4. Outputs findings to JSON report

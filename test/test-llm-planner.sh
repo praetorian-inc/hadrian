@@ -2,14 +2,14 @@
 # =============================================================================
 # test-llm-planner.sh
 #
-# Tests LLM-assisted attack planner against crAPI.
-# Verifies the planner generates a valid attack plan and executes it.
+# Tests LLM-assisted attack planner against the in-house
+# vulnerable-rest-complex target. Verifies the planner generates a valid
+# attack plan and executes it.
 #
 # Prerequisites:
-#   - crAPI running on the port resolved by setup-live-targets.sh
-#     (default 8888 — see CRAPI_OPENAPI_SPEC_DEFAULT_PORT in
-#     test/crapi/crapi-helpers.sh; override via CRAPI_PORT env var or
-#     .live-test-config)
+#   - vulnerable-rest-complex running on the port resolved by
+#     setup-live-targets.sh (default 8888; override via
+#     VULN_REST_COMPLEX_PORT env var or .live-test-config). No Docker needed.
 #   - OPENAI_API_KEY or ANTHROPIC_API_KEY set
 #   - hadrian binary built
 #
@@ -25,9 +25,8 @@ HADRIAN_BIN="${HADRIAN_BIN:-${REPO_ROOT}/hadrian}"
 OUTPUT_DIR="${SCRIPT_DIR}/.results"
 CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
-# Load setup config (CRAPI_PORT, CRAPI_SPEC_FILE, canonical creds) if it
-# exists. Without this, we'd reach for a different default port and
-# different user credentials than setup-live-targets.sh used.
+# Load setup config (port assignments) if it exists. Without this, we'd
+# reach for a different default port than setup-live-targets.sh used.
 if [ -f "$CONFIG_FILE" ]; then
     # Quoted-value-only regex; matches setup-live-targets.sh's heredoc
     # format. See run-live-tests.sh for the rationale (path-with-space
@@ -40,15 +39,8 @@ if [ -f "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
 fi
 
-# Shared crAPI helpers (canonical users, signup/login, spec patcher).
-# Sourced BEFORE the CRAPI_PORT default so the default tracks
-# CRAPI_OPENAPI_SPEC_DEFAULT_PORT (single source of truth) instead of
-# duplicating the literal 8888.
-# shellcheck source=test/crapi/crapi-helpers.sh
-. "${SCRIPT_DIR}/crapi/crapi-helpers.sh"
-
-CRAPI_PORT="${CRAPI_PORT:-$CRAPI_OPENAPI_SPEC_DEFAULT_PORT}"
-CRAPI_URL="http://localhost:${CRAPI_PORT}"
+REST_COMPLEX_PORT="${VULN_REST_COMPLEX_PORT:-8888}"
+REST_COMPLEX_URL="http://localhost:${REST_COMPLEX_PORT}"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -85,73 +77,53 @@ if [ ! -f "$HADRIAN_BIN" ]; then
     (cd "$REPO_ROOT" && go build -o hadrian ./cmd/hadrian)
 fi
 
-if ! curl -s -o /dev/null -w '%{http_code}' "${CRAPI_URL}/identity/api/auth/signup" 2>/dev/null | grep -qE '^[2-4][0-9]{2}$'; then
-    log_fail "crAPI not running on $CRAPI_URL"
+if ! curl -sf -o /dev/null "${REST_COMPLEX_URL}/health" 2>/dev/null; then
+    log_fail "vulnerable-rest-complex not running on $REST_COMPLEX_URL"
+    log_info "Start it with: ./test/setup-live-targets.sh --targets vulnerable-rest-complex"
     exit 1
 fi
 
-# Setup crAPI users + tokens.
-# Sign up the canonical roster — this is idempotent against an existing DB
-# but required against a freshly torn-down one. Previous versions of this
-# script assumed users already existed (with credentials that didn't match
-# what setup-live-targets.sh registered) and failed silently against a
-# clean volume.
-log_info "Setting up crAPI users and tokens..."
-# Wrap with `if !` so a provisioning failure produces a coherent diagnostic
-# instead of a raw set-e abort with no context (matches the pattern in
-# run-live-tests.sh and setup-live-targets.sh).
-if ! crapi_setup_users "$CRAPI_URL"; then
-    log_fail "crAPI user provisioning failed (see error above)"
-    exit 1
-fi
+# Setup tokens. Seed users (admin/user1/user2/mechanic1) are created at
+# server startup, so we just log in — no provisioning step required.
+log_info "Setting up vulnerable-rest-complex tokens..."
 
-ADMIN_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_ADMIN_EMAIL"    "$CRAPI_PASSWORD")
-USER_TOKEN=$(crapi_login  "$CRAPI_URL" "$CRAPI_USER_EMAIL"     "$CRAPI_PASSWORD")
-USER2_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_USER2_EMAIL"    "$CRAPI_PASSWORD")
-MECH_TOKEN=$(crapi_login  "$CRAPI_URL" "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
+rest_complex_login() {
+    local username="$1" password="$2"
+    printf '{"username":"%s","password":"%s"}' "$username" "$password" | \
+        curl -sf -X POST "${REST_COMPLEX_URL}/api/auth/login" \
+            -H "Content-Type: application/json" \
+            --data-binary @- 2>/dev/null | \
+        python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo ""
+}
 
-# All four tokens must be acquired so role-specific templates (BFLA
-# admin-video-delete, mechanic workflows) run with the correct identity.
-# Previously this script mapped admin -> USER_TOKEN, which silently
-# degraded admin-scoped templates in the planner test to regular-user
-# credentials.
+ADMIN_TOKEN=$(rest_complex_login "admin" "admin123")
+USER_TOKEN=$(rest_complex_login  "user1" "user1pass")
+USER2_TOKEN=$(rest_complex_login "user2" "user2pass")
+MECH_TOKEN=$(rest_complex_login  "mechanic1" "mech1pass")
+
+# All four tokens must be acquired so role-specific templates (BFLA admin
+# delete, mechanic workflows) run with the correct identity.
 if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER_TOKEN" ] \
         || [ -z "$USER2_TOKEN" ] || [ -z "$MECH_TOKEN" ]; then
-    log_fail "Failed to get crAPI tokens (admin/user1/user2/mechanic must all be non-empty)"
+    log_fail "Failed to get vulnerable-rest-complex tokens (admin/user1/user2/mechanic must all be non-empty)"
     exit 1
 fi
 log_ok "Tokens acquired"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Resolve the OpenAPI spec path. Prefer the patched copy that
-# setup-live-targets.sh wrote into .live-test-config, but only if its
-# baked-in port matches our current CRAPI_PORT — otherwise a runtime
-# CRAPI_PORT override against a stale config would silently mis-route.
-# When re-patching, write into the same SPEC_CACHE_DIR setup uses
-# (test/.live-test-cache/) so a planner-only run doesn't leave a cache
-# artifact in the .results directory.
-SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
-# Anchor the port match on a non-digit / end-of-line boundary to avoid
-# substring false-matches (e.g. CRAPI_PORT=889 vs localhost:8895).
-if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "$CRAPI_SPEC_FILE" ] \
-        && grep -qE "localhost:${CRAPI_PORT}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
-    CRAPI_SPEC="$CRAPI_SPEC_FILE"
-else
-    if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "$CRAPI_SPEC_FILE" ]; then
-        log_info "Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${CRAPI_PORT}; re-patching."
-    fi
-    mkdir -p "$SPEC_CACHE_DIR"
-    CRAPI_SPEC=$(crapi_patch_openapi_spec \
-        "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
-        "$CRAPI_PORT" \
-        "$SPEC_CACHE_DIR")
+# Resolve the OpenAPI spec path. The in-house target ships a static spec
+# pinned to the default port; if the operator runs on a non-default port,
+# patch the server URL into a copy under the results dir.
+REST_COMPLEX_SPEC="${SCRIPT_DIR}/vulnerable-rest-complex/openapi.yaml"
+if [ "$REST_COMPLEX_PORT" != "8888" ]; then
+    REST_COMPLEX_SPEC="${OUTPUT_DIR}/planner-rest-complex-openapi.yaml"
+    sed "s|http://localhost:8888|http://localhost:${REST_COMPLEX_PORT}|g" \
+        "${SCRIPT_DIR}/vulnerable-rest-complex/openapi.yaml" > "$REST_COMPLEX_SPEC"
+    log_info "Patched OpenAPI spec to use port $REST_COMPLEX_PORT"
 fi
-# Guard against silent failure of crapi_patch_openapi_spec (validation
-# branch returns 1 + empty stdout). An unchecked empty $CRAPI_SPEC would
-# pass `--api ""` to hadrian and produce an opaque downstream error.
-if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
-    log_fail "Could not resolve crAPI OpenAPI spec (empty path or missing file)"
+if [ ! -f "$REST_COMPLEX_SPEC" ]; then
+    log_fail "Could not resolve vulnerable-rest-complex OpenAPI spec ($REST_COMPLEX_SPEC)"
     exit 1
 fi
 
@@ -164,7 +136,7 @@ roles:
     token: "${ADMIN_TOKEN}"
   mechanic:
     token: "${MECH_TOKEN}"
-  user:
+  user1:
     token: "${USER_TOKEN}"
   user2:
     token: "${USER2_TOKEN}"
@@ -194,10 +166,10 @@ RESULT_FILE="${OUTPUT_DIR}/planner-${PROVIDER}-results.json"
 log_info "Running planner with --planner-provider ${PROVIDER}..."
 run_test "planner generates plan" \
     "$HADRIAN_BIN" test rest \
-        --api "$CRAPI_SPEC" \
-        --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
+        --api "$REST_COMPLEX_SPEC" \
+        --roles "${SCRIPT_DIR}/vulnerable-rest-complex/roles.yaml" \
         --auth "$AUTH_FILE" \
-        --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
+        --template-dir "${SCRIPT_DIR}/vulnerable-rest-complex/templates/owasp" \
         --planner --planner-provider "$PROVIDER" \
         --output json --output-file "$RESULT_FILE"
 
@@ -205,10 +177,10 @@ run_test "planner generates plan" \
 RESULT_FILE_ONLY="${OUTPUT_DIR}/planner-only-${PROVIDER}-results.json"
 run_test "planner-only mode runs" \
     "$HADRIAN_BIN" test rest \
-        --api "$CRAPI_SPEC" \
-        --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
+        --api "$REST_COMPLEX_SPEC" \
+        --roles "${SCRIPT_DIR}/vulnerable-rest-complex/roles.yaml" \
         --auth "$AUTH_FILE" \
-        --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
+        --template-dir "${SCRIPT_DIR}/vulnerable-rest-complex/templates/owasp" \
         --planner --planner-only --planner-provider "$PROVIDER" \
         --output json --output-file "$RESULT_FILE_ONLY"
 
@@ -216,10 +188,10 @@ run_test "planner-only mode runs" \
 RESULT_FILE_CTX="${OUTPUT_DIR}/planner-context-${PROVIDER}-results.json"
 run_test "planner-context steers plan" \
     "$HADRIAN_BIN" test rest \
-        --api "$CRAPI_SPEC" \
-        --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
+        --api "$REST_COMPLEX_SPEC" \
+        --roles "${SCRIPT_DIR}/vulnerable-rest-complex/roles.yaml" \
         --auth "$AUTH_FILE" \
-        --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
+        --template-dir "${SCRIPT_DIR}/vulnerable-rest-complex/templates/owasp" \
         --planner --planner-only --planner-provider "$PROVIDER" \
         --planner-context "Only test the orders endpoint" \
         --output json --output-file "$RESULT_FILE_CTX"
@@ -252,13 +224,13 @@ assert_findings() {
     fi
 }
 
-# Test 1 (plan + brute-force) should find crAPI BOLA vulns
+# Test 1 (plan + brute-force) should find vulnerable-rest-complex BOLA vulns
 assert_findings "test1 has findings" "$RESULT_FILE" 1
 
 # Test 2 (planner-only) — file should exist and be valid JSON
 assert_findings "test2 result file valid" "$RESULT_FILE_ONLY" 0
 
-# Test 3 (context-steered) — orders endpoint is a known crAPI BOLA target with >=1 finding
+# Test 3 (context-steered) — orders endpoint is a known vulnerable-rest-complex BOLA target with >=1 finding
 assert_findings "test3 context-steered findings" "$RESULT_FILE_CTX" 1
 
 # Summary

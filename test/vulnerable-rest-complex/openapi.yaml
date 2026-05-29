@@ -1,0 +1,554 @@
+openapi: 3.0.3
+info:
+  title: Vulnerable REST Complex
+  description: |
+    A deliberately vulnerable multi-resource REST API for testing Hadrian's OWASP API security
+    testing capabilities.  Mirrors OWASP crAPI's multi-resource shape (vehicles + mechanics +
+    orders + customers) as a single in-house Go binary — no Docker required.
+
+    **WARNING**: This API has intentional BOLA, BFLA, BOPLA, and rate-limit vulnerabilities.
+    DO NOT deploy to production.
+
+    Replaces the old crAPI Docker target for devcontainer users.
+  version: 1.0.0
+  contact:
+    name: Hadrian Security Testing
+
+servers:
+  - url: http://localhost:8888
+    description: Local development server
+
+tags:
+  - name: auth
+    description: Authentication endpoints
+  - name: public
+    description: Public endpoints (no authentication required)
+  - name: customers
+    description: Customer management (BOLA + excessive data exposure)
+  - name: vehicles
+    description: Vehicle management (BOLA + mass assignment)
+  - name: orders
+    description: Order management (BOLA + mass assignment)
+  - name: mechanics
+    description: Mechanic service requests (BFLA)
+  - name: admin
+    description: Admin endpoints — delete is BFLA vulnerable; reports is properly protected
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      tags: [public]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  /api/reset:
+    post:
+      summary: Reset data store to initial seed state
+      operationId: reset
+      tags: [public]
+      responses:
+        '200':
+          description: Data reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/auth/login:
+    post:
+      summary: Authenticate and get JWT token
+      operationId: login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: user1
+                password:
+                  type: string
+                  example: user1pass
+      responses:
+        '200':
+          description: Successful authentication
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: HS256 JWT
+                  customer:
+                    $ref: '#/components/schemas/CustomerPublic'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/auth/check-otp:
+    post:
+      summary: Check OTP (NO rate limiting — rate-limit test target)
+      operationId: checkOTP
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                otp:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: OTP verified
+        '400':
+          description: Invalid OTP
+
+  /api/dashboard:
+    get:
+      summary: Current customer dashboard (BOPLA — excessive data exposure)
+      description: |
+        Returns the authenticated customer's own dashboard including sensitive fields
+        (role, ssn, payment_card). Also used by mutation templates as the setup phase
+        to obtain vehicle_id and order_id for the authenticated user.
+      operationId: getDashboard
+      tags: [customers]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard data (sensitive fields exposed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/customers/{id}:
+    get:
+      summary: Get customer by ID (BOLA + excessive data exposure)
+      description: |
+        No ownership check — any authenticated user can read any customer's data.
+        Returns sensitive fields including ssn and payment_card.
+      operationId: getCustomer
+      tags: [customers]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Customer with sensitive data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/vehicles/{id}:
+    get:
+      summary: Get vehicle by ID (BOLA)
+      description: No ownership check — any authenticated customer reads any vehicle.
+      operationId: getVehicle
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Vehicle details (vin, location)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update vehicle (mass assignment — honors id/customer_id/owner_id from body)
+      description: |
+        No ownership check. Honors id, customer_id, and owner_id fields from the JSON body,
+        allowing an attacker to reassign ownership or modify another customer's vehicle.
+      operationId: updateVehicle
+      tags: [vehicles]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: integer
+                  description: MASS ASSIGNMENT — honoured from body
+                customer_id:
+                  type: integer
+                  description: MASS ASSIGNMENT — honoured from body
+                owner_id:
+                  type: integer
+                  description: MASS ASSIGNMENT — honoured from body
+                vin:
+                  type: string
+                location:
+                  type: string
+      responses:
+        '200':
+          description: Updated vehicle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/orders:
+    post:
+      summary: Create order (mass assignment — honors customer_id/price/status from body)
+      description: |
+        Honors customer_id, price, and status from the request body, allowing an attacker
+        to create orders on behalf of other customers or with arbitrary prices/statuses.
+      operationId: createOrder
+      tags: [orders]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                item:
+                  type: string
+                price:
+                  type: number
+                  format: float
+                  description: MASS ASSIGNMENT — honoured from body
+                status:
+                  type: string
+                  description: MASS ASSIGNMENT — honoured from body
+                customer_id:
+                  type: integer
+                  description: MASS ASSIGNMENT — honoured from body
+      responses:
+        '201':
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/orders/{id}:
+    get:
+      summary: Get order by ID (BOLA)
+      description: No ownership check — any authenticated customer reads any order.
+      operationId: getOrder
+      tags: [orders]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Order details (amount, card_last4)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/mechanic/service-requests:
+    post:
+      summary: Submit mechanic service request (BFLA — no role check)
+      description: |
+        Mechanic-only function, but there is NO role check. Any authenticated user
+        can submit a service request and receive a report ID.
+      operationId: createServiceRequest
+      tags: [mechanics]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                vehicle_id:
+                  type: integer
+                problem:
+                  type: string
+      responses:
+        '200':
+          description: Service request created (includes report_id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/admin/vehicles/{id}:
+    delete:
+      summary: Admin delete vehicle (BFLA — no role check)
+      description: |
+        Admin-only endpoint but there is NO role check. Any authenticated user can
+        delete any vehicle. After deletion GET /api/vehicles/{id} returns 404.
+      operationId: adminDeleteVehicle
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Vehicle deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/admin/reports:
+    get:
+      summary: Admin service reports (properly protected — negative control)
+      description: Returns 403 for non-admin users. Used as a negative control in tests.
+      operationId: adminReports
+      tags: [admin]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Service reports (admin only)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ServiceRequest'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      description: Resource ID
+      schema:
+        type: integer
+        example: 2
+
+  schemas:
+    CustomerPublic:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        username:
+          type: string
+          example: user1
+        email:
+          type: string
+          format: email
+          example: user1@example.com
+        role:
+          type: string
+          enum: [admin, user, mechanic]
+          example: user
+
+    Customer:
+      type: object
+      description: Full customer record including sensitive fields (BOLA + excessive data exposure)
+      properties:
+        id:
+          type: integer
+          example: 2
+        username:
+          type: string
+          example: user1
+        email:
+          type: string
+          format: email
+          example: user1@example.com
+        role:
+          type: string
+          enum: [admin, user, mechanic]
+          example: user
+        ssn:
+          type: string
+          description: SENSITIVE — Social Security Number
+          example: "222-22-2222"
+        payment_card:
+          type: string
+          description: SENSITIVE — Payment card number
+          example: "4222222222222222"
+
+    Dashboard:
+      type: object
+      description: Per-customer dashboard with excessive data exposure
+      properties:
+        customer_id:
+          type: integer
+          example: 2
+        vehicle_id:
+          type: integer
+          example: 2
+        order_id:
+          type: integer
+          example: 2
+        role:
+          type: string
+          description: SENSITIVE — role exposed in dashboard
+          example: user
+        ssn:
+          type: string
+          description: SENSITIVE — SSN exposed in dashboard
+          example: "222-22-2222"
+        payment_card:
+          type: string
+          description: SENSITIVE — payment card exposed in dashboard
+          example: "4222222222222222"
+
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        customer_id:
+          type: integer
+          example: 2
+        vin:
+          type: string
+          example: "1HGCM82633A000002"
+        location:
+          type: string
+          example: "Garage B"
+
+    Order:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2
+        customer_id:
+          type: integer
+          example: 2
+        item:
+          type: string
+          example: "Basic Plan"
+        price:
+          type: number
+          format: float
+          example: 49.99
+        status:
+          type: string
+          enum: [pending, completed, cancelled]
+          example: pending
+        card_last4:
+          type: string
+          description: SENSITIVE — last 4 digits of payment card
+          example: "2222"
+
+    ServiceRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        customer_id:
+          type: integer
+          example: 2
+        vehicle_id:
+          type: integer
+          example: 2
+        problem:
+          type: string
+          example: "Engine noise"
+        report_id:
+          type: string
+          example: "RPT-00001"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: resource not found
+
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

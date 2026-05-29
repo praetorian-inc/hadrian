@@ -1,0 +1,122 @@
+# Vulnerable GraphQL Server — Schema (SDL)
+# In-house replacement for DVGA (Damn Vulnerable GraphQL App).
+# Intentional security vulnerabilities are documented inline.
+
+scalar DateTime
+
+type Query {
+  """List pastes with optional filtering"""
+  pastes(public: Boolean, limit: Int, filter: String): [PasteObject]
+
+  """Get a specific paste by ID or title — VULNERABLE: BOLA (no owner check)"""
+  paste(id: Int, title: String): PasteObject
+
+  """System health check"""
+  systemHealth: String
+
+  """System debug endpoint — VULNERABLE: Information disclosure"""
+  systemDebug(arg: String): String
+
+  """System diagnostics — VULNERABLE: Real command injection via cmd parameter"""
+  systemDiagnostics(username: String, password: String, cmd: String): String
+
+  """List users — VULNERABLE: password field exposed in UserObject"""
+  users(id: Int): [UserObject]
+
+  """Get current user info from token"""
+  me(token: String): UserObject
+
+  """Delete all pastes — BFLA: no authorisation check"""
+  deleteAllPastes: Boolean
+}
+
+type Mutation {
+  """User login — returns a real HS256 JWT accessToken"""
+  login(username: String, password: String): Login
+
+  """Create a new paste"""
+  createPaste(burn: Boolean, content: String, public: Boolean, title: String): CreatePaste
+
+  """Edit an existing paste — VULNERABLE: BOLA (no owner check)"""
+  editPaste(content: String, id: Int, title: String): EditPaste
+
+  """Delete a paste — VULNERABLE: BOLA (no owner check)"""
+  deletePaste(id: Int): DeletePaste
+
+  """Upload a paste from content — VULNERABLE: Path traversal via filename"""
+  uploadPaste(content: String!, filename: String!): UploadPaste
+
+  """Create a new user"""
+  createUser(userData: UserInput!): CreateUser
+
+  """Change a user's role — VULNERABLE: BFLA (admin mutation, no authz check)"""
+  promoteUser(username: String!, role: String!): UserObject
+}
+
+"""Paste object containing user-submitted content"""
+type PasteObject {
+  id: ID!
+  title: String
+  content: String
+  public: Boolean
+  userAgent: String
+  ipAddr: String
+  ownerId: Int
+  burn: Boolean
+  owner: OwnerObject
+}
+
+"""Owner of a paste"""
+type OwnerObject {
+  id: ID!
+  name: String
+  pastes: [PasteObject]
+}
+
+"""User account — VULNERABLE: password field directly readable"""
+type UserObject {
+  id: ID!
+  username(capitalize: Boolean): String
+  """VULNERABLE: Sensitive data exposure — password returned in plaintext"""
+  password: String!
+}
+
+"""Login response with JWT tokens"""
+type Login {
+  accessToken: String
+  refreshToken: String
+}
+
+"""Result of creating a paste"""
+type CreatePaste {
+  paste: PasteObject
+}
+
+"""Result of editing a paste"""
+type EditPaste {
+  paste: PasteObject
+}
+
+"""Result of deleting a paste"""
+type DeletePaste {
+  result: Boolean
+}
+
+"""Result of uploading a paste — VULNERABLE: filename reflects traversal path"""
+type UploadPaste {
+  content: String
+  filename: String
+  result: String
+}
+
+"""Result of creating a user"""
+type CreateUser {
+  user: UserObject
+}
+
+"""Input for creating a new user"""
+input UserInput {
+  username: String!
+  email: String!
+  password: String!
+}
