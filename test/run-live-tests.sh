@@ -254,35 +254,26 @@ if [ "$DO_BUILD" = true ]; then
         log_info "Building grpc-server..."
         (cd "${SCRIPT_DIR}/grpc-server" && {
             # Check for actual generated files, not just directory existence
-            # This handles the case where pb/ exists but is empty from a failed run
+            # (handles a pb/ left empty by a previously failed run). Generate
+            # non-interactively — setup-live-targets.sh is the documented
+            # prerequisite, so a missing pb/ here means the operator ran the
+            # runner directly; do NOT prompt (a `read` would hang CI).
             if [ ! -f pb/service.pb.go ] || [ ! -f pb/service_grpc.pb.go ]; then
-                printf "[?] gRPC server requires generated protobuf code.\n"
-                printf "    This will run protoc to generate Go code from service.proto.\n"
-                printf "    Generate protobuf code now? [y/N] "
-                read -r REPLY
-                if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
-                    if command -v protoc >/dev/null 2>&1; then
-                        log_info "Generating protobuf code..."
-                        # Clean up any empty/corrupted pb directory from previous failed runs
-                        rm -rf pb
-                        mkdir -p pb
-                        if ! protoc --go_out=pb --go_opt=paths=source_relative \
-                            --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-                            service.proto; then
-                            log_fail "protoc failed to generate Go code"
-                            rm -rf pb  # Clean up on failure
-                            exit 1
-                        fi
-                        log_ok "Protobuf code generated"
-                    else
-                        log_fail "protoc not found. Install with: brew install protobuf"
-                        log_fail "Then install Go plugins:"
-                        log_fail "  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
-                        log_fail "  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"
+                if command -v protoc >/dev/null 2>&1; then
+                    log_info "Generating protobuf code (run ./test/setup-live-targets.sh to pre-generate)..."
+                    rm -rf pb
+                    mkdir -p pb
+                    if ! protoc --go_out=pb --go_opt=paths=source_relative \
+                        --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+                        service.proto; then
+                        log_fail "protoc failed to generate Go code"
+                        rm -rf pb  # Clean up on failure
                         exit 1
                     fi
+                    log_ok "Protobuf code generated"
                 else
-                    log_fail "Skipping grpc-server (protobuf files required). Run 'make proto' in test/grpc-server/ first."
+                    log_fail "grpc-server needs generated protobuf code and protoc is not installed."
+                    log_fail "Run ./test/setup-live-targets.sh first, or 'make proto' in test/grpc-server/."
                     exit 1
                 fi
             fi
