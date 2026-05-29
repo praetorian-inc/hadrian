@@ -27,6 +27,13 @@ import (
 // mutations modeled on the Damn Vulnerable GraphQL Application (DVGA):
 // `users` / `pastes` queries, a `createPaste` mutation, and a `systemHealth`
 // query. Integration tests run real introspection + execution against it.
+//
+// SCOPE: these tests validate the GraphQL plumbing (schema introspection and
+// query execution) against an in-process target. Detection-rate regression
+// coverage for the templates/graphql/ detection templates is NOT exercised
+// here — that is covered for REST in pkg/runner/integration_test.go
+// (TestIntegration_NoRegression_AllTemplates). Running the GraphQL/gRPC
+// detection templates in-process is tracked as separate follow-up work.
 // =============================================================================
 
 // newVulnerableGraphQLServer builds and starts the in-process GraphQL service.
@@ -47,8 +54,12 @@ func newVulnerableGraphQLServer(t *testing.T) *httptest.Server {
 			return
 		}
 
-		// Regular queries → echo back data referencing the requested fields so
-		// callers can assert on the response body.
+		// Regular queries → return canned data for the requested root field.
+		// Routing is naive substring matching, which is sufficient ONLY because
+		// the fixture's known queries use non-overlapping root-field tokens.
+		// If you add a query whose text contains another branch's token as a
+		// nested selection (e.g. `pastes { author { ... } }` containing "users"),
+		// route on the GraphQL root field instead of a bare substring.
 		data := map[string]interface{}{}
 		switch {
 		case strings.Contains(req.Query, "__typename"):
@@ -143,7 +154,14 @@ func TestIntegration_QueryExecution(t *testing.T) {
 	result, err := executor.Execute(ctx, "{ __typename }", nil, "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 200, result.StatusCode)
-	assert.Contains(t, result.Body, "__typename")
+
+	// Assert on the decoded data envelope value, not just substring presence —
+	// proves the executor returned the GraphQL `data` payload intact.
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(result.Body), &resp))
+	assert.Equal(t, "Query", resp.Data["__typename"])
 }
 
 func TestIntegration_AuthenticatedRequest(t *testing.T) {
@@ -161,6 +179,12 @@ func TestIntegration_AuthenticatedRequest(t *testing.T) {
 	result, err := executor.Execute(ctx, `query { systemHealth }`, nil, "", authInfo)
 	require.NoError(t, err)
 	assert.Equal(t, 200, result.StatusCode)
+
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(result.Body), &resp))
+	assert.Equal(t, "ok", resp.Data["systemHealth"])
 }
 
 func TestIntegration_SchemaDiscovery(t *testing.T) {

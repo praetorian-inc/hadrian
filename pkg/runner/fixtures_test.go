@@ -64,6 +64,25 @@ func newVulnerableRESTServer(t *testing.T) *httptest.Server {
 	return server
 }
 
+// newSecuredRESTServer is the NON-vulnerable control: it enforces authorization
+// on every endpoint the spec declares — missing token → 401, present token →
+// 403 (deny, since the attacker is never the resource owner / not admin). The
+// same templates that fire against the vulnerable fixture must produce ZERO
+// findings here, proving the detection assertions are differential rather than
+// unconditional.
+func newSecuredRESTServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, _, ok := fixtureUser(r); !ok {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Forbidden", http.StatusForbidden)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
 // vulnerableRESTHandler builds the seeded vulnerable REST API as an http.Handler
 // so callers can wrap it (e.g. to capture request headers) before serving.
 func vulnerableRESTHandler() http.Handler {

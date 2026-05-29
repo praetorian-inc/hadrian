@@ -107,6 +107,33 @@ func TestIntegration_NoRegression_AllTemplates(t *testing.T) {
 	}
 }
 
+// TestIntegration_SecuredServer_NoFindings is the control case for
+// TestIntegration_NoRegression_AllTemplates: the SAME templates, run against a
+// properly-secured server (401/403 on every endpoint), must produce ZERO
+// findings. This proves the detection assertions are differential (vulnerable →
+// findings, secured → none) and guards against an over-detection regression
+// that would emit findings regardless of the response.
+func TestIntegration_SecuredServer_NoFindings(t *testing.T) {
+	server := newSecuredRESTServer(t)
+	apiPath, rolesPath, authPath := writeFixtureConfigs(t, server.URL)
+
+	config := Config{
+		API:         apiPath,
+		Roles:       rolesPath,
+		Auth:        authPath,
+		TemplateDir: restTemplateDir,
+		Categories:  []string{"all"},
+		RateLimit:   50.0,
+		Timeout:     30,
+		Output:      "json",
+	}
+
+	findings, err := RunTest(context.Background(), config)
+	require.NoError(t, err)
+	assert.Empty(t, findings,
+		"a properly-secured server (401/403) must yield no findings; got %v", findingsByCategory(findings))
+}
+
 // TestIntegration_JSONOutput verifies the CLI path (runTest) produces valid JSON
 // against the in-process fixture.
 func TestIntegration_JSONOutput(t *testing.T) {

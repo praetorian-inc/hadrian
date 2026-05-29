@@ -52,10 +52,16 @@ func TestE2E_RequestIDsInTerminalOutput(t *testing.T) {
 		Verbose:     true,
 	}
 
-	// Capture stdout.
+	// Capture stdout. Restore via t.Cleanup so a panic or fatal assertion in
+	// runTest cannot leave the process-global os.Stdout pointing at the pipe
+	// and corrupt the output of subsequent tests in this package.
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		_ = w.Close()
+	})
 
 	err := runTest(context.Background(), config)
 

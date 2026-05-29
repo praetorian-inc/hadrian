@@ -16,6 +16,13 @@ import (
 
 // These integration tests parse the local .proto fixtures under test/grpc/.
 // They require no Docker or running gRPC server — parsing happens in-process.
+//
+// SOURCE OF TRUTH: the exact-equality assertions below (operation counts,
+// method names, owner fields) are derived from test/grpc/sample.proto and
+// test/grpc/complex.proto. These assertions are intentionally drift-sensitive —
+// they verify the parser's contract and SHOULD break if a .proto changes. If
+// you edit those proto fixtures, update the expected values here in the same
+// commit.
 
 func TestIntegration_ParseSampleProto(t *testing.T) {
 	protoPath := filepath.Join("..", "..", "..", "test", "grpc", "sample.proto")
