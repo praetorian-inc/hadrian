@@ -12,6 +12,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/auth"
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -495,4 +496,138 @@ func TestMapTemplateSeverity(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// writeTemplateFile writes a YAML template file to the given dir. Used by
+// the loadAndCompileGraphQLTemplates tests below to construct hermetic
+// fixtures so the tests don't depend on the canonical templates/graphql/
+// tree.
+func writeTemplateFile(t *testing.T, dir, name, body string) {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0644))
+}
+
+// TestLoadAndCompileGraphQLTemplates exercises the helper that backs both the
+// SARIF rule enrichment preload (graphql.go) and the runtime template
+// executor's legacy fallback (runTemplateTests). It owns three independently
+// testable behaviors — load propagation, filter semantics, and compile-failure
+// handling — and previously had no direct test.
+func TestLoadAndCompileGraphQLTemplates(t *testing.T) {
+	minimal := `id: t-one
+info:
+  name: "One"
+  category: "API1:2023"
+  severity: "MEDIUM"
+graphql:
+  - query: |
+      query Q { __typename }
+    matchers:
+      - type: status
+        status: [200]
+`
+	second := `id: t-two
+info:
+  name: "Two"
+  category: "API2:2023"
+  severity: "HIGH"
+graphql:
+  - query: |
+      query Q { __typename }
+    matchers:
+      - type: status
+        status: [200]
+`
+	t.Run("empty filters returns full compiled set", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTemplateFile(t, dir, "one.yaml", minimal)
+		writeTemplateFile(t, dir, "two.yaml", second)
+
+		got, err := loadAndCompileGraphQLTemplates(dir, nil)
+		require.NoError(t, err)
+		require.Len(t, got, 2, "empty filter must keep every template")
+		ids := []string{got[0].ID, got[1].ID}
+		assert.ElementsMatch(t, []string{"t-one", "t-two"}, ids)
+	})
+
+	t.Run("filter narrows the set", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTemplateFile(t, dir, "one.yaml", minimal)
+		writeTemplateFile(t, dir, "two.yaml", second)
+
+		got, err := loadAndCompileGraphQLTemplates(dir, []string{"t-two"})
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, "t-two", got[0].ID)
+	})
+
+	t.Run("non-matching filter returns empty without error", func(t *testing.T) {
+		dir := t.TempDir()
+		writeTemplateFile(t, dir, "one.yaml", minimal)
+
+		got, err := loadAndCompileGraphQLTemplates(dir, []string{"no-such-id"})
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("missing directory returns error", func(t *testing.T) {
+		_, err := loadAndCompileGraphQLTemplates(filepath.Join(t.TempDir(), "does-not-exist"), nil)
+		assert.Error(t, err, "missing template dir should surface as an error to the caller")
+	})
+}
+
+// TestRunTemplateTests_UsesPreloadedSlice verifies the entire point of the
+// Pass-2 refactor: when callers pass a preloaded []*CompiledTemplate, the
+// internal load+filter+compile is skipped. We point config.TemplateDir at a
+// directory that does NOT exist — if a regression re-enabled the internal
+// load this test would fail trying to read the bogus directory.
+func TestRunTemplateTests_UsesPreloadedSlice(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer server.Close()
+
+	// Compile a real template in-memory so executor.ExecuteGraphQL has a
+	// well-formed input. The matchers won't fire against the empty server
+	// response — that's fine; the test asserts the LOAD path was skipped,
+	// not that findings are produced.
+	parsed, err := templates.ParseYAML([]byte(`id: preloaded-only
+info:
+  name: "Preloaded Only"
+  category: "API1:2023"
+  severity: "MEDIUM"
+graphql:
+  - query: |
+      query Q { __typename }
+    matchers:
+      - type: status
+        status: [418]
+`))
+	require.NoError(t, err)
+	compiled, err := templates.Compile(parsed)
+	require.NoError(t, err)
+
+	bogusDir := filepath.Join(t.TempDir(), "definitely-not-a-templates-dir")
+	config := GraphQLConfig{
+		TemplateDir: bogusDir, // would fail if the internal load ran
+		Timeout:     30,
+	}
+
+	_, count := runTemplateTests(
+		context.Background(),
+		config,
+		server.URL,
+		server.Client(),
+		nil, // no auth
+		nil, // no reporter
+		nil, // no headers
+		[]*templates.CompiledTemplate{compiled},
+	)
+
+	// templateCount == len(preloaded) is the proof the internal load was
+	// skipped — if a regression re-enabled it the bogus TemplateDir would
+	// have caused loadAndCompileGraphQLTemplates to return an error and
+	// runTemplateTests would return (nil, 0).
+	assert.Equal(t, 1, count, "templateCount must reflect preloaded slice length, proving internal load was skipped")
 }

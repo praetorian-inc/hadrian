@@ -190,7 +190,6 @@ func reportFindings(findings []*model.Finding) {
 	}
 }
 
-// runSecurityChecks executes scanner checks and template tests, returning all findings and template count
 // runSecurityChecks runs scanner-based checks plus template-driven tests. When
 // `preloaded` is non-nil, runTemplateTests uses it directly and skips its
 // internal load+filter+compile path. This is how the SARIF reporter and the
@@ -293,7 +292,6 @@ func filterGraphQLTemplatesByID(tmpls []*templates.Template, filters []string) [
 	return filtered
 }
 
-// runTemplateTests executes GraphQL templates and returns findings and template count
 // runTemplateTests executes GraphQL templates and returns findings and template
 // count. When `preloaded` is non-nil it is used as the canonical compiled set;
 // when nil the function falls back to its legacy load+filter+compile path so

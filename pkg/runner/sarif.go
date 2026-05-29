@@ -195,6 +195,38 @@ func (r *SARIFReporter) Close() error { return nil }
 // build assembles the SARIF document from findings.
 func (r *SARIFReporter) build(findings []*model.Finding) SARIFReport {
 	rules, ruleIndex := r.buildRules(findings)
+	results := r.buildResults(findings, ruleIndex)
+
+	return SARIFReport{
+		Schema:  sarifSchema,
+		Version: sarifVersion,
+		Runs: []SARIFRun{{
+			Tool: SARIFTool{
+				Driver: SARIFDriver{
+					Name:           "Hadrian",
+					InformationURI: hadrianInformationURI,
+					Version:        Version,
+					Rules:          rules,
+				},
+			},
+			Results: results,
+			AutomationDetails: &SARIFRunAutomation{
+				ID: "hadrian",
+			},
+			ColumnKind: "utf16CodeUnits",
+		}},
+	}
+}
+
+// buildResults maps findings to SARIF results given a TemplateID→index map.
+//
+// Extracted from build() so the invariant-violation branch (a finding whose
+// ruleID is not in ruleIndex) is unit-testable. In normal flow buildRules
+// produces ruleIndex from the same finding set, so the !ok case should never
+// fire — but the defensive log.Warn+skip exists to surface future refactor
+// regressions, and a regression test for it must be able to inject an
+// inconsistent ruleIndex.
+func (r *SARIFReporter) buildResults(findings []*model.Finding, ruleIndex map[string]int) []SARIFResult {
 	results := make([]SARIFResult, 0, len(findings))
 	for _, f := range findings {
 		ruleID := f.TemplateID
@@ -220,26 +252,7 @@ func (r *SARIFReporter) build(findings []*model.Finding) SARIFReport {
 			Properties:          buildResultProperties(f),
 		})
 	}
-
-	return SARIFReport{
-		Schema:  sarifSchema,
-		Version: sarifVersion,
-		Runs: []SARIFRun{{
-			Tool: SARIFTool{
-				Driver: SARIFDriver{
-					Name:           "Hadrian",
-					InformationURI: hadrianInformationURI,
-					Version:        Version,
-					Rules:          rules,
-				},
-			},
-			Results: results,
-			AutomationDetails: &SARIFRunAutomation{
-				ID: "hadrian",
-			},
-			ColumnKind: "utf16CodeUnits",
-		}},
-	}
+	return results
 }
 
 // buildRules emits one SARIFRule per unique TemplateID found in `findings`.

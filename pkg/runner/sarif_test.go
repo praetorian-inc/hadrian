@@ -198,6 +198,43 @@ func TestSARIFReporter_PartialFingerprintsDifferWhenIdentityChanges(t *testing.T
 	}
 }
 
+// TestSARIFReporter_BuildResults_DropsFindingWhenRuleIDMissing exercises the
+// invariant-violation branch in buildResults: when a finding's ruleID is not
+// in the supplied ruleIndex, the result is dropped (log.Warn + skip). In
+// normal flow buildRules produces ruleIndex from the same finding set, so the
+// branch is impossible to reach via build(); the regression test injects an
+// inconsistent ruleIndex directly to prove the defensive fallback fires.
+func TestSARIFReporter_BuildResults_DropsFindingWhenRuleIDMissing(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "missing-rule.sarif")
+	rep, err := NewSARIFReporter(out, nil)
+	require.NoError(t, err)
+
+	f := sampleFinding()
+	f.TemplateID = "absent-from-index"
+
+	// Empty ruleIndex simulates the invariant violation. buildResults must
+	// drop the finding rather than emit a SARIF result pointing at index 0.
+	results := rep.buildResults([]*model.Finding{f}, map[string]int{})
+
+	assert.Empty(t, results, "finding with missing ruleID must be dropped, not emitted with wrong index")
+}
+
+// Companion: when ruleIndex contains the ruleID, buildResults emits the result
+// with the correct index. Prevents an over-zealous regression that drops every
+// finding.
+func TestSARIFReporter_BuildResults_EmitsWhenRuleIDPresent(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "present-rule.sarif")
+	rep, err := NewSARIFReporter(out, nil)
+	require.NoError(t, err)
+
+	f := sampleFinding()
+	results := rep.buildResults([]*model.Finding{f}, map[string]int{f.TemplateID: 7})
+
+	require.Len(t, results, 1)
+	assert.Equal(t, f.TemplateID, results[0].RuleID)
+	assert.Equal(t, 7, results[0].RuleIndex)
+}
+
 // QUAL-006 / SEC-BE-002 regression test: two findings whose identity fields
 // would collide under a printable delimiter (e.g. "|") must still produce
 // distinct fingerprints. The NUL separator guarantees this.
