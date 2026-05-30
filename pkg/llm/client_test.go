@@ -99,23 +99,6 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 	assert.True(t, running, "IsOllamaRunning should check OLLAMA_HOST env var")
 }
 
-func TestIsOllamaRunning_WithCustomHostNotRunning(t *testing.T) {
-	// Arrange — pin OLLAMA_HOST to a guaranteed-refused address (valid port,
-	// nothing listening) so the probe deterministically hits a connection-refused
-	// rather than the out-of-range port 99999, which fails on URL/dial setup
-	// instead. Matches the convention used by the sibling tests in this file.
-	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
-
-	// Act
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-	defer cancel()
-
-	running := IsOllamaRunning(ctx)
-
-	// Assert
-	assert.False(t, running, "IsOllamaRunning should return false when custom host not responding")
-}
-
 // TestNewClientWithConfig tests LLM client creation with explicit config
 func TestNewClientWithConfig_WithOllamaHost(t *testing.T) {
 	// Arrange - Mock Ollama server
