@@ -198,6 +198,11 @@ func detectHardcodedSecret(value string) bool {
 	// it resolves to a hardcoded JWT, so it must NOT short-circuit — match
 	// the patterns against the stripped remainder to catch it.
 	stripped := envBraceRE.ReplaceAllString(value, "")
+	// HasPrefix("${") AND stripped=="" together mean "non-empty AND made up
+	// entirely of ${VAR} refs" — the HasPrefix term excludes the empty string
+	// (for which stripped=="" is trivially true) and any value whose literal
+	// part precedes the first ref, both of which must fall through to the
+	// pattern check below.
 	if strings.HasPrefix(value, "${") && stripped == "" {
 		return false // pure environment variable reference
 	}

@@ -260,6 +260,8 @@ test/
   run-live-tests.sh        # End-to-end test runner
   test-llm-planner.sh      # LLM-planner regression tests
   test_detect_planner_provider.sh  # Unit test for detect_planner_provider
+  target-helpers.sh        # Target-selection helper (targets_contains)
+  test_targets_contains.sh # Unit test for targets_contains
   README.md                # This file
   .live-test-config        # Auto-generated port + path config (gitignored)
   .live-test-cache/        # Patched OpenAPI specs (gitignored)

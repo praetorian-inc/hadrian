@@ -82,6 +82,10 @@ GRPC_PORT="${GRPC_PORT:-$GRPC_DEFAULT_PORT}"
 # shellcheck source=test/llm-helpers.sh
 . "${SCRIPT_DIR}/llm-helpers.sh"
 
+# Target-selection helpers (targets_contains).
+# shellcheck source=test/target-helpers.sh
+. "${SCRIPT_DIR}/target-helpers.sh"
+
 # CRAPI_PORT default tracks the helper's CRAPI_OPENAPI_SPEC_DEFAULT_PORT.
 CRAPI_PORT="${CRAPI_PORT:-$CRAPI_OPENAPI_SPEC_DEFAULT_PORT}"
 
@@ -158,11 +162,7 @@ get_findings() { echo "${FINDINGS[$1]:-0}"; }
 set_duration() { DURATION["$1"]="$2"; }
 get_duration() { echo "${DURATION[$1]:-0}"; }
 
-# targets_contains <name> — exact comma-delimited membership test on $TARGETS.
-# Avoids the substring pitfall of `grep -q "crapi"` (which also matches
-# "crapi-planner"); the crapi → crapi-planner prerequisite coupling is now made
-# explicit at each call site instead of relying on a silent substring match.
-targets_contains() { case ",${TARGETS}," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+# targets_contains is sourced from target-helpers.sh (above).
 
 # ==== Helper functions ====
 

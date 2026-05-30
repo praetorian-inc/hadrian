@@ -36,15 +36,20 @@ assert_skip() {  # assert_skip <label> <reason>
     skip=$((skip + 1))
 }
 
-# Save caller's env so we can restore it between scenarios.
+# Save caller's env so we can restore it between scenarios. OLLAMA_MODEL is
+# saved too: detect_planner_provider's model check (_ollama_has_model) reads it,
+# so a developer with OLLAMA_MODEL exported would otherwise make P6 (which
+# serves llama3.2:latest) non-deterministic.
 _SAVED_OPENAI="${OPENAI_API_KEY:-}"
 _SAVED_ANTHROPIC="${ANTHROPIC_API_KEY:-}"
 _SAVED_OLLAMA="${OLLAMA_HOST:-}"
+_SAVED_OLLAMA_MODEL="${OLLAMA_MODEL:-}"
 
 restore_env() {
     if [ -n "$_SAVED_OPENAI" ];    then export OPENAI_API_KEY="$_SAVED_OPENAI";    else unset OPENAI_API_KEY;    fi
     if [ -n "$_SAVED_ANTHROPIC" ]; then export ANTHROPIC_API_KEY="$_SAVED_ANTHROPIC"; else unset ANTHROPIC_API_KEY; fi
     if [ -n "$_SAVED_OLLAMA" ];    then export OLLAMA_HOST="$_SAVED_OLLAMA";        else unset OLLAMA_HOST;        fi
+    if [ -n "$_SAVED_OLLAMA_MODEL" ]; then export OLLAMA_MODEL="$_SAVED_OLLAMA_MODEL"; else unset OLLAMA_MODEL; fi
 }
 
 # _start_tags_server <body_json> — starts a background HTTP server on an
@@ -156,7 +161,7 @@ restore_env
 # expansion happened correctly" from "ollama is up and responded".
 # ---------------------------------------------------------------------------
 echo "P5: OLLAMA_HOST unset → falls back to default localhost:11434 → empty (no local ollama with the model)"
-unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
+unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST OLLAMA_MODEL
 if _ollama_has_model 2>/dev/null; then
     assert_skip "P5 OLLAMA_HOST default fallback" \
         "local ollama on localhost:11434 has the model; default-fallback path produces 'ollama' instead of empty"
@@ -190,7 +195,7 @@ restore_env
 #     Exercises the reachable-AND-model-present path of _ollama_has_model.
 # ---------------------------------------------------------------------------
 echo "P6: /api/tags lists llama3.2:latest → echoes ollama"
-unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
+unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST OLLAMA_MODEL
 _start_tags_server '{"models":[{"name":"llama3.2:latest"}]}'
 export OLLAMA_HOST="http://127.0.0.1:${_TAGS_PORT}"
 out=$(detect_planner_provider)
@@ -204,7 +209,7 @@ restore_env
 #     running ollama without the model pulled must NOT be reported usable.
 # ---------------------------------------------------------------------------
 echo "P7: /api/tags omits the model → echoes empty (reachable but model absent)"
-unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
+unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST OLLAMA_MODEL
 _start_tags_server '{"models":[{"name":"some-other-model:latest"}]}'
 export OLLAMA_HOST="http://127.0.0.1:${_TAGS_PORT}"
 out=$(detect_planner_provider)
