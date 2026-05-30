@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -16,13 +17,15 @@ import (
 // data set via initData().
 func setupTestServer(t *testing.T) http.Handler {
 	t.Helper()
-	// Provide a throw-away upload dir so uploadPaste tests can write files.
-	var err error
-	uploadDir, err = os.MkdirTemp("", "vuln-gql-test-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp: %v", err)
+	// Root uploadDir under a per-test temp dir (auto-cleaned by t.TempDir).
+	// The path-traversal test escapes uploadDir with ".." and lands in this
+	// owned parent, so the test never writes to a fixed shared path (which
+	// would collide with concurrent runs or pre-existing /tmp state — the
+	// cause of a non-hermetic failure under `go test -race ./...`).
+	uploadDir = filepath.Join(t.TempDir(), "uploads")
+	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
+		t.Fatalf("mkdir uploadDir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(uploadDir) })
 
 	initData()
 	schema, err := buildSchema()
@@ -219,7 +222,11 @@ func TestHealthEndpoint(t *testing.T) {
 // registers a cleanup to remove the traversed file.
 func TestUploadPastePathTraversal(t *testing.T) {
 	srv := setupTestServer(t)
-	q := `mutation { uploadPaste(content: "pwned", filename: "../../../tmp/traversal-test.txt") { result filename } }`
+	// Escape the uploads dir with "..". With uploadDir = <tmp>/uploads this
+	// resolves to <tmp>/traversal-test.txt — outside uploadDir (proving the
+	// traversal) but still inside the per-test temp dir, so the write always
+	// succeeds and leaves no artifact outside t.TempDir's auto-cleanup.
+	q := `mutation { uploadPaste(content: "pwned", filename: "../traversal-test.txt") { result filename } }`
 	resp := gqlDo(t, srv, q, "")
 	data, ok := resp["data"].(map[string]interface{})
 	if !ok {
@@ -227,23 +234,20 @@ func TestUploadPastePathTraversal(t *testing.T) {
 	}
 	up, ok := data["uploadPaste"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("uploadPaste missing: %v", data)
+		t.Fatalf("uploadPaste missing: %v (errors: %v)", data, resp["errors"])
 	}
 	if up["result"] != "success" {
 		t.Errorf("expected result=success, got: %v", up["result"])
 	}
-	// The resolved filename should be absolute (path traversal escaped upload dir)
 	filename, _ := up["filename"].(string)
 	if filename == "" {
 		t.Errorf("expected non-empty filename in response")
 	}
-	// Prove the written path actually escaped the upload base directory.
-	// filepath.Join collapses ".." so the resolved path will not start with uploadDir.
+	// Prove the written path actually escaped the uploads directory.
+	// filepath.Join collapses ".." so the resolved path is not under uploadDir.
 	if strings.HasPrefix(filename, uploadDir) {
 		t.Errorf("path traversal did not escape upload dir: resolved %q is still under %q", filename, uploadDir)
 	}
-	// Clean up the escaped file so the test leaves no artifacts on disk.
-	t.Cleanup(func() { os.Remove(filename) }) //nolint:errcheck
 }
 
 // TestResetEndpoint verifies POST /api/reset restores seed data.
