@@ -23,6 +23,7 @@ pass=0; fail=0
 
 # assert_match <label> <targets_csv> <name>   — expects targets_contains to return 0
 assert_match() {
+    # shellcheck disable=SC2034  # read by targets_contains (sourced) via the global $TARGETS
     TARGETS="$2"
     if targets_contains "$3"; then
         echo "  PASS: $1"; pass=$((pass + 1))
@@ -33,6 +34,7 @@ assert_match() {
 
 # assert_no_match <label> <targets_csv> <name> — expects targets_contains to return non-zero
 assert_no_match() {
+    # shellcheck disable=SC2034  # read by targets_contains (sourced) via the global $TARGETS
     TARGETS="$2"
     if targets_contains "$3"; then
         echo "  FAIL: $1 — expected NO match for '$3' in TARGETS='$2'"; fail=$((fail + 1))
