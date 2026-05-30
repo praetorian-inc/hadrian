@@ -98,8 +98,11 @@ func TestIsOllamaRunning_WithCustomHost(t *testing.T) {
 }
 
 func TestIsOllamaRunning_WithCustomHostNotRunning(t *testing.T) {
-	// Arrange - Set custom host that doesn't exist
-	t.Setenv("OLLAMA_HOST", "http://localhost:99999")
+	// Arrange — pin OLLAMA_HOST to a guaranteed-refused address (valid port,
+	// nothing listening) so the probe deterministically hits a connection-refused
+	// rather than the out-of-range port 99999, which fails on URL/dial setup
+	// instead. Matches the convention used by the sibling tests in this file.
+	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
 
 	// Act
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -165,7 +168,7 @@ func TestNewClientWithConfig_OllamaNotReachable(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	client, err := NewClientWithConfig(ctx, "http://localhost:99999", "llama3.2:latest", 180*time.Second, "")
+	client, err := NewClientWithConfig(ctx, "http://127.0.0.1:1", "llama3.2:latest", 180*time.Second, "")
 
 	// Assert — require.* on the first two so a regression fails the test
 	// cleanly instead of panicking on the err.Error() dereference below.
