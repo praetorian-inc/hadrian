@@ -65,7 +65,9 @@ func TestIsOllamaRunning_ServerResponds(t *testing.T) {
 func TestIsOllamaRunning_ServerNotResponding(t *testing.T) {
 	// Arrange — pin OLLAMA_HOST to a guaranteed-refused address so this test
 	// doesn't accidentally hit a real local ollama on the default port (same
-	// flake class as LAB-3638).
+	// flake class as LAB-3638). 127.0.0.1:1 returns an immediate kernel RST
+	// (connection-refused), so the probe resolves well within the 100ms context
+	// bound below and never waits on IsOllamaRunningAt's 2s client timeout.
 	t.Setenv("OLLAMA_HOST", "http://127.0.0.1:1")
 
 	// Act
