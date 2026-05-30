@@ -209,9 +209,15 @@ make check       # Run all checks (fmt, vet, lint, test)
 
 ```bash
 go test ./...                        # Unit tests
-go test -tags=integration ./...      # Integration tests
+go test -tags=integration ./...      # Integration tests (fully in-process, no Docker)
 go test -race ./...                  # Race detection
 ```
+
+> **No Docker required.** The Go integration tests stand up in-process `httptest`
+> fixtures with seeded BOLA / BFLA / BOPLA / IDOR bugs, so the full suite —
+> including `-tags=integration` — runs in a fresh devcontainer with no Docker
+> daemon. The crAPI / DVGA Docker harnesses under `test/` are for optional
+> end-to-end *live* testing only (see the wiki tutorials), not for the test suite.
 
 ## Contributing
 

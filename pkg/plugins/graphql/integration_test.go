@@ -5,8 +5,11 @@ package graphql
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
-	"os"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,78 +19,184 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/graphql"
 )
 
-func TestIntegration_IntrospectionClient(t *testing.T) {
-	endpoint := os.Getenv("DVGA_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("DVGA_ENDPOINT not set, skipping integration test")
-	}
+// =============================================================================
+// In-process vulnerable GraphQL service (no Docker, no external DVGA target).
+//
+// Replaces the previous DVGA_ENDPOINT (Docker) dependency with an httptest
+// server that answers GraphQL introspection and a small set of queries /
+// mutations modeled on the Damn Vulnerable GraphQL Application (DVGA):
+// `users` / `pastes` queries, a `createPaste` mutation, and a `systemHealth`
+// query. Integration tests run real introspection + execution against it.
+//
+// SCOPE: these tests validate the GraphQL plumbing (schema introspection and
+// query execution) against an in-process target. Detection-rate regression
+// coverage for the templates/graphql/ detection templates is NOT exercised
+// here — that is covered for REST in pkg/runner/integration_test.go
+// (TestIntegration_NoRegression_AllTemplates). Running the GraphQL/gRPC
+// detection templates in-process is tracked as separate follow-up work.
+// =============================================================================
 
-	client := graphql.NewIntrospectionClient(http.DefaultClient, endpoint)
+// newVulnerableGraphQLServer builds and starts the in-process GraphQL service.
+func newVulnerableGraphQLServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var req struct {
+			Query string `json:"query"`
+		}
+		_ = json.Unmarshal(body, &req)
+
+		w.Header().Set("Content-Type", "application/json")
+
+		// Introspection request → return the schema.
+		if strings.Contains(req.Query, "__schema") || strings.Contains(req.Query, "IntrospectionQuery") {
+			_ = json.NewEncoder(w).Encode(introspectionResponse())
+			return
+		}
+
+		// Regular queries → return canned data for the requested root field.
+		// Routing is naive substring matching, which is sufficient ONLY because
+		// the fixture's known queries use non-overlapping root-field tokens.
+		// If you add a query whose text contains another branch's token as a
+		// nested selection (e.g. `pastes { author { ... } }` containing "users"),
+		// route on the GraphQL root field instead of a bare substring.
+		data := map[string]interface{}{}
+		switch {
+		case strings.Contains(req.Query, "__typename"):
+			data["__typename"] = "Query"
+		case strings.Contains(req.Query, "systemHealth"):
+			data["systemHealth"] = "ok"
+		case strings.Contains(req.Query, "users"):
+			data["users"] = []map[string]interface{}{{"id": "1", "username": "admin"}}
+		default:
+			data["ok"] = true
+		}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"data": data})
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+// introspectionResponse returns a minimal-but-valid introspection result with
+// the DVGA-style queries (`users`, `pastes`) and mutation (`createPaste`).
+func introspectionResponse() graphql.IntrospectionResult {
+	return graphql.IntrospectionResult{
+		Data: graphql.IntrospectionData{
+			Schema: graphql.IntrospectionSchema{
+				QueryType:    &graphql.TypeNameRef{Name: "Query"},
+				MutationType: &graphql.TypeNameRef{Name: "Mutation"},
+				Types: []graphql.IntrospectionType{
+					{
+						Kind: "OBJECT",
+						Name: "Query",
+						Fields: []graphql.IntrospectionField{
+							{Name: "users", Type: graphql.IntrospectionTypeRef{Kind: "LIST", OfType: &graphql.IntrospectionTypeRef{Kind: "OBJECT", Name: "UserObject"}}},
+							{Name: "pastes", Type: graphql.IntrospectionTypeRef{Kind: "LIST", OfType: &graphql.IntrospectionTypeRef{Kind: "OBJECT", Name: "PasteObject"}}},
+							{Name: "systemHealth", Type: graphql.IntrospectionTypeRef{Kind: "SCALAR", Name: "String"}},
+						},
+					},
+					{
+						Kind: "OBJECT",
+						Name: "Mutation",
+						Fields: []graphql.IntrospectionField{
+							{
+								Name: "createPaste",
+								Type: graphql.IntrospectionTypeRef{Kind: "OBJECT", Name: "PasteObject"},
+								Args: []graphql.IntrospectionInput{
+									{Name: "title", Type: graphql.IntrospectionTypeRef{Kind: "SCALAR", Name: "String"}},
+									{Name: "content", Type: graphql.IntrospectionTypeRef{Kind: "SCALAR", Name: "String"}},
+								},
+							},
+						},
+					},
+					{
+						Kind: "OBJECT",
+						Name: "UserObject",
+						Fields: []graphql.IntrospectionField{
+							{Name: "id", Type: graphql.IntrospectionTypeRef{Kind: "SCALAR", Name: "ID"}},
+							{Name: "username", Type: graphql.IntrospectionTypeRef{Kind: "SCALAR", Name: "String"}},
+						},
+					},
+					{
+						Kind: "OBJECT",
+						Name: "PasteObject",
+						Fields: []graphql.IntrospectionField{
+							{Name: "id", Type: graphql.IntrospectionTypeRef{Kind: "SCALAR", Name: "ID"}},
+							{Name: "content", Type: graphql.IntrospectionTypeRef{Kind: "SCALAR", Name: "String"}},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestIntegration_IntrospectionClient(t *testing.T) {
+	server := newVulnerableGraphQLServer(t)
+
+	client := graphql.NewIntrospectionClient(http.DefaultClient, server.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	schema, err := client.FetchSchema(ctx)
 	require.NoError(t, err)
-	assert.NotNil(t, schema)
-	assert.True(t, len(schema.Queries) > 0, "should have queries")
+	require.NotNil(t, schema)
+	assert.Greater(t, len(schema.Queries), 0, "should have queries")
 }
 
 func TestIntegration_QueryExecution(t *testing.T) {
-	endpoint := os.Getenv("DVGA_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("DVGA_ENDPOINT not set, skipping integration test")
-	}
+	server := newVulnerableGraphQLServer(t)
 
-	executor := graphql.NewExecutor(http.DefaultClient, endpoint, nil)
+	executor := graphql.NewExecutor(http.DefaultClient, server.URL, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	result, err := executor.Execute(ctx, "{ __typename }", nil, "", nil)
 	require.NoError(t, err)
 	assert.Equal(t, 200, result.StatusCode)
-	assert.Contains(t, result.Body, "__typename")
+
+	// Assert on the decoded data envelope value, not just substring presence —
+	// proves the executor returned the GraphQL `data` payload intact.
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(result.Body), &resp))
+	assert.Equal(t, "Query", resp.Data["__typename"])
 }
 
 func TestIntegration_AuthenticatedRequest(t *testing.T) {
-	endpoint := os.Getenv("DVGA_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("DVGA_ENDPOINT not set, skipping integration test")
-	}
+	server := newVulnerableGraphQLServer(t)
 
-	token := os.Getenv("DVGA_ADMIN_TOKEN")
-	if token == "" {
-		t.Skip("DVGA_ADMIN_TOKEN not set, skipping authenticated test")
-	}
-
-	executor := graphql.NewExecutor(http.DefaultClient, endpoint, nil)
+	executor := graphql.NewExecutor(http.DefaultClient, server.URL, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	authInfo := &graphql.AuthInfo{
 		Method: "bearer",
-		Value:  "Bearer " + token,
+		Value:  "Bearer test-admin-token",
 	}
 
-	query := `query { systemHealth }`
-	result, err := executor.Execute(ctx, query, nil, "", authInfo)
+	result, err := executor.Execute(ctx, `query { systemHealth }`, nil, "", authInfo)
 	require.NoError(t, err)
 	assert.Equal(t, 200, result.StatusCode)
+
+	var resp struct {
+		Data map[string]interface{} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(result.Body), &resp))
+	assert.Equal(t, "ok", resp.Data["systemHealth"])
 }
 
 func TestIntegration_SchemaDiscovery(t *testing.T) {
-	endpoint := os.Getenv("DVGA_ENDPOINT")
-	if endpoint == "" {
-		t.Skip("DVGA_ENDPOINT not set, skipping integration test")
-	}
+	server := newVulnerableGraphQLServer(t)
 
-	client := graphql.NewIntrospectionClient(http.DefaultClient, endpoint)
+	client := graphql.NewIntrospectionClient(http.DefaultClient, server.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	schema, err := client.FetchSchema(ctx)
 	require.NoError(t, err)
 
-	// Verify expected DVGA operations exist
 	hasUsersQuery := false
 	hasPastesQuery := false
 	for _, q := range schema.Queries {
@@ -98,11 +207,9 @@ func TestIntegration_SchemaDiscovery(t *testing.T) {
 			hasPastesQuery = true
 		}
 	}
-
 	assert.True(t, hasUsersQuery, "should have users query")
 	assert.True(t, hasPastesQuery, "should have pastes query")
 
-	// Verify mutations exist
 	hasCreatePaste := false
 	for _, m := range schema.Mutations {
 		if m.Name == "createPaste" {

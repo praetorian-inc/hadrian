@@ -3,397 +3,231 @@
 package runner
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // =============================================================================
-// Integration Test Fixtures
+// Integration tests — in-process httptest fixtures, no Docker.
+//
+// These exercise Hadrian's real templates (templates/rest/) against the seeded
+// vulnerable API from fixtures_test.go, asserting that BOLA/IDOR, broken
+// authentication, excessive data exposure (BOPLA), and BFLA are detected
+// without launching any container.
 // =============================================================================
 
-const testOpenAPISpec = `
-openapi: "3.0.0"
-info:
-  title: Test API
-  version: "1.0.0"
-servers:
-  - url: "%s"
-paths:
-  /api/users:
-    get:
-      summary: List users
-      security:
-        - bearerAuth: []
-      responses:
-        "200":
-          description: Success
-  /api/users/{id}:
-    get:
-      summary: Get user by ID
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: Success
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-`
+// runFixtureTemplates runs the given REST templates against the vulnerable
+// fixture server and returns the resulting findings.
+func runFixtureTemplates(t *testing.T, templateIDs ...string) []*model.Finding {
+	t.Helper()
+	server := newVulnerableRESTServer(t)
+	apiPath, rolesPath, authPath := writeFixtureConfigs(t, server.URL)
 
-const testRolesConfig = `
-objects:
-  - users
-roles:
-  - name: admin
-    permissions:
-      - "read:users:all"
-      - "write:users:all"
-  - name: user
-    permissions:
-      - "read:users:own"
-  - name: guest
-    permissions: []
-`
-
-const testAuthConfig = `
-auth_method: bearer_token
-roles:
-  admin:
-    token: "admin-token-12345"
-  user:
-    token: "user-token-67890"
-  guest:
-    token: "guest-token-00000"
-`
-
-// =============================================================================
-// Integration Tests
-// =============================================================================
-
-func TestIntegration_FullWorkflow(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Create mock HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id": "123", "name": "test user"}`))
-	}))
-	defer server.Close()
-
-	// Create temp directory for test files
-	tmpDir := t.TempDir()
-
-	// Write API spec with server URL
-	apiSpecPath := filepath.Join(tmpDir, "api.yaml")
-	specContent := strings.Replace(testOpenAPISpec, "%s", server.URL, 1)
-	err := os.WriteFile(apiSpecPath, []byte(specContent), 0644)
-	require.NoError(t, err)
-
-	// Write roles config
-	rolesPath := filepath.Join(tmpDir, "roles.yaml")
-	err = os.WriteFile(rolesPath, []byte(testRolesConfig), 0644)
-	require.NoError(t, err)
-
-	// Write auth config
-	authPath := filepath.Join(tmpDir, "auth.yaml")
-	err = os.WriteFile(authPath, []byte(testAuthConfig), 0644)
-	require.NoError(t, err)
-
-	// Create templates directory with a simple template
-	templatesDir := filepath.Join(tmpDir, "templates", "rest")
-	err = os.MkdirAll(templatesDir, 0755)
-	require.NoError(t, err)
-
-	// Set HADRIAN_TEMPLATES env var
-	os.Setenv("HADRIAN_TEMPLATES", templatesDir)
-	defer os.Unsetenv("HADRIAN_TEMPLATES")
-
-	// Create config
 	config := Config{
-		API:        apiSpecPath,
-		Roles:      rolesPath,
-		Auth:       authPath,
-		RateLimit:  10.0,
-		Timeout:    30,
-		Output:     "terminal",
-		Categories: []string{"owasp"},
+		API:         apiPath,
+		Roles:       rolesPath,
+		Auth:        authPath,
+		TemplateDir: restTemplateDir,
+		Categories:  []string{"all"},
+		Templates:   templateIDs,
+		RateLimit:   50.0,
+		Timeout:     30,
+		Output:      "json",
 	}
 
-	// Run the test
-	ctx := context.Background()
-	err = runTest(ctx, config)
-
-	// Should complete without error (may have no findings if no templates)
-	// The main goal is to verify the workflow executes
-	assert.NoError(t, err)
+	findings, err := RunTest(context.Background(), config)
+	require.NoError(t, err, "RunTest should not error against in-process fixture")
+	return findings
 }
 
-func TestIntegration_DryRunMode(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
+// findingsByCategory counts findings per OWASP category.
+func findingsByCategory(findings []*model.Finding) map[string]int {
+	counts := make(map[string]int)
+	for _, f := range findings {
+		counts[f.Category]++
+	}
+	return counts
+}
+
+func TestIntegration_BOLADetection(t *testing.T) {
+	findings := runFixtureTemplates(t, "01-api1-bola-read")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API1:2023"],
+		"BOLA template should detect cross-user object access on the vulnerable fixture; got %v", counts)
+}
+
+func TestIntegration_BrokenAuthDetection(t *testing.T) {
+	findings := runFixtureTemplates(t, "04-api2-broken-auth-no-token")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API2:2023"],
+		"broken-auth template should detect the unauthenticated /api/internal/config access; got %v", counts)
+}
+
+func TestIntegration_ExcessiveDataExposure(t *testing.T) {
+	findings := runFixtureTemplates(t, "05-api3-excessive-data-exposure")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API3:2023"],
+		"excessive-data template should detect the leaked SSN/credit_card fields; got %v", counts)
+}
+
+func TestIntegration_BFLADetection(t *testing.T) {
+	findings := runFixtureTemplates(t, "06-api5-bfla-admin-access")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API5:2023"],
+		"BFLA template should detect non-admin access to /api/admin/users; got %v", counts)
+}
+
+func TestIntegration_BOLAWriteDetection(t *testing.T) {
+	// PUT to /api/documents/{id} succeeds for a non-owner → BOLA write.
+	findings := runFixtureTemplates(t, "02-api1-bola-write")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API1:2023"],
+		"BOLA-write template should detect cross-user object modification; got %v", counts)
+}
+
+func TestIntegration_BOLADeleteDetection(t *testing.T) {
+	// DELETE to /api/orders/{id} succeeds for a non-owner → BOLA delete.
+	findings := runFixtureTemplates(t, "03-api1-bola-delete")
+	counts := findingsByCategory(findings)
+	assert.Positive(t, counts["API1:2023"],
+		"BOLA-delete template should detect cross-user object deletion; got %v", counts)
+}
+
+// TestIntegration_NoRegression_AllTemplates runs the full REST template suite
+// against the fixture and asserts the detection rate has not regressed: each of
+// the core OWASP categories the fixture seeds must still produce findings.
+func TestIntegration_NoRegression_AllTemplates(t *testing.T) {
+	findings := runFixtureTemplates(t) // no filter → all templates
+	require.NotEmpty(t, findings, "running all templates against the vulnerable fixture should yield findings")
+
+	counts := findingsByCategory(findings)
+	t.Logf("findings by category: %v (total=%d)", counts, len(findings))
+
+	for _, category := range []string{"API1:2023", "API2:2023", "API3:2023", "API5:2023"} {
+		assert.Positivef(t, counts[category],
+			"expected at least one %s finding against the seeded fixture (regression?); got %v", category, counts)
 	}
 
-	// Track request count
-	var requestCount int32
+	for _, f := range findings {
+		assert.True(t, f.IsVulnerability, "returned findings should be vulnerabilities")
+	}
+}
 
-	// Create mock HTTP server that tracks requests
+// TestIntegration_SecuredServer_NoFindings is the control case for
+// TestIntegration_NoRegression_AllTemplates: the SAME templates, run against a
+// properly-secured server (401/403 on every endpoint), must produce ZERO
+// findings. This proves the detection assertions are differential (vulnerable →
+// findings, secured → none) and guards against an over-detection regression
+// that would emit findings regardless of the response.
+func TestIntegration_SecuredServer_NoFindings(t *testing.T) {
+	server := newSecuredRESTServer(t)
+	apiPath, rolesPath, authPath := writeFixtureConfigs(t, server.URL)
+
+	config := Config{
+		API:         apiPath,
+		Roles:       rolesPath,
+		Auth:        authPath,
+		TemplateDir: restTemplateDir,
+		Categories:  []string{"all"},
+		RateLimit:   50.0,
+		Timeout:     30,
+		Output:      "json",
+	}
+
+	findings, err := RunTest(context.Background(), config)
+	require.NoError(t, err)
+	assert.Empty(t, findings,
+		"a properly-secured server (401/403) must yield no findings; got %v", findingsByCategory(findings))
+}
+
+// TestIntegration_JSONOutput verifies the CLI path (runTest) produces valid JSON
+// against the in-process fixture.
+func TestIntegration_JSONOutput(t *testing.T) {
+	server := newVulnerableRESTServer(t)
+	apiPath, rolesPath, authPath := writeFixtureConfigs(t, server.URL)
+	outputFile := filepath.Join(t.TempDir(), "report.json")
+
+	config := Config{
+		API:         apiPath,
+		Roles:       rolesPath,
+		Auth:        authPath,
+		TemplateDir: restTemplateDir,
+		Categories:  []string{"all"},
+		RateLimit:   50.0,
+		Timeout:     30,
+		Output:      "json",
+		OutputFile:  outputFile,
+	}
+
+	require.NoError(t, runTest(context.Background(), config))
+
+	data, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	var result interface{}
+	assert.NoError(t, json.Unmarshal(data, &result), "output should be valid JSON")
+}
+
+// TestIntegration_MarkdownOutput verifies the markdown reporter path.
+func TestIntegration_MarkdownOutput(t *testing.T) {
+	server := newVulnerableRESTServer(t)
+	apiPath, rolesPath, authPath := writeFixtureConfigs(t, server.URL)
+	outputFile := filepath.Join(t.TempDir(), "report.md")
+
+	config := Config{
+		API:         apiPath,
+		Roles:       rolesPath,
+		Auth:        authPath,
+		TemplateDir: restTemplateDir,
+		Categories:  []string{"all"},
+		RateLimit:   50.0,
+		Timeout:     30,
+		Output:      "markdown",
+		OutputFile:  outputFile,
+	}
+
+	require.NoError(t, runTest(context.Background(), config))
+
+	data, err := os.ReadFile(outputFile)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "# Hadrian Security Test Report", "markdown report should contain the report header")
+	assert.Contains(t, content, "## Summary", "markdown report should contain the summary section")
+}
+
+// TestIntegration_DryRunMode verifies dry-run sends NO requests to the target.
+func TestIntegration_DryRunMode(t *testing.T) {
+	var requestCount int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&requestCount, 1)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id": "123"}`))
+		vulnerableRESTHandler().ServeHTTP(w, r)
 	}))
 	defer server.Close()
 
-	// Create temp directory for test files
-	tmpDir := t.TempDir()
+	apiPath, rolesPath, authPath := writeFixtureConfigs(t, server.URL)
 
-	// Write API spec
-	apiSpecPath := filepath.Join(tmpDir, "api.yaml")
-	specContent := strings.Replace(testOpenAPISpec, "%s", server.URL, 1)
-	err := os.WriteFile(apiSpecPath, []byte(specContent), 0644)
-	require.NoError(t, err)
-
-	// Write roles config
-	rolesPath := filepath.Join(tmpDir, "roles.yaml")
-	err = os.WriteFile(rolesPath, []byte(testRolesConfig), 0644)
-	require.NoError(t, err)
-
-	// Set empty templates dir
-	templatesDir := filepath.Join(tmpDir, "templates")
-	err = os.MkdirAll(templatesDir, 0755)
-	require.NoError(t, err)
-	os.Setenv("HADRIAN_TEMPLATES", templatesDir)
-	defer os.Unsetenv("HADRIAN_TEMPLATES")
-
-	// Create config with DryRun enabled
 	config := Config{
-		API:        apiSpecPath,
-		Roles:      rolesPath,
-		RateLimit:  10.0,
-		Timeout:    30,
-		Output:     "terminal",
-		Categories: []string{"owasp"},
-		DryRun:     true, // Enable dry-run mode
+		API:         apiPath,
+		Roles:       rolesPath,
+		Auth:        authPath,
+		TemplateDir: restTemplateDir,
+		Categories:  []string{"all"},
+		RateLimit:   50.0,
+		Timeout:     30,
+		Output:      "terminal",
+		DryRun:      true,
 	}
 
-	// Run the test
-	ctx := context.Background()
-	_ = runTest(ctx, config)
-
-	// In dry-run mode, no HTTP requests should be made to the target
-	// Note: The mock server may receive 0 requests if dry-run is properly implemented
-	// This test verifies the dry-run flag is respected
+	require.NoError(t, runTest(context.Background(), config))
 	assert.Equal(t, int32(0), atomic.LoadInt32(&requestCount),
-		"dry-run mode should not make HTTP requests to target server")
-}
-
-func TestIntegration_VerboseOutput(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Create mock HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer server.Close()
-
-	// Create temp directory for test files
-	tmpDir := t.TempDir()
-
-	// Write API spec
-	apiSpecPath := filepath.Join(tmpDir, "api.yaml")
-	specContent := strings.Replace(testOpenAPISpec, "%s", server.URL, 1)
-	err := os.WriteFile(apiSpecPath, []byte(specContent), 0644)
-	require.NoError(t, err)
-
-	// Write roles config
-	rolesPath := filepath.Join(tmpDir, "roles.yaml")
-	err = os.WriteFile(rolesPath, []byte(testRolesConfig), 0644)
-	require.NoError(t, err)
-
-	// Set empty templates dir
-	templatesDir := filepath.Join(tmpDir, "templates")
-	err = os.MkdirAll(templatesDir, 0755)
-	require.NoError(t, err)
-	os.Setenv("HADRIAN_TEMPLATES", templatesDir)
-	defer os.Unsetenv("HADRIAN_TEMPLATES")
-
-	// Capture stdout
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Create config with Verbose enabled
-	config := Config{
-		API:        apiSpecPath,
-		Roles:      rolesPath,
-		RateLimit:  10.0,
-		Timeout:    30,
-		Output:     "terminal",
-		Categories: []string{"owasp"},
-		Verbose:    true, // Enable verbose mode
-	}
-
-	// Run the test
-	ctx := context.Background()
-	_ = runTest(ctx, config)
-
-	// Restore stdout and read captured output
-	w.Close()
-	os.Stdout = oldStdout
-	var buf bytes.Buffer
-	io.Copy(&buf, r)
-	output := buf.String()
-
-	// Verbose mode should produce output with INFO prefix
-	// Note: The actual verbose output depends on implementation
-	assert.NotEmpty(t, output, "verbose mode should produce output")
-}
-
-func TestIntegration_JSONOutput(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Create mock HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer server.Close()
-
-	// Create temp directory for test files
-	tmpDir := t.TempDir()
-
-	// Write API spec
-	apiSpecPath := filepath.Join(tmpDir, "api.yaml")
-	specContent := strings.Replace(testOpenAPISpec, "%s", server.URL, 1)
-	err := os.WriteFile(apiSpecPath, []byte(specContent), 0644)
-	require.NoError(t, err)
-
-	// Write roles config
-	rolesPath := filepath.Join(tmpDir, "roles.yaml")
-	err = os.WriteFile(rolesPath, []byte(testRolesConfig), 0644)
-	require.NoError(t, err)
-
-	// Set empty templates dir
-	templatesDir := filepath.Join(tmpDir, "templates")
-	err = os.MkdirAll(templatesDir, 0755)
-	require.NoError(t, err)
-	os.Setenv("HADRIAN_TEMPLATES", templatesDir)
-	defer os.Unsetenv("HADRIAN_TEMPLATES")
-
-	// Create output file path
-	outputFile := filepath.Join(tmpDir, "report.json")
-
-	// Create config with JSON output
-	config := Config{
-		API:        apiSpecPath,
-		Roles:      rolesPath,
-		RateLimit:  10.0,
-		Timeout:    30,
-		Output:     "json",
-		OutputFile: outputFile,
-		Categories: []string{"owasp"},
-	}
-
-	// Run the test
-	ctx := context.Background()
-	err = runTest(ctx, config)
-	require.NoError(t, err)
-
-	// Read and verify JSON output
-	data, err := os.ReadFile(outputFile)
-	require.NoError(t, err)
-
-	// Verify it's valid JSON
-	var result interface{}
-	err = json.Unmarshal(data, &result)
-	assert.NoError(t, err, "output should be valid JSON")
-}
-
-func TestIntegration_MarkdownOutput(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Create mock HTTP server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{}`))
-	}))
-	defer server.Close()
-
-	// Create temp directory for test files
-	tmpDir := t.TempDir()
-
-	// Write API spec
-	apiSpecPath := filepath.Join(tmpDir, "api.yaml")
-	specContent := strings.Replace(testOpenAPISpec, "%s", server.URL, 1)
-	err := os.WriteFile(apiSpecPath, []byte(specContent), 0644)
-	require.NoError(t, err)
-
-	// Write roles config
-	rolesPath := filepath.Join(tmpDir, "roles.yaml")
-	err = os.WriteFile(rolesPath, []byte(testRolesConfig), 0644)
-	require.NoError(t, err)
-
-	// Set empty templates dir
-	templatesDir := filepath.Join(tmpDir, "templates")
-	err = os.MkdirAll(templatesDir, 0755)
-	require.NoError(t, err)
-	os.Setenv("HADRIAN_TEMPLATES", templatesDir)
-	defer os.Unsetenv("HADRIAN_TEMPLATES")
-
-	// Create output file path
-	outputFile := filepath.Join(tmpDir, "report.md")
-
-	// Create config with Markdown output
-	config := Config{
-		API:        apiSpecPath,
-		Roles:      rolesPath,
-		RateLimit:  10.0,
-		Timeout:    30,
-		Output:     "markdown",
-		OutputFile: outputFile,
-		Categories: []string{"owasp"},
-	}
-
-	// Run the test
-	ctx := context.Background()
-	err = runTest(ctx, config)
-	require.NoError(t, err)
-
-	// Read and verify Markdown output
-	data, err := os.ReadFile(outputFile)
-	require.NoError(t, err)
-
-	content := string(data)
-	// Verify it contains Markdown headers
-	assert.Contains(t, content, "#", "output should contain Markdown headers")
+		"dry-run mode must not send any HTTP request to the target")
 }
