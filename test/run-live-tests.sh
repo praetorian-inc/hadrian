@@ -17,7 +17,10 @@
 #
 # Options:
 #   --targets <list>      Comma-separated targets to test (default: all)
-#                         Valid: vulnerable-api,dvga,grpc,crapi
+#                         Valid: vulnerable-api,dvga,grpc,crapi,crapi-planner
+#                         crapi-planner is opt-in and requires an LLM credential
+#                         (OPENAI_API_KEY, ANTHROPIC_API_KEY, or running ollama);
+#                         it is SKIPped cleanly when no provider is available.
 #   --verbose             Enable verbose Hadrian output
 #   --no-build            Skip building hadrian and target binaries
 #   --no-start            Don't start/stop services (assume already running)
@@ -75,6 +78,14 @@ GRPC_PORT="${GRPC_PORT:-$GRPC_DEFAULT_PORT}"
 # shellcheck source=test/crapi/crapi-helpers.sh
 . "${SCRIPT_DIR}/crapi/crapi-helpers.sh"
 
+# Provider-agnostic LLM helpers (detect_planner_provider).
+# shellcheck source=test/llm-helpers.sh
+. "${SCRIPT_DIR}/llm-helpers.sh"
+
+# Target-selection helpers (targets_contains).
+# shellcheck source=test/target-helpers.sh
+. "${SCRIPT_DIR}/target-helpers.sh"
+
 # CRAPI_PORT default tracks the helper's CRAPI_OPENAPI_SPEC_DEFAULT_PORT.
 CRAPI_PORT="${CRAPI_PORT:-$CRAPI_OPENAPI_SPEC_DEFAULT_PORT}"
 
@@ -101,7 +112,7 @@ DO_START=true
 
 # Track results per target using associative arrays
 declare -A STATUS FINDINGS DURATION
-for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie dvga grpc crapi; do
+for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie dvga grpc crapi crapi-planner; do
     STATUS["$_t"]="NOT_RUN"
     FINDINGS["$_t"]="0"
     DURATION["$_t"]="0"
@@ -150,6 +161,8 @@ set_findings() { FINDINGS["$1"]="$2"; }
 get_findings() { echo "${FINDINGS[$1]:-0}"; }
 set_duration() { DURATION["$1"]="$2"; }
 get_duration() { echo "${DURATION[$1]:-0}"; }
+
+# targets_contains is sourced from target-helpers.sh (above).
 
 # ==== Helper functions ====
 
@@ -372,7 +385,12 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
             fi
             log_ok "Tokens acquired for admin, user1, user2"
 
-            (umask 077; cat > "$AUTH_FILE" <<EOF
+            # Emit ${VAR} env-var refs (single-quoted heredoc) rather than
+            # inline JWTs so hadrian's expandEnvSafe resolves them at load
+            # and detectHardcodedSecret does not flag them — same pattern as
+            # the crapi block. Keeps the harness free of SECURITY warnings.
+            export ADMIN_TOKEN USER1_TOKEN USER2_TOKEN
+            (umask 077; cat > "$AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 key_name: Authorization
@@ -548,7 +566,12 @@ if echo "$TARGETS" | grep -q "dvga"; then
                 log_ok "Created victim PII paste" || log_warn "Failed to create victim paste"
 
             DVGA_AUTH_FILE="${OUTPUT_DIR}/dvga-auth.yaml"
-            (umask 077; cat > "$DVGA_AUTH_FILE" <<EOF
+            # Emit ${VAR} env-var refs (single-quoted heredoc) rather than
+            # inline JWTs so hadrian's expandEnvSafe resolves them at load and
+            # detectHardcodedSecret does not flag them — same pattern as the
+            # crapi block. Keeps the harness free of SECURITY warnings.
+            export DVGA_ADMIN_TOKEN DVGA_OPERATOR_TOKEN
+            (umask 077; cat > "$DVGA_AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 key_name: Authorization
@@ -633,8 +656,18 @@ if echo "$TARGETS" | grep -q "grpc"; then
 fi
 
 # ==== Test: crapi ====
-if echo "$TARGETS" | grep -q "crapi"; then
+# crapi-planner depends on this block (it consumes CRAPI_AUTH_FILE / CRAPI_SPEC),
+# so requesting crapi-planner runs crapi as its prerequisite. The coupling is
+# explicit here rather than hidden in a `grep -q "crapi"` substring match.
+if targets_contains crapi || targets_contains crapi-planner; then
     log_header "Target 4: crapi (REST)"
+
+    # Tell the operator when crapi is running only as the crapi-planner
+    # prerequisite (they did not ask for crapi directly) so its setup work
+    # isn't a surprise.
+    if targets_contains crapi-planner && ! targets_contains crapi; then
+        log_info "crapi-planner requested: running the crapi target first as its prerequisite"
+    fi
 
     CRAPI_URL="http://localhost:${CRAPI_PORT}"
 
@@ -698,7 +731,10 @@ if echo "$TARGETS" | grep -q "crapi"; then
             log_ok "crapi test videos uploaded"
 
             CRAPI_AUTH_FILE="${OUTPUT_DIR}/crapi-auth.yaml"
-            (umask 077; cat > "$CRAPI_AUTH_FILE" <<EOF
+            # See test-llm-planner.sh for the env-var-rather-than-inline-token
+            # rationale. Same fix applies here.
+            export CRAPI_ADMIN_TOKEN CRAPI_MECHANIC_TOKEN CRAPI_USER_TOKEN CRAPI_USER2_TOKEN
+            (umask 077; cat > "$CRAPI_AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 key_name: Authorization
@@ -718,42 +754,12 @@ EOF
 
             RESULT_FILE="${OUTPUT_DIR}/crapi-results.json"
 
-            # Prefer the spec patched at setup time (CRAPI_SPEC_FILE in
-            # .live-test-config), but only if its baked-in port matches
-            # the port we're about to test against. If the operator
-            # overrides CRAPI_PORT at runtime (e.g.
-            # `CRAPI_PORT=9999 ./run-live-tests.sh`), the cached spec
-            # will be pinned to the old port and silently mis-route
-            # every request — so re-patch in that case.
-            # When re-patching, write into the same SPEC_CACHE_DIR
-            # setup-live-targets.sh uses so the artifact lives alongside
-            # the cache rather than mixed into the JSON results dir.
             SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
-            CRAPI_SPEC=""
-            # Anchor the port match on a non-digit / end-of-line boundary
-            # so CRAPI_PORT=889 doesn't accept a stale spec pinned to
-            # localhost:8895 (substring match).
-            if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ] \
-                    && grep -qE "localhost:${CRAPI_PORT}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
-                CRAPI_SPEC="$CRAPI_SPEC_FILE"
-            else
-                if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
-                    log_info "Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${CRAPI_PORT}; re-patching."
-                fi
-                mkdir -p "$SPEC_CACHE_DIR"
-                CRAPI_SPEC=$(crapi_patch_openapi_spec \
+            if ! CRAPI_SPEC=$(crapi_resolve_spec \
                     "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
                     "$CRAPI_PORT" \
-                    "$SPEC_CACHE_DIR")
-                if [ "$CRAPI_PORT" != "$CRAPI_OPENAPI_SPEC_DEFAULT_PORT" ]; then
-                    log_info "Patched OpenAPI spec to use port $CRAPI_PORT"
-                fi
-            fi
-            # Guard against silent failure of crapi_patch_openapi_spec —
-            # an empty path here would pass `--api ""` to hadrian and
-            # produce an opaque downstream error.
-            if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
-                log_fail "Could not resolve crAPI OpenAPI spec (empty path or missing file)"
+                    "$SPEC_CACHE_DIR"); then
+                log_fail "Could not resolve crAPI OpenAPI spec"
                 set_status "crapi" "ERROR"
             else
                 run_hadrian "crapi" test rest \
@@ -772,6 +778,50 @@ EOF
     fi
 fi
 
+# ==== Test: crapi-planner ====
+# Runs the LLM-assisted planner against crAPI. The crapi block above runs
+# first whenever crapi-planner is requested (the gate there is the explicit
+# `targets_contains crapi || targets_contains crapi-planner`), so by the time
+# this block executes, CRAPI_AUTH_FILE and CRAPI_SPEC have already been
+# produced by that prior block — no additional signup, spec patching, or
+# cleanup is needed here. Gated on LLM provider availability: OpenAI key
+# wins, Anthropic key next, local ollama as fallback, otherwise SKIP cleanly.
+if targets_contains crapi-planner; then
+    log_header "Target 5: crapi-planner (REST + LLM planner)"
+
+    # Inherit crapi status — if crapi didn't produce a usable CRAPI_AUTH_FILE /
+    # CRAPI_SPEC (because crapi SKIPPED or ERRORED), we have nothing to plan
+    # against. The readiness predicate lives in crapi-helpers.sh so its branches
+    # are unit-tested (test/crapi/test_crapi_planner_inputs.sh) without Docker.
+    # SKIP rather than ERROR because the operator's environment, not a code
+    # fault, is the cause.
+    if ! crapi_planner_inputs_ready "$(get_status crapi)" "${CRAPI_AUTH_FILE:-}" "${CRAPI_SPEC:-}"; then
+        log_info "crapi-planner requires the crapi target to have run successfully first; skipping"
+        set_status "crapi-planner" "SKIP"
+    else
+        PLANNER_PROVIDER=$(detect_planner_provider)
+        if [ -z "$PLANNER_PROVIDER" ]; then
+            log_info "no LLM provider available (set OPENAI_API_KEY, ANTHROPIC_API_KEY, or run ollama with the model pulled), skipping crapi-planner"
+            set_status "crapi-planner" "SKIP"
+        else
+            log_info "Using LLM provider: ${PLANNER_PROVIDER}"
+            CRAPI_PLANNER_RESULT_FILE="${OUTPUT_DIR}/crapi-planner-${PLANNER_PROVIDER}-results.json"
+            run_hadrian "crapi-planner" test rest \
+                --api "$CRAPI_SPEC" \
+                --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
+                --auth "$CRAPI_AUTH_FILE" \
+                --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
+                --planner --planner-provider "$PLANNER_PROVIDER" \
+                --output json \
+                --output-file "$CRAPI_PLANNER_RESULT_FILE" \
+                $VERBOSE
+
+            set_findings "crapi-planner" "$(extract_finding_count "$CRAPI_PLANNER_RESULT_FILE")"
+            log_ok "crapi-planner: $(get_findings crapi-planner) findings in $(get_duration crapi-planner)s"
+        fi
+    fi
+fi
+
 # ==== Summary ====
 log_header "Test Summary"
 
@@ -785,14 +835,21 @@ TOTAL_FAIL=0
 TOTAL_SKIP=0
 
 ALL_TARGETS=""
-if echo "$TARGETS" | grep -q "vulnerable-api"; then
+if targets_contains vulnerable-api; then
     ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie"
 fi
-for extra in dvga grpc crapi; do
-    if echo "$TARGETS" | grep -q "${extra}"; then
+# Exact membership (targets_contains) so the substring overlap between "crapi"
+# and "crapi-planner" no longer adds phantom rows.
+for extra in dvga grpc crapi crapi-planner; do
+    if targets_contains "$extra"; then
         ALL_TARGETS="$ALL_TARGETS $extra"
     fi
 done
+# crapi runs as a prerequisite of crapi-planner; surface its row even when the
+# operator asked only for crapi-planner, so its PASS/SKIP/ERROR is visible.
+if targets_contains crapi-planner && ! targets_contains crapi; then
+    ALL_TARGETS="$ALL_TARGETS crapi"
+fi
 
 for target in $ALL_TARGETS; do
 

@@ -167,3 +167,55 @@ crapi_patch_openapi_spec() {
     fi
     echo "$dst"
 }
+
+# crapi_resolve_spec <src_spec> <port> <cache_dir>
+#
+# Resolves the OpenAPI spec path for hadrian. Preference order:
+#   1. If $CRAPI_SPEC_FILE (from .live-test-config) exists AND its baked-in
+#      port matches <port>, echo it unchanged.
+#   2. Otherwise, patch <src_spec> into <cache_dir> via
+#      crapi_patch_openapi_spec and echo the new path.
+#
+# Echoes the resolved path on stdout. Logs to stderr.
+# Returns non-zero if the resolved path is empty or does not exist.
+crapi_resolve_spec() {
+    local src_spec="$1" port="$2" cache_dir="$3"
+    local resolved=""
+
+    # Anchor the port match on a non-digit / end-of-line boundary so
+    # CRAPI_PORT=889 doesn't accept a stale spec pinned to localhost:8895
+    # (substring match).
+    if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ] \
+            && grep -qE "localhost:${port}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
+        resolved="$CRAPI_SPEC_FILE"
+    else
+        if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
+            echo "crapi_resolve_spec: cached spec at ${CRAPI_SPEC_FILE} does not match port=${port}; re-patching." >&2
+        fi
+        mkdir -p "$cache_dir"
+        resolved=$(crapi_patch_openapi_spec "$src_spec" "$port" "$cache_dir")
+    fi
+
+    if [ -z "$resolved" ] || [ ! -f "$resolved" ]; then
+        echo "crapi_resolve_spec: could not resolve spec (empty path or missing file)" >&2
+        return 1
+    fi
+    echo "$resolved"
+}
+
+# crapi_planner_inputs_ready <crapi_status> <auth_file> <spec_file>
+#
+# Pure predicate for the crapi-planner SKIP gate in run-live-tests.sh. The
+# planner can only run if the crapi target PASSed and produced a usable auth
+# file and OpenAPI spec on disk. All inputs are arguments so the decision is
+# unit-testable without Docker, crAPI, or an LLM provider.
+#
+# Returns 0 (ready) iff crapi_status == "PASS" AND both files are non-empty
+# paths that exist; returns 1 otherwise.
+crapi_planner_inputs_ready() {
+    local crapi_status="$1" auth_file="$2" spec_file="$3"
+    [ "$crapi_status" = "PASS" ] || return 1
+    [ -n "$auth_file" ] && [ -f "$auth_file" ] || return 1
+    [ -n "$spec_file" ] && [ -f "$spec_file" ] || return 1
+    return 0
+}

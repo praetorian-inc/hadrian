@@ -55,6 +55,10 @@ The setup script handles:
 ./test/run-live-tests.sh --targets dvga
 ./test/run-live-tests.sh --targets crapi
 
+# Run crAPI + LLM planner (opt-in; requires OPENAI_API_KEY, ANTHROPIC_API_KEY,
+# or a running ollama instance — SKIPped cleanly when no provider is available).
+OPENAI_API_KEY=sk-... ./test/run-live-tests.sh --targets crapi,crapi-planner
+
 # Verbose output
 ./test/run-live-tests.sh --verbose
 
@@ -97,7 +101,7 @@ For each target, `run-live-tests.sh` automatically:
 
 | Target | Auth Setup |
 |--------|-----------|
-| vulnerable-api | Tests all 3 auth methods sequentially (see below) |
+| vulnerable-api | Tests all 4 auth methods sequentially (see below) |
 | dvga | Logs in as admin, creates private pastes for BOLA testing |
 | grpc-server | Uses pre-configured static tokens |
 | crapi | Creates 4 users (admin, user1, user2, mechanic), gets tokens, uploads test videos |
@@ -111,13 +115,14 @@ test paths share the same accounts and spec-patching logic.
 
 ### vulnerable-api Multi-Auth Testing
 
-The vulnerable-api is tested three times, once per authentication method:
+The vulnerable-api is tested four times, once per authentication method:
 
 | Sub-target | Auth Method | How It Works |
 |------------|------------|--------------|
 | vulnerable-api-bearer | Bearer JWT | Logs in as admin/user1/user2 to get JWT tokens, writes dynamic auth config |
 | vulnerable-api-apikey | API Key | Uses static API keys (`X-API-Key` header) |
 | vulnerable-api-basic | Basic Auth | Uses username/password (HTTP Basic) |
+| vulnerable-api-cookie | Cookie | Uses cookie session identifiers (configurable cookie name) |
 
 The server is restarted with each `AUTH_METHOD` and API data is reset between runs to ensure consistent results.
 
@@ -254,6 +259,9 @@ test/
   setup-live-targets.sh    # One-time setup
   run-live-tests.sh        # End-to-end test runner
   test-llm-planner.sh      # LLM-planner regression tests
+  test_detect_planner_provider.sh  # Unit test for detect_planner_provider
+  target-helpers.sh        # Target-selection helper (targets_contains)
+  test_targets_contains.sh # Unit test for targets_contains
   README.md                # This file
   .live-test-config        # Auto-generated port + path config (gitignored)
   .live-test-cache/        # Patched OpenAPI specs (gitignored)
@@ -264,8 +272,12 @@ test/
   vulnerable-api/          # REST vulnerable API source + templates
   dvga/                    # GraphQL test config + templates
   grpc-server/             # gRPC server source + templates
+  llm-helpers.sh           # LLM provider detection helper
   crapi/                   # crAPI test config + templates
     crapi-helpers.sh       # Shared signup/login/spec-patch helpers
+    test_crapi_resolve_spec.sh        # Unit test for crapi_resolve_spec
+    test_crapi_patch_openapi_spec.sh  # Unit test for crapi_patch_openapi_spec
+    test_crapi_planner_inputs.sh      # Unit test for crapi_planner_inputs_ready (crapi-planner SKIP gate)
 ```
 
 ## Expected result
@@ -282,4 +294,5 @@ vulnerable-api-cookie     PASS       61           20s
 dvga                      PASS       6            3s
 grpc                      PASS       8            1s
 crapi                     PASS       26           37s
+crapi-planner             SKIP       0            0s
 ```
