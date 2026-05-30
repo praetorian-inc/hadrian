@@ -1,0 +1,51 @@
+# Hadrian roles configuration for vulnerable-graphql
+# Defines permissions for each role using <action>:<object>:<scope> format.
+# Mirrors dvga-roles.yaml but adapted for the in-house target.
+
+roles:
+  - name: admin
+    level: 100    # Highest privilege
+    permissions:
+      - "*:*:*"   # Full access to everything
+
+  - name: user
+    level: 50     # Regular user (victim role for BOLA tests)
+    permissions:
+      - "read:pastes:own"
+      - "write:pastes:own"
+      - "delete:pastes:own"
+      - "read:pastes:public"
+      - "read:users:own"
+
+  - name: guest
+    level: 0      # Unauthenticated / lowest privilege
+    permissions:
+      - "read:pastes:public"
+
+# Valid objects in this API
+objects:
+  - pastes
+  - users
+  - systemHealth
+
+# GraphQL operation to object mapping for BOLA/BFLA detection
+endpoints:
+  - path: /graphql
+    object: pastes
+    operations:
+      - paste
+      - pastes
+      - editPaste
+      - deletePaste
+      - createPaste
+      - deleteAllPastes
+
+  - path: /graphql
+    object: users
+    operations:
+      - users
+      - me
+      - createUser
+      - deleteUser
+      - promoteUser
+      - login

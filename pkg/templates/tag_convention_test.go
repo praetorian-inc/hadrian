@@ -19,8 +19,9 @@ func TestOWASPTagsConvention(t *testing.T) {
 	dirs := []string{
 		"../../templates/graphql",
 		"../../templates/grpc",
-		"../../test/dvga/templates/owasp",
+		"../../test/vulnerable-graphql/templates/owasp",
 		"../../test/grpc-server/templates/owasp",
+		"../../test/vulnerable-rest-complex/templates/owasp",
 	}
 
 	for _, dir := range dirs {

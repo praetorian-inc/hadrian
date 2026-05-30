@@ -2,22 +2,25 @@
 # =============================================================================
 # run-live-tests.sh
 #
-# Runs Hadrian security tests against all four vulnerable targets:
-#   1. vulnerable-api (REST - Bearer/APIKey/Basic auth)
-#   2. dvga (GraphQL - Damn Vulnerable GraphQL Application)
-#   3. grpc-server (gRPC - vulnerable gRPC service)
-#   4. crapi (REST - OWASP crAPI, requires external setup)
+# Runs Hadrian security tests against all four in-house vulnerable targets:
+#   1. vulnerable-api          (REST  - Bearer/APIKey/Basic/Cookie auth)
+#   2. vulnerable-graphql      (GraphQL - in-house vulnerable GraphQL target)
+#   3. grpc-server             (gRPC  - vulnerable gRPC service)
+#   4. vulnerable-rest-complex (REST  - multi-resource: customers/vehicles/mechanics/orders)
+#
+# Every target is a local Go binary — no container runtime is required, so the
+# full suite runs in a fresh devcontainer (LAB-2750).
 #
 # Prerequisites:
-#   - Run ./test/setup-live-targets.sh first (one-time setup)
-#   - Or manually: Go 1.21+, Docker (for dvga/crapi), hadrian binary
+#   - Run ./test/setup-live-targets.sh first (one-time build), or
+#   - Go 1.21+ and a built hadrian binary (this script can build them).
 #
 # Usage:
 #   ./test/run-live-tests.sh [options]
 #
 # Options:
 #   --targets <list>      Comma-separated targets to test (default: all)
-#                         Valid: vulnerable-api,dvga,grpc,crapi
+#                         Valid: vulnerable-api,vulnerable-graphql,grpc,vulnerable-rest-complex
 #   --verbose             Enable verbose Hadrian output
 #   --no-build            Skip building hadrian and target binaries
 #   --no-start            Don't start/stop services (assume already running)
@@ -25,10 +28,10 @@
 #   --help                Show this help message
 #
 # Examples:
-#   ./test/run-live-tests.sh                          # Run all targets
-#   ./test/run-live-tests.sh --targets vulnerable-api # Just vulnerable-api
-#   ./test/run-live-tests.sh --targets dvga,grpc      # GraphQL + gRPC
-#   ./test/run-live-tests.sh --verbose --no-build     # Verbose, skip build
+#   ./test/run-live-tests.sh                                  # Run all targets
+#   ./test/run-live-tests.sh --targets vulnerable-api         # Just vulnerable-api
+#   ./test/run-live-tests.sh --targets vulnerable-graphql,grpc # GraphQL + gRPC
+#   ./test/run-live-tests.sh --verbose --no-build             # Verbose, skip build
 # =============================================================================
 
 set -euo pipefail
@@ -40,12 +43,10 @@ HADRIAN_BIN="${HADRIAN_BIN:-${REPO_ROOT}/hadrian}"
 OUTPUT_DIR="${SCRIPT_DIR}/.results"
 CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
-# Load config from setup script if it exists (ports, paths).
+# Load config from setup script if it exists (port assignments).
 # The regex requires every value to be double-quoted so `source` can't
-# word-split a path containing whitespace into a command (the previous
-# regex permitted unquoted values with spaces, which made
-# `--crapi-dir '/tmp/foo bar'` exec `bar`). Quoted form is what
-# setup-live-targets.sh writes; an old/loose config will be rejected
+# word-split a path containing whitespace into a command. Quoted form is
+# what setup-live-targets.sh writes; an old/loose config will be rejected
 # loudly — re-run setup to regenerate.
 if [ -f "$CONFIG_FILE" ]; then
     if grep -qvE '^[[:space:]]*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*="[A-Za-z0-9_./:@,+ -]*"$' "$CONFIG_FILE"; then
@@ -61,22 +62,15 @@ fi
 # constants instead of hardcoded literals so a future port move only has
 # to touch one place per target.
 VULN_API_DEFAULT_PORT=9889
-DVGA_DEFAULT_PORT=5013
+VULN_GRAPHQL_DEFAULT_PORT=5013
 GRPC_DEFAULT_PORT=50051
-# CRAPI default port comes from crapi-helpers.sh
-# (CRAPI_OPENAPI_SPEC_DEFAULT_PORT, sourced below).
+VULN_REST_COMPLEX_DEFAULT_PORT=8888
 
 # Target ports (env vars > config file > defaults)
 VULN_API_PORT="${VULN_API_PORT:-$VULN_API_DEFAULT_PORT}"
-DVGA_PORT="${DVGA_PORT:-$DVGA_DEFAULT_PORT}"
+VULN_GRAPHQL_PORT="${VULN_GRAPHQL_PORT:-$VULN_GRAPHQL_DEFAULT_PORT}"
 GRPC_PORT="${GRPC_PORT:-$GRPC_DEFAULT_PORT}"
-
-# Shared crAPI helpers (canonical users, signup/login, spec patcher).
-# shellcheck source=test/crapi/crapi-helpers.sh
-. "${SCRIPT_DIR}/crapi/crapi-helpers.sh"
-
-# CRAPI_PORT default tracks the helper's CRAPI_OPENAPI_SPEC_DEFAULT_PORT.
-CRAPI_PORT="${CRAPI_PORT:-$CRAPI_OPENAPI_SPEC_DEFAULT_PORT}"
+VULN_REST_COMPLEX_PORT="${VULN_REST_COMPLEX_PORT:-$VULN_REST_COMPLEX_DEFAULT_PORT}"
 
 # Require Bash 4+ for associative arrays
 if [ "${BASH_VERSINFO[0]}" -lt 4 ]; then
@@ -94,14 +88,14 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # Defaults
-TARGETS="vulnerable-api,dvga,grpc,crapi"
+TARGETS="vulnerable-api,vulnerable-graphql,grpc,vulnerable-rest-complex"
 VERBOSE=""
 DO_BUILD=true
 DO_START=true
 
 # Track results per target using associative arrays
 declare -A STATUS FINDINGS DURATION
-for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie dvga grpc crapi; do
+for _t in vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie vulnerable-graphql grpc vulnerable-rest-complex; do
     STATUS["$_t"]="NOT_RUN"
     FINDINGS["$_t"]="0"
     DURATION["$_t"]="0"
@@ -194,14 +188,6 @@ cleanup() {
             wait "$pid" 2>/dev/null || true
         fi
     done
-
-    # Stop dvga container if we started it
-    if [ "$DO_START" = true ] && command -v docker >/dev/null 2>&1; then
-        if docker ps -q --filter "name=hadrian-dvga" 2>/dev/null | grep -q .; then
-            log_info "Stopping dvga container"
-            docker rm -f hadrian-dvga 2>/dev/null || true
-        fi
-    fi
 }
 
 trap cleanup EXIT
@@ -252,39 +238,42 @@ if [ "$DO_BUILD" = true ]; then
         log_ok "vulnerable-api built"
     fi
 
+    if echo "$TARGETS" | grep -q "vulnerable-graphql"; then
+        log_info "Building vulnerable-graphql..."
+        (cd "${SCRIPT_DIR}/vulnerable-graphql" && go build -o vulnerable-graphql .)
+        log_ok "vulnerable-graphql built"
+    fi
+
+    if echo "$TARGETS" | grep -q "vulnerable-rest-complex"; then
+        log_info "Building vulnerable-rest-complex..."
+        (cd "${SCRIPT_DIR}/vulnerable-rest-complex" && go build -o vulnerable-rest-complex .)
+        log_ok "vulnerable-rest-complex built"
+    fi
+
     if echo "$TARGETS" | grep -q "grpc"; then
         log_info "Building grpc-server..."
         (cd "${SCRIPT_DIR}/grpc-server" && {
             # Check for actual generated files, not just directory existence
-            # This handles the case where pb/ exists but is empty from a failed run
+            # (handles a pb/ left empty by a previously failed run). Generate
+            # non-interactively — setup-live-targets.sh is the documented
+            # prerequisite, so a missing pb/ here means the operator ran the
+            # runner directly; do NOT prompt (a `read` would hang CI).
             if [ ! -f pb/service.pb.go ] || [ ! -f pb/service_grpc.pb.go ]; then
-                printf "[?] gRPC server requires generated protobuf code.\n"
-                printf "    This will run protoc to generate Go code from service.proto.\n"
-                printf "    Generate protobuf code now? [y/N] "
-                read -r REPLY
-                if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ]; then
-                    if command -v protoc >/dev/null 2>&1; then
-                        log_info "Generating protobuf code..."
-                        # Clean up any empty/corrupted pb directory from previous failed runs
-                        rm -rf pb
-                        mkdir -p pb
-                        if ! protoc --go_out=pb --go_opt=paths=source_relative \
-                            --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-                            service.proto; then
-                            log_fail "protoc failed to generate Go code"
-                            rm -rf pb  # Clean up on failure
-                            exit 1
-                        fi
-                        log_ok "Protobuf code generated"
-                    else
-                        log_fail "protoc not found. Install with: brew install protobuf"
-                        log_fail "Then install Go plugins:"
-                        log_fail "  go install google.golang.org/protobuf/cmd/protoc-gen-go@latest"
-                        log_fail "  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest"
+                if command -v protoc >/dev/null 2>&1; then
+                    log_info "Generating protobuf code (run ./test/setup-live-targets.sh to pre-generate)..."
+                    rm -rf pb
+                    mkdir -p pb
+                    if ! protoc --go_out=pb --go_opt=paths=source_relative \
+                        --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+                        service.proto; then
+                        log_fail "protoc failed to generate Go code"
+                        rm -rf pb  # Clean up on failure
                         exit 1
                     fi
+                    log_ok "Protobuf code generated"
                 else
-                    log_fail "Skipping grpc-server (protobuf files required). Run 'make proto' in test/grpc-server/ first."
+                    log_fail "grpc-server needs generated protobuf code and protoc is not installed."
+                    log_fail "Run ./test/setup-live-targets.sh first, or 'make proto' in test/grpc-server/."
                     exit 1
                 fi
             fi
@@ -333,7 +322,7 @@ if echo "$TARGETS" | grep -q "vulnerable-api"; then
 
         if [ "$DO_START" = true ]; then
             # Kill any existing instance
-            pkill -f "vulnerable-api$" 2>/dev/null || true
+            pkill -f "/vulnerable-api$" 2>/dev/null || true
             sleep 1
 
             log_info "Starting vulnerable-api on port $VULN_API_PORT (auth: ${auth_method})..."
@@ -466,127 +455,93 @@ EOF
     done
 fi
 
-# ==== Test: dvga (GraphQL) ====
-if echo "$TARGETS" | grep -q "dvga"; then
-    log_header "Target 2: dvga (GraphQL)"
+# ==== Test: vulnerable-graphql (GraphQL) ====
+if echo "$TARGETS" | grep -q "vulnerable-graphql"; then
+    log_header "Target 2: vulnerable-graphql (GraphQL)"
 
     if [ "$DO_START" = true ]; then
-        if ! command -v docker >/dev/null 2>&1; then
-            log_warn "Docker not available, skipping dvga"
-            set_status "dvga" "SKIP"
-        else
-            docker rm -f hadrian-dvga 2>/dev/null || true
-            log_info "Starting dvga container on port $DVGA_PORT..."
-            docker run -d -p "${DVGA_PORT}:5013" -e WEB_HOST=0.0.0.0 --name hadrian-dvga dolevf/dvga:latest 2>/dev/null || {
-                log_warn "Failed to start dvga container (image may not be pulled)"
-                log_info "Pull with: docker pull dolevf/dvga:latest"
-                set_status "dvga" "SKIP"
-            }
+        pkill -f "/vulnerable-graphql$" 2>/dev/null || true
+        sleep 1
 
-            if [ "$(get_status dvga)" != "SKIP" ]; then
-                wait_for_http "http://localhost:${DVGA_PORT}/" "dvga" 60 || {
-                    log_warn "dvga container logs:"
-                    docker logs hadrian-dvga 2>&1 | tail -20
-                    set_status "dvga" "SKIP"
-                    log_warn "Skipping dvga tests"
-                }
-            fi
-        fi
+        log_info "Starting vulnerable-graphql on port $VULN_GRAPHQL_PORT..."
+        (cd "${SCRIPT_DIR}/vulnerable-graphql" && PORT="${VULN_GRAPHQL_PORT}" ./vulnerable-graphql) &
+        LAST_PID=$!
+        PIDS_TO_CLEANUP="$PIDS_TO_CLEANUP $LAST_PID"
+        wait_for_http "http://localhost:${VULN_GRAPHQL_PORT}/health" "vulnerable-graphql" 15 || {
+            set_status "vulnerable-graphql" "SKIP"
+            log_warn "Skipping vulnerable-graphql tests"
+        }
     fi
 
-    if [ "$(get_status dvga)" != "SKIP" ]; then
-        DVGA_ENDPOINT="http://localhost:${DVGA_PORT}/graphql"
+    if [ "$(get_status vulnerable-graphql)" != "SKIP" ]; then
+        GRAPHQL_ENDPOINT="http://localhost:${VULN_GRAPHQL_PORT}/graphql"
 
-        # ---- Setup: Acquire auth tokens for BOLA testing ----
-        log_info "Setting up dvga auth tokens..."
+        # ---- Acquire auth tokens via the login mutation ----
+        # Seed users (admin/user1/user2) and their pastes are created at
+        # server startup, so unlike the old containerized flow we don't need
+        # to provision data over the wire — just log in.
+        log_info "Acquiring vulnerable-graphql JWT tokens..."
 
-        dvga_get_token() {
+        graphql_get_token() {
             local username="$1"
             local password="$2"
-            local result
-            result=$(curl -sf -X POST "$DVGA_ENDPOINT" \
+            curl -sf -X POST "$GRAPHQL_ENDPOINT" \
                 -H "Content-Type: application/json" \
-                --data-raw "{\"query\":\"mutation { login(username: \\\"$username\\\", password: \\\"$password\\\") { accessToken } }\"}" 2>/dev/null)
-            echo "$result" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['data']['login']['accessToken'])" 2>/dev/null || echo ""
+                --data-raw "{\"query\":\"mutation { login(username: \\\"$username\\\", password: \\\"$password\\\") { accessToken } }\"}" 2>/dev/null \
+                | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['login']['accessToken'])" 2>/dev/null || echo ""
         }
 
-        DVGA_ADMIN_TOKEN=""
-        for pass in "changeme" "admin" "password" "admin123"; do
-            DVGA_ADMIN_TOKEN=$(dvga_get_token "admin" "$pass")
-            if [ -n "$DVGA_ADMIN_TOKEN" ]; then
-                log_ok "dvga admin token acquired"
-                break
-            fi
-        done
+        GRAPHQL_ADMIN_TOKEN=$(graphql_get_token "admin" "admin123")
+        GRAPHQL_USER1_TOKEN=$(graphql_get_token "user1" "user1pass")
+        GRAPHQL_USER2_TOKEN=$(graphql_get_token "user2" "user2pass")
 
-        DVGA_OPERATOR_TOKEN=""
-        for pass in "changeme" "operator" "password"; do
-            DVGA_OPERATOR_TOKEN=$(dvga_get_token "operator" "$pass")
-            if [ -n "$DVGA_OPERATOR_TOKEN" ]; then
-                log_ok "dvga operator token acquired"
-                break
-            fi
-        done
-        if [ -z "$DVGA_OPERATOR_TOKEN" ]; then
-            DVGA_OPERATOR_TOKEN="$DVGA_ADMIN_TOKEN"
-            log_info "operator token unavailable, using admin token"
-        fi
-
-        if [ -z "$DVGA_ADMIN_TOKEN" ]; then
-            log_warn "Failed to acquire dvga tokens, running without auth"
-        else
-            log_info "Creating dvga test data (pastes for BOLA)..."
-            curl -sf -X POST "$DVGA_ENDPOINT" \
-                -H "Content-Type: application/json" \
-                -H "Authorization: Bearer $DVGA_ADMIN_TOKEN" \
-                -d '{"query": "mutation { createPaste(title: \"Admin Confidential\", content: \"Secret admin data - DO NOT ACCESS\", public: false) { paste { id } } }"}' >/dev/null 2>&1 && \
-                log_ok "Created admin private paste" || log_warn "Failed to create admin paste"
-            curl -sf -X POST "$DVGA_ENDPOINT" \
-                -H "Content-Type: application/json" \
-                -H "Authorization: Bearer $DVGA_ADMIN_TOKEN" \
-                -d '{"query": "mutation { createPaste(title: \"Victim PII\", content: \"SSN: 123-45-6789, Credit Card: 4111-1111-1111-1111\", public: false) { paste { id } } }"}' >/dev/null 2>&1 && \
-                log_ok "Created victim PII paste" || log_warn "Failed to create victim paste"
-
-            DVGA_AUTH_FILE="${OUTPUT_DIR}/dvga-auth.yaml"
-            (umask 077; cat > "$DVGA_AUTH_FILE" <<EOF
+        GRAPHQL_AUTH_FLAGS=""
+        if [ -n "$GRAPHQL_ADMIN_TOKEN" ] && [ -n "$GRAPHQL_USER1_TOKEN" ] && [ -n "$GRAPHQL_USER2_TOKEN" ]; then
+            log_ok "vulnerable-graphql tokens acquired (admin, user1, user2)"
+            GRAPHQL_AUTH_FILE="${OUTPUT_DIR}/vulnerable-graphql-auth.yaml"
+            # attacker -> user2 (lower priv), victim -> user1 (higher priv).
+            (umask 077; cat > "$GRAPHQL_AUTH_FILE" <<EOF
 method: bearer
 location: header
 key_name: Authorization
 roles:
   admin:
-    token: "${DVGA_ADMIN_TOKEN}"
-  operator:
-    token: "${DVGA_OPERATOR_TOKEN}"
+    token: "${GRAPHQL_ADMIN_TOKEN}"
+  user1:
+    token: "${GRAPHQL_USER1_TOKEN}"
+  user2:
+    token: "${GRAPHQL_USER2_TOKEN}"
   attacker:
-    token: "${DVGA_OPERATOR_TOKEN}"
+    token: "${GRAPHQL_USER2_TOKEN}"
   victim:
-    token: "${DVGA_ADMIN_TOKEN}"
+    token: "${GRAPHQL_USER1_TOKEN}"
 EOF
             )
-            log_ok "dvga auth config written"
+            GRAPHQL_AUTH_FLAGS="--auth ${GRAPHQL_AUTH_FILE} --roles ${SCRIPT_DIR}/vulnerable-graphql/roles.yaml"
+        else
+            log_warn "Failed to acquire vulnerable-graphql tokens, running without auth"
         fi
 
         # ---- Run tests ----
-        RESULT_FILE="${OUTPUT_DIR}/dvga-results.json"
-
-        DVGA_AUTH_FLAGS=""
-        if [ -n "${DVGA_ADMIN_TOKEN:-}" ]; then
-            DVGA_AUTH_FLAGS="--auth ${DVGA_AUTH_FILE} --roles ${SCRIPT_DIR}/dvga/dvga-roles.yaml"
-        fi
+        # NOTE: unlike the old containerized flow we do NOT pass --skip-builtin-checks.
+        # The in-house target deliberately enables introspection and applies
+        # no depth/alias limits, so hadrian's built-in GraphQL checks
+        # (introspection, alias-based DoS, field duplication) fire alongside
+        # the template-driven BOLA/BFLA/data-exposure tests (LAB-2750).
+        RESULT_FILE="${OUTPUT_DIR}/vulnerable-graphql-results.json"
 
         # shellcheck disable=SC2086
-        run_hadrian "dvga" test graphql \
-            --target "http://localhost:${DVGA_PORT}" \
-            --schema "${SCRIPT_DIR}/dvga/schema.graphql" \
-            --template-dir "${SCRIPT_DIR}/dvga/templates/owasp" \
-            --skip-builtin-checks \
+        run_hadrian "vulnerable-graphql" test graphql \
+            --target "http://localhost:${VULN_GRAPHQL_PORT}" \
+            --schema "${SCRIPT_DIR}/vulnerable-graphql/schema.graphql" \
+            --template-dir "${SCRIPT_DIR}/vulnerable-graphql/templates/owasp" \
             --output json \
             --output-file "$RESULT_FILE" \
-            $DVGA_AUTH_FLAGS \
+            $GRAPHQL_AUTH_FLAGS \
             $VERBOSE
 
-        set_findings "dvga" "$(extract_finding_count "$RESULT_FILE")"
-        log_ok "dvga: $(get_findings dvga) findings in $(get_duration dvga)s"
+        set_findings "vulnerable-graphql" "$(extract_finding_count "$RESULT_FILE")"
+        log_ok "vulnerable-graphql: $(get_findings vulnerable-graphql) findings in $(get_duration vulnerable-graphql)s"
     fi
 fi
 
@@ -595,7 +550,7 @@ if echo "$TARGETS" | grep -q "grpc"; then
     log_header "Target 3: grpc-server (gRPC)"
 
     if [ "$DO_START" = true ]; then
-        pkill -f "grpc-server$" 2>/dev/null || true
+        pkill -f "/grpc-server$" 2>/dev/null || true
         sleep 1
 
         log_info "Starting grpc-server on port $GRPC_PORT..."
@@ -632,142 +587,100 @@ if echo "$TARGETS" | grep -q "grpc"; then
     fi
 fi
 
-# ==== Test: crapi ====
-if echo "$TARGETS" | grep -q "crapi"; then
-    log_header "Target 4: crapi (REST)"
+# ==== Test: vulnerable-rest-complex ====
+if echo "$TARGETS" | grep -q "vulnerable-rest-complex"; then
+    log_header "Target 4: vulnerable-rest-complex (REST)"
 
-    CRAPI_URL="http://localhost:${CRAPI_PORT}"
+    if [ "$DO_START" = true ]; then
+        pkill -f "/vulnerable-rest-complex$" 2>/dev/null || true
+        sleep 1
 
-    if ! curl -s -o /dev/null -w "%{http_code}" "${CRAPI_URL}/identity/api/auth/login" 2>/dev/null | grep -qE "^[2-4]"; then
-        log_warn "crapi not detected on port $CRAPI_PORT"
-        log_info "To set up crapi:"
-        log_info "  git clone https://github.com/OWASP/crAPI.git"
-        log_info "  cd crAPI/deploy/docker && docker compose up -d"
-        set_status "crapi" "SKIP"
+        log_info "Starting vulnerable-rest-complex on port $VULN_REST_COMPLEX_PORT..."
+        (cd "${SCRIPT_DIR}/vulnerable-rest-complex" && PORT="${VULN_REST_COMPLEX_PORT}" ./vulnerable-rest-complex) &
+        LAST_PID=$!
+        PIDS_TO_CLEANUP="$PIDS_TO_CLEANUP $LAST_PID"
+        wait_for_http "http://localhost:${VULN_REST_COMPLEX_PORT}/health" "vulnerable-rest-complex" 15 || {
+            set_status "vulnerable-rest-complex" "SKIP"
+            log_warn "Skipping vulnerable-rest-complex tests"
+        }
     fi
 
-    if [ "$(get_status crapi)" != "SKIP" ]; then
-        # ---- Setup: Auto-create users and acquire tokens ----
-        # Canonical user identities, signup, and login come from
-        # crapi-helpers.sh (sourced at the top of this script). That file
-        # is the single source of truth for credentials so this script and
-        # test-llm-planner.sh can't drift.
-        log_info "Setting up crapi test users and tokens..."
+    if [ "$(get_status vulnerable-rest-complex)" != "SKIP" ]; then
+        REST_COMPLEX_URL="http://localhost:${VULN_REST_COMPLEX_PORT}"
 
-        if ! crapi_setup_users "$CRAPI_URL"; then
-            log_fail "crapi user provisioning failed (see error above)"
-            set_status "crapi" "ERROR"
-        fi
-    fi
+        # Reset data to a known seeded state before testing.
+        curl -sf -X POST "${REST_COMPLEX_URL}/api/reset" >/dev/null 2>&1 || true
 
-    # Re-check status: skip the test phase if provisioning errored.
-    if [ "$(get_status crapi)" != "SKIP" ] && [ "$(get_status crapi)" != "ERROR" ]; then
-        log_ok "crapi users created/verified"
+        # ---- Acquire tokens via login ----
+        log_info "Acquiring vulnerable-rest-complex JWT tokens..."
 
-        CRAPI_ADMIN_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_ADMIN_EMAIL"    "$CRAPI_PASSWORD")
-        CRAPI_USER_TOKEN=$(crapi_login     "$CRAPI_URL" "$CRAPI_USER_EMAIL"     "$CRAPI_PASSWORD")
-        CRAPI_USER2_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_USER2_EMAIL"    "$CRAPI_PASSWORD")
-        CRAPI_MECHANIC_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
+        rest_complex_get_token() {
+            local username="$1"
+            local password="$2"
+            curl -sf -X POST "${REST_COMPLEX_URL}/api/auth/login" \
+                -H "Content-Type: application/json" \
+                --data-binary @- <<EOF | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo ""
+{"username":"${username}","password":"${password}"}
+EOF
+        }
 
-        # All four tokens must be acquired — admin and mechanic are used by
-        # role-specific templates (BFLA admin-video-delete, mechanic
-        # workflows). A missing token here would silently produce
-        # `token: ""` in the auth file and degrade those tests to anonymous
-        # requests. Fail loudly instead.
-        if [ -z "$CRAPI_ADMIN_TOKEN" ] || [ -z "$CRAPI_USER_TOKEN" ] \
-                || [ -z "$CRAPI_USER2_TOKEN" ] || [ -z "$CRAPI_MECHANIC_TOKEN" ]; then
-            log_fail "Failed to acquire crapi tokens (admin/user1/user2/mechanic must all be non-empty)"
-            set_status "crapi" "ERROR"
+        RC_ADMIN_TOKEN=$(rest_complex_get_token "admin" "admin123")
+        RC_USER1_TOKEN=$(rest_complex_get_token "user1" "user1pass")
+        RC_USER2_TOKEN=$(rest_complex_get_token "user2" "user2pass")
+        RC_MECHANIC_TOKEN=$(rest_complex_get_token "mechanic1" "mech1pass")
+
+        # All four tokens must be acquired — admin and mechanic drive the
+        # role-specific BFLA templates. A missing token would silently
+        # degrade those tests to anonymous requests, so fail loudly.
+        if [ -z "$RC_ADMIN_TOKEN" ] || [ -z "$RC_USER1_TOKEN" ] \
+                || [ -z "$RC_USER2_TOKEN" ] || [ -z "$RC_MECHANIC_TOKEN" ]; then
+            log_fail "Failed to acquire vulnerable-rest-complex tokens (admin/user1/user2/mechanic must all be non-empty)"
+            set_status "vulnerable-rest-complex" "ERROR"
         else
-            log_ok "crapi tokens acquired"
+            log_ok "vulnerable-rest-complex tokens acquired"
 
-            # Upload test videos for BFLA/BOPLA tests
-            log_info "Setting up crapi test videos..."
-            TMP_VIDEO=$(mktemp "${TMPDIR:-/tmp}/hadrian_test_video.XXXXXXXXXX.mp4")
-            echo "test video content for hadrian security testing" > "$TMP_VIDEO"
-
-            for token in "$CRAPI_USER_TOKEN" "$CRAPI_USER2_TOKEN" "$CRAPI_MECHANIC_TOKEN"; do
-                if [ -n "$token" ]; then
-                    curl -sf -X POST "${CRAPI_URL}/identity/api/v2/user/videos" \
-                        -H "Authorization: Bearer $token" \
-                        -F "file=@$TMP_VIDEO" \
-                        -F "videoName=hadrian_test_video" >/dev/null 2>&1 || true
-                fi
-            done
-            rm -f "$TMP_VIDEO"
-            log_ok "crapi test videos uploaded"
-
-            CRAPI_AUTH_FILE="${OUTPUT_DIR}/crapi-auth.yaml"
-            (umask 077; cat > "$CRAPI_AUTH_FILE" <<EOF
+            REST_COMPLEX_AUTH_FILE="${OUTPUT_DIR}/vulnerable-rest-complex-auth.yaml"
+            (umask 077; cat > "$REST_COMPLEX_AUTH_FILE" <<EOF
 method: bearer
 location: header
 key_name: Authorization
 roles:
   admin:
-    token: "${CRAPI_ADMIN_TOKEN}"
+    token: "${RC_ADMIN_TOKEN}"
   mechanic:
-    token: "${CRAPI_MECHANIC_TOKEN}"
-  user:
-    token: "${CRAPI_USER_TOKEN}"
+    token: "${RC_MECHANIC_TOKEN}"
+  user1:
+    token: "${RC_USER1_TOKEN}"
   user2:
-    token: "${CRAPI_USER2_TOKEN}"
+    token: "${RC_USER2_TOKEN}"
   anonymous:
     token: ""
+  no_header:
+    no_auth: true
 EOF
             )
 
-            RESULT_FILE="${OUTPUT_DIR}/crapi-results.json"
-
-            # Prefer the spec patched at setup time (CRAPI_SPEC_FILE in
-            # .live-test-config), but only if its baked-in port matches
-            # the port we're about to test against. If the operator
-            # overrides CRAPI_PORT at runtime (e.g.
-            # `CRAPI_PORT=9999 ./run-live-tests.sh`), the cached spec
-            # will be pinned to the old port and silently mis-route
-            # every request — so re-patch in that case.
-            # When re-patching, write into the same SPEC_CACHE_DIR
-            # setup-live-targets.sh uses so the artifact lives alongside
-            # the cache rather than mixed into the JSON results dir.
-            SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
-            CRAPI_SPEC=""
-            # Anchor the port match on a non-digit / end-of-line boundary
-            # so CRAPI_PORT=889 doesn't accept a stale spec pinned to
-            # localhost:8895 (substring match).
-            if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ] \
-                    && grep -qE "localhost:${CRAPI_PORT}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
-                CRAPI_SPEC="$CRAPI_SPEC_FILE"
-            else
-                if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
-                    log_info "Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${CRAPI_PORT}; re-patching."
-                fi
-                mkdir -p "$SPEC_CACHE_DIR"
-                CRAPI_SPEC=$(crapi_patch_openapi_spec \
-                    "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
-                    "$CRAPI_PORT" \
-                    "$SPEC_CACHE_DIR")
-                if [ "$CRAPI_PORT" != "$CRAPI_OPENAPI_SPEC_DEFAULT_PORT" ]; then
-                    log_info "Patched OpenAPI spec to use port $CRAPI_PORT"
-                fi
+            # If using a non-default port, patch the OpenAPI spec's server URL.
+            REST_COMPLEX_SPEC="${SCRIPT_DIR}/vulnerable-rest-complex/openapi.yaml"
+            if [ "$VULN_REST_COMPLEX_PORT" != "$VULN_REST_COMPLEX_DEFAULT_PORT" ]; then
+                REST_COMPLEX_SPEC="${OUTPUT_DIR}/vulnerable-rest-complex-openapi.yaml"
+                sed "s|http://localhost:${VULN_REST_COMPLEX_DEFAULT_PORT}|http://localhost:${VULN_REST_COMPLEX_PORT}|g" \
+                    "${SCRIPT_DIR}/vulnerable-rest-complex/openapi.yaml" > "$REST_COMPLEX_SPEC"
+                log_info "Patched OpenAPI spec to use port $VULN_REST_COMPLEX_PORT"
             fi
-            # Guard against silent failure of crapi_patch_openapi_spec —
-            # an empty path here would pass `--api ""` to hadrian and
-            # produce an opaque downstream error.
-            if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
-                log_fail "Could not resolve crAPI OpenAPI spec (empty path or missing file)"
-                set_status "crapi" "ERROR"
-            else
-                run_hadrian "crapi" test rest \
-                    --api "$CRAPI_SPEC" \
-                    --roles "${SCRIPT_DIR}/crapi/roles.yaml" \
-                    --auth "$CRAPI_AUTH_FILE" \
-                    --template-dir "${SCRIPT_DIR}/crapi/templates/owasp" \
-                    --output json \
-                    --output-file "$RESULT_FILE" \
-                    $VERBOSE
 
-                set_findings "crapi" "$(extract_finding_count "$RESULT_FILE")"
-                log_ok "crapi: $(get_findings crapi) findings in $(get_duration crapi)s"
-            fi
+            RESULT_FILE="${OUTPUT_DIR}/vulnerable-rest-complex-results.json"
+            run_hadrian "vulnerable-rest-complex" test rest \
+                --api "$REST_COMPLEX_SPEC" \
+                --roles "${SCRIPT_DIR}/vulnerable-rest-complex/roles.yaml" \
+                --auth "$REST_COMPLEX_AUTH_FILE" \
+                --template-dir "${SCRIPT_DIR}/vulnerable-rest-complex/templates/owasp" \
+                --output json \
+                --output-file "$RESULT_FILE" \
+                $VERBOSE
+
+            set_findings "vulnerable-rest-complex" "$(extract_finding_count "$RESULT_FILE")"
+            log_ok "vulnerable-rest-complex: $(get_findings vulnerable-rest-complex) findings in $(get_duration vulnerable-rest-complex)s"
         fi
     fi
 fi
@@ -776,8 +689,8 @@ fi
 log_header "Test Summary"
 
 echo ""
-printf "${BOLD}%-25s %-10s %-12s %-10s${NC}\n" "TARGET" "STATUS" "FINDINGS" "DURATION"
-printf "%-25s %-10s %-12s %-10s\n" "-------------------------" "----------" "------------" "----------"
+printf "${BOLD}%-27s %-10s %-12s %-10s${NC}\n" "TARGET" "STATUS" "FINDINGS" "DURATION"
+printf "%-27s %-10s %-12s %-10s\n" "---------------------------" "----------" "------------" "----------"
 
 TOTAL_FINDINGS=0
 TOTAL_PASS=0
@@ -788,11 +701,15 @@ ALL_TARGETS=""
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
     ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie"
 fi
-for extra in dvga grpc crapi; do
-    if echo "$TARGETS" | grep -q "${extra}"; then
-        ALL_TARGETS="$ALL_TARGETS $extra"
-    fi
-done
+if echo "$TARGETS" | grep -q "vulnerable-graphql"; then
+    ALL_TARGETS="$ALL_TARGETS vulnerable-graphql"
+fi
+if echo "$TARGETS" | grep -q "grpc"; then
+    ALL_TARGETS="$ALL_TARGETS grpc"
+fi
+if echo "$TARGETS" | grep -q "vulnerable-rest-complex"; then
+    ALL_TARGETS="$ALL_TARGETS vulnerable-rest-complex"
+fi
 
 for target in $ALL_TARGETS; do
 
@@ -829,7 +746,7 @@ for target in $ALL_TARGETS; do
         duration_str="-"
     fi
 
-    printf "${status_color}%-25s %-10s %-12s %-10s${NC}\n" "$target" "$status" "$findings" "$duration_str"
+    printf "${status_color}%-27s %-10s %-12s %-10s${NC}\n" "$target" "$status" "$findings" "$duration_str"
 done
 
 echo ""

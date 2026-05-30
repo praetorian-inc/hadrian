@@ -1,0 +1,9 @@
+# Build artifacts
+vulnerable-rest-complex
+
+# Test artifacts
+*.test
+*.out
+
+# Go vendor directory
+vendor/
