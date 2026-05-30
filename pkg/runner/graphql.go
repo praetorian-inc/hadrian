@@ -118,7 +118,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
 
 	// Output options
-	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
+	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown, sarif")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Output file path")
 	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids-limit", 1, "Limit request IDs in output (0 = show all)")
 	cmd.Flags().BoolVar(&config.Verbose, "verbose", false, "Verbose output")
@@ -238,8 +238,24 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs, config.Verbose)
 
+	// Load + compile GraphQL templates once and feed the same slice to both
+	// the reporter (for SARIF rule enrichment) and the test executor. Avoids
+	// the previous double-load and guarantees the SARIF rules section matches
+	// the templates actually exercised at runtime.
+	gqlTemplateDir := config.TemplateDir
+	if gqlTemplateDir == "" {
+		gqlTemplateDir = getTemplateDir("./templates/graphql")
+	}
+	compiledTemplates, lerr := loadAndCompileGraphQLTemplates(gqlTemplateDir, config.Templates)
+	if lerr != nil {
+		// Treat as non-fatal: the GraphQL command runs scanner-based checks
+		// even when no templates are available. Surface so the operator can
+		// see why the SARIF rules section is empty.
+		log.Warn("GraphQL: failed to load templates from %s: %v", gqlTemplateDir, lerr)
+	}
+
 	// Create reporter based on output format (using REST reporter pattern)
-	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
+	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit, compiledTemplates)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
@@ -247,7 +263,7 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint
-	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders)
+	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders, compiledTemplates)
 
 	// Compute unified LLM-enabled flag (same logic as REST command)
 	graphqlLLMEnabled := hasLLMConfig() || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMHost != "" || config.LLMModel != "" || config.LLMTriageClient != nil

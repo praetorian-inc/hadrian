@@ -190,8 +190,11 @@ func reportFindings(findings []*model.Finding) {
 	}
 }
 
-// runSecurityChecks executes scanner checks and template tests, returning all findings and template count
-func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo, reporter Reporter, customHeaders map[string]string) ([]*model.Finding, int) {
+// runSecurityChecks runs scanner-based checks plus template-driven tests. When
+// `preloaded` is non-nil, runTemplateTests uses it directly and skips its
+// internal load+filter+compile path. This is how the SARIF reporter and the
+// runtime test pass share one view of which templates exist.
+func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient templates.HTTPClient, endpoint string, config GraphQLConfig, authConfigs map[string]*graphql.AuthInfo, reporter Reporter, customHeaders map[string]string, preloaded []*templates.CompiledTemplate) ([]*model.Finding, int) {
 	var findings []*model.Finding
 
 	// Run built-in security checks unless skip flag is set
@@ -239,12 +242,36 @@ func runSecurityChecks(ctx context.Context, schema *graphql.Schema, httpClient t
 		}
 	} else {
 		config.TemplateDir = templateDir
-		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs, reporter, customHeaders)
+		templateFindings, count := runTemplateTests(ctx, config, endpoint, httpClient, authConfigs, reporter, customHeaders, preloaded)
 		findings = append(findings, templateFindings...)
 		templateCount = count
 	}
 
 	return findings, templateCount
+}
+
+// loadAndCompileGraphQLTemplates loads templates from `dir`, applies the
+// `filters` allowlist (empty = no filtering), and returns the compiled set.
+// Compile failures are logged and skipped — they are author bugs in the
+// template, not callable errors. The function is the single template-load site
+// for the graphql command; both the SARIF rule preload and the runtime
+// execution path consume its output to keep the two views in lockstep.
+func loadAndCompileGraphQLTemplates(dir string, filters []string) ([]*templates.CompiledTemplate, error) {
+	raw, err := loadGraphQLTemplates(dir)
+	if err != nil {
+		return nil, err
+	}
+	raw = filterGraphQLTemplatesByID(raw, filters)
+	out := make([]*templates.CompiledTemplate, 0, len(raw))
+	for _, t := range raw {
+		c, cerr := templates.Compile(t)
+		if cerr != nil {
+			log.Warn("Failed to compile GraphQL template %s: %v", t.ID, cerr)
+			continue
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 // filterGraphQLTemplatesByID filters GraphQL templates by ID patterns
@@ -265,26 +292,34 @@ func filterGraphQLTemplatesByID(tmpls []*templates.Template, filters []string) [
 	return filtered
 }
 
-// runTemplateTests executes GraphQL templates and returns findings and template count
-func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo, reporter Reporter, customHeaders map[string]string) ([]*model.Finding, int) {
+// runTemplateTests executes GraphQL templates and returns findings and template
+// count. When `preloaded` is non-nil it is used as the canonical compiled set;
+// when nil the function falls back to its legacy load+filter+compile path so
+// existing callers (tests, alternate entry points) keep working unchanged.
+func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string, httpClient templates.HTTPClient, authConfigs map[string]*graphql.AuthInfo, reporter Reporter, customHeaders map[string]string, preloaded []*templates.CompiledTemplate) ([]*model.Finding, int) {
 	graphqlVerboseLog(config.Verbose, "\n=== Running GraphQL Templates ===")
 
-	// Load templates
-	tmplFiles, err := loadGraphQLTemplates(config.TemplateDir)
-	if err != nil {
-		fmt.Printf("Error loading templates: %v\n", err)
-		return nil, 0
+	var compiledTmpls []*templates.CompiledTemplate
+	if preloaded != nil {
+		compiledTmpls = preloaded
+		graphqlVerboseLog(config.Verbose, "Using %d preloaded template(s)", len(compiledTmpls))
+	} else {
+		// Legacy path: load + filter + compile internally. Kept so existing
+		// tests and any other caller that doesn't share runGraphQLTest's
+		// preload work unchanged.
+		var lerr error
+		compiledTmpls, lerr = loadAndCompileGraphQLTemplates(config.TemplateDir, config.Templates)
+		if lerr != nil {
+			fmt.Printf("Error loading templates: %v\n", lerr)
+			return nil, 0
+		}
+		graphqlVerboseLog(config.Verbose, "Loaded %d template(s) from: %s", len(compiledTmpls), config.TemplateDir)
+		if len(config.Templates) > 0 {
+			graphqlVerboseLog(config.Verbose, "Filtered by templates: %v", config.Templates)
+		}
 	}
 
-	// Apply filters
-	tmplFiles = filterGraphQLTemplatesByID(tmplFiles, config.Templates)
-
-	templateCount := len(tmplFiles)
-	graphqlVerboseLog(config.Verbose, "Loaded %d template(s) from: %s", templateCount, config.TemplateDir)
-
-	if len(config.Templates) > 0 {
-		graphqlVerboseLog(config.Verbose, "Filtered by templates: %v", config.Templates)
-	}
+	templateCount := len(compiledTmpls)
 
 	// Create template executor
 	tmplExecutor := templates.NewExecutor(httpClient, customHeaders)
@@ -292,14 +327,8 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 	var findings []*model.Finding
 
 	// Execute each template
-	for _, tmpl := range tmplFiles {
-		// Compile template
-		compiled, err := templates.Compile(tmpl)
-		if err != nil {
-			// Use log.Warn for consistent warning output
-			log.Warn("Failed to compile GraphQL template %s: %v", tmpl.ID, err)
-			continue
-		}
+	for _, compiled := range compiledTmpls {
+		tmpl := compiled.Template
 
 		// Convert authConfigs to templates.AuthInfo map
 		var tmplAuthInfos map[string]*templates.AuthInfo
@@ -351,6 +380,7 @@ func runTemplateTests(ctx context.Context, config GraphQLConfig, endpoint string
 			// Create model.Finding using template ID as the name
 			finding := &model.Finding{
 				ID:              generateGraphQLID(),
+				TemplateID:      tmpl.ID,
 				Category:        tmpl.Info.Category,
 				Name:            tmpl.ID,
 				Description:     description,

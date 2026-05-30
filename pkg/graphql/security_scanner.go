@@ -96,9 +96,12 @@ func generateID() string {
 }
 
 // newFinding creates a new security finding with common fields pre-populated.
+// The `name` argument is also used as TemplateID (a stable rule identifier such
+// as "introspection-disclosure" or "bola") for SARIF ruleId and cross-run dedup.
 func (s *SecurityScanner) newFinding(category, name, description string, severity model.Severity) *model.Finding {
 	return &model.Finding{
 		ID:              generateID(),
+		TemplateID:      name,
 		Category:        category,
 		Name:            name,
 		Description:     description,

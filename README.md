@@ -27,7 +27,7 @@ Most API security scanners test for injection and configuration issues but miss 
 | **Mutation Testing** | Three-phase setup → attack → verify pattern proves write/delete vulnerabilities actually occurred |
 | **REST + GraphQL + gRPC** | Test any API protocol with protocol-specific security checks |
 | **Template-Driven** | YAML templates for customizable security tests — no code required |
-| **Multiple Output Formats** | Terminal, JSON, and Markdown reports for CI/CD integration |
+| **Multiple Output Formats** | Terminal, JSON, Markdown, and SARIF v2.1.0 (GitHub Code Scanning) reports |
 | **Adaptive Rate Limiting** | Proactive request throttling with reactive backoff on 429/503 responses |
 | **Proxy Support** | Route traffic through Burp Suite or other intercepting proxies |
 | **LLM-Powered Triage** | Optional AI analysis of findings via Ollama, OpenAI, or Anthropic to reduce false positives |
@@ -99,6 +99,9 @@ hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
 # Export findings as JSON
 hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file report.json
+
+# Export findings as SARIF for GitHub Code Scanning upload
+hadrian test rest --api api.yaml --roles roles.yaml --output sarif --output-file report.sarif
 
 # AI-powered triage with Ollama (local)
 hadrian test rest --api api.yaml --roles roles.yaml \
@@ -187,7 +190,7 @@ Yes. Hadrian uses YAML templates that define endpoint selectors, role selectors,
 
 ### Does Hadrian integrate with CI/CD pipelines?
 
-Yes. Use `--output json --output-file report.json` to generate machine-readable reports. Hadrian returns a non-zero exit code when vulnerabilities are found, making it suitable for CI/CD gates.
+Yes. Use `--output json --output-file report.json` to generate machine-readable reports, or `--output sarif --output-file report.sarif` to publish findings to GitHub Code Scanning (a complete example workflow lives at [`.github/workflows/example-sarif-upload.yml`](.github/workflows/example-sarif-upload.yml)). Hadrian returns a non-zero exit code when vulnerabilities are found, making it suitable for CI/CD gates.
 
 ## Development
 

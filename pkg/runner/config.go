@@ -35,9 +35,9 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate output format
-	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true}
+	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
 	if !validFormats[c.Output] {
-		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown)", c.Output)
+		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)
 	}
 
 	// Validate rate limit configuration

@@ -19,6 +19,7 @@ import (
 	_ "github.com/praetorian-inc/hadrian/pkg/plugins/rest"    // Register REST plugin
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
+	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
 // =============================================================================
@@ -77,8 +78,13 @@ type Stats struct {
 	TemplatesLoaded int           `json:"templates_loaded"`
 }
 
-// createReporter creates appropriate reporter based on output format
-func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, error) {
+// createReporter creates appropriate reporter based on output format.
+//
+// tmpls is consulted only by the SARIF reporter (to enrich the rules section
+// with descriptions, tags, and helpUri). Other formats ignore it. Pass nil if
+// no templates are available — SARIF will still emit minimal rules derived
+// from each finding's own metadata.
+func createReporter(format, outputFile string, requestIDsLimit int, tmpls []*templates.CompiledTemplate) (Reporter, error) {
 	switch format {
 	case "terminal":
 		return NewTerminalReporter(os.Stdout, requestIDsLimit), nil
@@ -86,6 +92,8 @@ func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, e
 		return NewJSONReporter(outputFile, requestIDsLimit)
 	case "markdown":
 		return NewMarkdownReporter(outputFile, requestIDsLimit)
+	case "sarif":
+		return NewSARIFReporter(outputFile, tmpls)
 	default:
 		return nil, fmt.Errorf("unsupported output format: %s", format)
 	}

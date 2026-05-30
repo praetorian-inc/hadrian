@@ -561,6 +561,61 @@ func TestExecuteTemplate_NoneAttacker_NoVictim(t *testing.T) {
 	require.Len(t, findings, 1, "should produce exactly one finding with no victim role")
 	assert.Equal(t, "anonymous", findings[0].AttackerRole)
 	assert.Empty(t, findings[0].VictimRole)
+	assert.Equal(t, "none-attacker-no-victim", findings[0].TemplateID, "TemplateID must propagate from the 'none' attacker branch — SARIF dedup depends on it")
+}
+
+// TestExecuteTemplate_PropagatesTemplateID drives each finding-construction
+// branch in executeTemplate (unauthenticated, "none" attacker, authenticated
+// cross-role) and asserts Finding.TemplateID is populated. A regression that
+// drops `TemplateID: tmpl.ID` would silently collapse every SARIF result to
+// rule "hadrian.unknown" and break GitHub Code Scanning deduplication.
+func TestExecuteTemplate_PropagatesTemplateID(t *testing.T) {
+	t.Run("unauthenticated endpoint", func(t *testing.T) {
+		server := newTestServer(200, `{"data": "exposed"}`)
+		defer server.Close()
+
+		tmpl := makeCompiledTemplate("tmpl-unauth", false, []string{"GET"}, "lower", "", "simple")
+		op := &model.Operation{Method: "GET", Path: "/api/public"}
+		executor := templates.NewExecutor(server.Client(), nil)
+		mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+		findings, err := executeTemplate(context.Background(), executor, mutationExecutor, tmpl, op, makeTestRolesConfig(), nil, server.URL)
+		require.NoError(t, err)
+		require.NotEmpty(t, findings, "unauthenticated branch should produce at least one finding")
+		for _, f := range findings {
+			assert.Equal(t, "tmpl-unauth", f.TemplateID)
+		}
+	})
+
+	t.Run("authenticated cross-role", func(t *testing.T) {
+		server := newTestServer(200, `{"data": "vulnerable"}`)
+		defer server.Close()
+
+		tmpl := makeCompiledTemplate("tmpl-auth", true, []string{"GET"}, "lower", "higher", "simple")
+		op := &model.Operation{
+			Method:       "GET",
+			Path:         "/api/users/{id}",
+			RequiresAuth: true,
+			PathParams:   []model.Parameter{{Name: "id", Example: "42"}},
+		}
+		executor := templates.NewExecutor(server.Client(), nil)
+		mutationExecutor := orchestrator.NewMutationExecutor(server.Client(), nil)
+
+		authCfg := &auth.AuthConfig{
+			Method: "bearer",
+			Roles: map[string]*auth.RoleAuth{
+				"user":  {Token: "user-token"},
+				"admin": {Token: "admin-token"},
+			},
+		}
+
+		findings, err := executeTemplate(context.Background(), executor, mutationExecutor, tmpl, op, makeTestRolesConfig(), authCfg, server.URL)
+		require.NoError(t, err)
+		require.NotEmpty(t, findings, "authenticated branch should produce at least one finding")
+		for _, f := range findings {
+			assert.Equal(t, "tmpl-auth", f.TemplateID)
+		}
+	})
 }
 
 // =============================================================================

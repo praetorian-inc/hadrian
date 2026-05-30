@@ -123,30 +123,47 @@ func TestCreateHTTPClient_WithInsecure(t *testing.T) {
 // =============================================================================
 
 func TestCreateReporter_Terminal(t *testing.T) {
-	rep, err := createReporter("terminal", "", 1)
+	rep, err := createReporter("terminal", "", 1, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, rep)
 	assert.NoError(t, rep.Close())
 }
 
 func TestCreateReporter_JSON(t *testing.T) {
-	rep, err := createReporter("json", "", 1)
+	rep, err := createReporter("json", "", 1, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, rep)
 	assert.NoError(t, rep.Close())
 }
 
 func TestCreateReporter_Markdown(t *testing.T) {
-	rep, err := createReporter("markdown", "", 1)
+	rep, err := createReporter("markdown", "", 1, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, rep)
 	assert.NoError(t, rep.Close())
 }
 
 func TestCreateReporter_InvalidFormat(t *testing.T) {
-	_, err := createReporter("invalid", "", 1)
+	_, err := createReporter("invalid", "", 1, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported output format")
+}
+
+func TestCreateReporter_SARIF(t *testing.T) {
+	dir := t.TempDir()
+	rep, err := createReporter("sarif", filepath.Join(dir, "out.sarif"), 1, nil)
+	require.NoError(t, err)
+	// Type-assert the concrete reporter; a regression returning a different
+	// implementation for "sarif" would otherwise still pass.
+	_, ok := rep.(*SARIFReporter)
+	require.True(t, ok, "createReporter(sarif) must return *SARIFReporter, got %T", rep)
+	assert.NoError(t, rep.Close())
+}
+
+func TestCreateReporter_SARIF_RequiresOutputFile(t *testing.T) {
+	_, err := createReporter("sarif", "", 1, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--output-file")
 }
 
 // =============================================================================
