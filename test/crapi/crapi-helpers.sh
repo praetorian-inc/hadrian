@@ -190,7 +190,7 @@ crapi_resolve_spec() {
         resolved="$CRAPI_SPEC_FILE"
     else
         if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "${CRAPI_SPEC_FILE}" ]; then
-            echo "[INFO] Cached spec at ${CRAPI_SPEC_FILE} does not match port=${port}; re-patching." >&2
+            echo "crapi_resolve_spec: cached spec at ${CRAPI_SPEC_FILE} does not match port=${port}; re-patching." >&2
         fi
         mkdir -p "$cache_dir"
         resolved=$(crapi_patch_openapi_spec "$src_spec" "$port" "$cache_dir")
@@ -201,4 +201,21 @@ crapi_resolve_spec() {
         return 1
     fi
     echo "$resolved"
+}
+
+# crapi_planner_inputs_ready <crapi_status> <auth_file> <spec_file>
+#
+# Pure predicate for the crapi-planner SKIP gate in run-live-tests.sh. The
+# planner can only run if the crapi target PASSed and produced a usable auth
+# file and OpenAPI spec on disk. All inputs are arguments so the decision is
+# unit-testable without Docker, crAPI, or an LLM provider.
+#
+# Returns 0 (ready) iff crapi_status == "PASS" AND both files are non-empty
+# paths that exist; returns 1 otherwise.
+crapi_planner_inputs_ready() {
+    local crapi_status="$1" auth_file="$2" spec_file="$3"
+    [ "$crapi_status" = "PASS" ] || return 1
+    [ -n "$auth_file" ] && [ -f "$auth_file" ] || return 1
+    [ -n "$spec_file" ] && [ -f "$spec_file" ] || return 1
+    return 0
 }

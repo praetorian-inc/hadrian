@@ -2,14 +2,15 @@
 # Unit test for detect_planner_provider. Sources llm-helpers.sh directly.
 # Run with: ./test/test_detect_planner_provider.sh
 #
-# Covers seven checks for detect_planner_provider behavior:
+# Covers eight checks for detect_planner_provider behavior:
 #   P1: only OPENAI_API_KEY set                                  → echoes "openai"
 #   P2: only ANTHROPIC_API_KEY set                               → echoes "anthropic"
 #   P3: both OPENAI + ANTHROPIC set                              → echoes "openai" (priority)
 #   P4: no keys, OLLAMA_HOST=http://127.0.0.1:1                  → echoes ""
-#   P5: OLLAMA_HOST unset (default localhost:11434)              → echoes "" (or SKIP if local ollama is running)
+#   P5: OLLAMA_HOST unset (default localhost:11434)              → echoes "" (or SKIP if local ollama has the model)
 #   PE: empty-but-set OPENAI/ANTHROPIC keys + unreachable ollama → echoes ""
-#   P6: one-shot HTTP server on free local port                  → echoes "ollama" (reachable)
+#   P6: HTTP server whose /api/tags lists the model              → echoes "ollama" (reachable AND model present)
+#   P7: HTTP server whose /api/tags omits the model              → echoes "" (reachable but model NOT pulled)
 set -u  # NOT -e: we want to catch failed assertions and keep going.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -44,6 +45,64 @@ restore_env() {
     if [ -n "$_SAVED_OPENAI" ];    then export OPENAI_API_KEY="$_SAVED_OPENAI";    else unset OPENAI_API_KEY;    fi
     if [ -n "$_SAVED_ANTHROPIC" ]; then export ANTHROPIC_API_KEY="$_SAVED_ANTHROPIC"; else unset ANTHROPIC_API_KEY; fi
     if [ -n "$_SAVED_OLLAMA" ];    then export OLLAMA_HOST="$_SAVED_OLLAMA";        else unset OLLAMA_HOST;        fi
+}
+
+# _start_tags_server <body_json> — starts a background HTTP server on an
+# OS-assigned free port that returns <body_json> for every GET (so /api/tags
+# is served), waits until it accepts connections, and sets two globals:
+#   _TAGS_PORT       — the bound port
+#   _TAGS_SERVER_PID — the server PID (for _stop_tags_server)
+# Binding and port publication happen in the SAME process (port written to a
+# tmpfile), so there is no TOCTOU window. The server's own stdout/stderr are
+# sent to /dev/null so callers can run this without a command-substitution
+# pipe staying open. Call this from the MAIN shell (not in $(...)) so the
+# globals propagate.
+_TAGS_SERVER_PID=""
+_TAGS_PORT=""
+_start_tags_server() {
+    local body="$1"
+    local port_file; port_file="$(mktemp)"
+    _TAGS_BODY="$body" python3 -c "
+import http.server, pathlib, sys, os
+payload = os.environ['_TAGS_BODY'].encode()
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(payload)
+    def log_message(self, *a): pass
+srv = http.server.HTTPServer(('127.0.0.1', 0), H)
+pathlib.Path(sys.argv[1]).write_text(str(srv.server_port))
+srv.serve_forever()
+" "$port_file" >/dev/null 2>&1 &
+    _TAGS_SERVER_PID=$!
+
+    # Wait for the server to publish its port (max ~500ms).
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        [ -s "$port_file" ] && break
+        sleep 0.05
+    done
+    _TAGS_PORT="$(cat "$port_file")"
+    rm -f "$port_file"
+
+    # Wait for the server to accept connections (max ~500ms). Subshell + outer
+    # 2>/dev/null reliably suppresses bash's "connect: Connection refused"
+    # diagnostic on failed /dev/tcp attempts.
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+        if (exec 3<>"/dev/tcp/127.0.0.1/${_TAGS_PORT}") 2>/dev/null; then
+            break
+        fi
+        sleep 0.05
+    done
+}
+
+# _stop_tags_server — kill the server started by _start_tags_server. No trap,
+# to avoid clobbering any outer trap chain.
+_stop_tags_server() {
+    [ -n "$_TAGS_SERVER_PID" ] || return 0
+    kill "$_TAGS_SERVER_PID" 2>/dev/null
+    wait "$_TAGS_SERVER_PID" 2>/dev/null || true
+    _TAGS_SERVER_PID=""
 }
 
 # ---------------------------------------------------------------------------
@@ -96,11 +155,11 @@ restore_env
 # developer machines), SKIP — the assertion can't distinguish "default
 # expansion happened correctly" from "ollama is up and responded".
 # ---------------------------------------------------------------------------
-echo "P5: OLLAMA_HOST unset → falls back to default localhost:11434 → empty (no local ollama)"
+echo "P5: OLLAMA_HOST unset → falls back to default localhost:11434 → empty (no local ollama with the model)"
 unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
-if curl -sf -o /dev/null --max-time 2 http://localhost:11434/api/tags 2>/dev/null; then
+if _ollama_has_model 2>/dev/null; then
     assert_skip "P5 OLLAMA_HOST default fallback" \
-        "local ollama detected on localhost:11434; default-fallback path produces 'ollama' instead of empty"
+        "local ollama on localhost:11434 has the model; default-fallback path produces 'ollama' instead of empty"
 else
     out=$(detect_planner_provider 2>/dev/null || true)
     assert_eq "P5 OLLAMA_HOST default fallback" "" "$out"
@@ -127,64 +186,30 @@ assert_eq "PE empty-but-set OPENAI_API_KEY falls through" "" "$out"
 restore_env
 
 # ---------------------------------------------------------------------------
-# P6: one-shot HTTP server on a free local port → detect_planner_provider
-#     should succeed on the ollama curl probe and echo "ollama".
-#
-# Strategy: start a minimal HTTP server bound to port 0 (OS-assigned); the
-# server itself publishes its bound port to a tmpfile. Binding and port
-# publication happen in the SAME process, so there is no TOCTOU window
-# where another process could steal the port between discovery and bind.
+# P6: HTTP server whose /api/tags lists the wanted model → echoes "ollama".
+#     Exercises the reachable-AND-model-present path of _ollama_has_model.
 # ---------------------------------------------------------------------------
-echo "P6: local HTTP server returns 200 on /api/tags → echoes ollama"
+echo "P6: /api/tags lists llama3.2:latest → echoes ollama"
 unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
-
-_P6_PORT_FILE="$(mktemp)"
-
-# Start a persistent HTTP server in the background that serves 200 on any path.
-# The server binds to port 0, writes its actual port to "$1", then serves.
-# Uses serve_forever() (not handle_request()) so the /dev/tcp readiness probe
-# and the curl from detect_planner_provider can both be served without racing.
-# The process is explicitly killed after the assertion.
-python3 -c "
-import http.server, pathlib, sys
-class H(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'{}')
-    def log_message(self, *a): pass
-srv = http.server.HTTPServer(('127.0.0.1', 0), H)
-pathlib.Path(sys.argv[1]).write_text(str(srv.server_port))
-srv.serve_forever()
-" "$_P6_PORT_FILE" &
-_P6_SERVER_PID=$!
-
-# Wait for the server to publish its port (max ~500ms).
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    [ -s "$_P6_PORT_FILE" ] && break
-    sleep 0.05
-done
-FREE_PORT="$(cat "$_P6_PORT_FILE")"
-
-# Wait for the server to accept connections (max ~500ms).
-# Subshell + outer 2>/dev/null is the only form that reliably suppresses bash's
-# "connect: Connection refused" diagnostic on failed /dev/tcp attempts — the
-# exec-line `2>/dev/null` form leaks the message on some bash builds.
-for _ in 1 2 3 4 5 6 7 8 9 10; do
-    if (exec 3<>"/dev/tcp/127.0.0.1/${FREE_PORT}") 2>/dev/null; then
-        break
-    fi
-    sleep 0.05
-done
-
-export OLLAMA_HOST="http://127.0.0.1:${FREE_PORT}"
+_start_tags_server '{"models":[{"name":"llama3.2:latest"}]}'
+export OLLAMA_HOST="http://127.0.0.1:${_TAGS_PORT}"
 out=$(detect_planner_provider)
-assert_eq "P6 echoes ollama when server reachable" "ollama" "$out"
+assert_eq "P6 echoes ollama when model present" "ollama" "$out"
+_stop_tags_server
+restore_env
 
-# Explicit cleanup — do NOT use trap here to avoid clobbering any outer trap chain.
-kill "$_P6_SERVER_PID" 2>/dev/null
-wait "$_P6_SERVER_PID" 2>/dev/null || true
-rm -f "$_P6_PORT_FILE"
+# ---------------------------------------------------------------------------
+# P7: HTTP server whose /api/tags omits the wanted model → echoes "".
+#     This is the regression guard for the reachability-vs-usability fix: a
+#     running ollama without the model pulled must NOT be reported usable.
+# ---------------------------------------------------------------------------
+echo "P7: /api/tags omits the model → echoes empty (reachable but model absent)"
+unset OPENAI_API_KEY ANTHROPIC_API_KEY OLLAMA_HOST
+_start_tags_server '{"models":[{"name":"some-other-model:latest"}]}'
+export OLLAMA_HOST="http://127.0.0.1:${_TAGS_PORT}"
+out=$(detect_planner_provider)
+assert_eq "P7 echoes empty when model absent" "" "$out"
+_stop_tags_server
 restore_env
 
 # ---------------------------------------------------------------------------

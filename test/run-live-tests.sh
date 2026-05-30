@@ -158,6 +158,12 @@ get_findings() { echo "${FINDINGS[$1]:-0}"; }
 set_duration() { DURATION["$1"]="$2"; }
 get_duration() { echo "${DURATION[$1]:-0}"; }
 
+# targets_contains <name> — exact comma-delimited membership test on $TARGETS.
+# Avoids the substring pitfall of `grep -q "crapi"` (which also matches
+# "crapi-planner"); the crapi → crapi-planner prerequisite coupling is now made
+# explicit at each call site instead of relying on a silent substring match.
+targets_contains() { case ",${TARGETS}," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+
 # ==== Helper functions ====
 
 # All log_* helpers write to stderr so they don't collide with values
@@ -650,8 +656,18 @@ if echo "$TARGETS" | grep -q "grpc"; then
 fi
 
 # ==== Test: crapi ====
-if echo "$TARGETS" | grep -q "crapi"; then
+# crapi-planner depends on this block (it consumes CRAPI_AUTH_FILE / CRAPI_SPEC),
+# so requesting crapi-planner runs crapi as its prerequisite. The coupling is
+# explicit here rather than hidden in a `grep -q "crapi"` substring match.
+if targets_contains crapi || targets_contains crapi-planner; then
     log_header "Target 4: crapi (REST)"
+
+    # Tell the operator when crapi is running only as the crapi-planner
+    # prerequisite (they did not ask for crapi directly) so its setup work
+    # isn't a surprise.
+    if targets_contains crapi-planner && ! targets_contains crapi; then
+        log_info "crapi-planner requested: running the crapi target first as its prerequisite"
+    fi
 
     CRAPI_URL="http://localhost:${CRAPI_PORT}"
 
@@ -763,38 +779,29 @@ EOF
 fi
 
 # ==== Test: crapi-planner ====
-# Runs the LLM-assisted planner against crAPI. The crapi block always runs
-# first when "crapi-planner" is in TARGETS (because the grep -q "crapi"
-# gate matches the "crapi" substring of "crapi-planner"), so by the time
+# Runs the LLM-assisted planner against crAPI. The crapi block above runs
+# first whenever crapi-planner is requested (the gate there is the explicit
+# `targets_contains crapi || targets_contains crapi-planner`), so by the time
 # this block executes, CRAPI_AUTH_FILE and CRAPI_SPEC have already been
 # produced by that prior block — no additional signup, spec patching, or
 # cleanup is needed here. Gated on LLM provider availability: OpenAI key
 # wins, Anthropic key next, local ollama as fallback, otherwise SKIP cleanly.
-#
-# Note on the crapi-prefix substring match: the crapi block gate above
-# uses `grep -q "crapi"`, which also matches "crapi-planner". That is
-# intentional — the planner depends on the crapi block having produced
-# CRAPI_AUTH_FILE and CRAPI_SPEC, so `--targets crapi-planner` implicitly
-# runs the crapi block too. The STATUS[crapi]=="PASS" check below is the
-# actual safety gate; the substring match is the desired pre-requisite
-# coupling.
-if echo "$TARGETS" | grep -q "crapi-planner"; then
+if targets_contains crapi-planner; then
     log_header "Target 5: crapi-planner (REST + LLM planner)"
 
-    # Inherit crapi status — if crapi didn't produce CRAPI_AUTH_FILE /
-    # CRAPI_SPEC (because crapi wasn't in TARGETS, or it SKIPPED, or it
-    # ERRORED), we have nothing to plan against. SKIP rather than ERROR
-    # because the operator's choice of TARGETS, not a code fault, is the
-    # cause.
-    if [ "$(get_status crapi)" != "PASS" ] \
-            || [ -z "${CRAPI_AUTH_FILE:-}" ] || [ ! -f "${CRAPI_AUTH_FILE:-/nonexistent}" ] \
-            || [ -z "${CRAPI_SPEC:-}" ]      || [ ! -f "${CRAPI_SPEC:-/nonexistent}" ]; then
+    # Inherit crapi status — if crapi didn't produce a usable CRAPI_AUTH_FILE /
+    # CRAPI_SPEC (because crapi SKIPPED or ERRORED), we have nothing to plan
+    # against. The readiness predicate lives in crapi-helpers.sh so its branches
+    # are unit-tested (test/crapi/test_crapi_planner_inputs.sh) without Docker.
+    # SKIP rather than ERROR because the operator's environment, not a code
+    # fault, is the cause.
+    if ! crapi_planner_inputs_ready "$(get_status crapi)" "${CRAPI_AUTH_FILE:-}" "${CRAPI_SPEC:-}"; then
         log_info "crapi-planner requires the crapi target to have run successfully first; skipping"
         set_status "crapi-planner" "SKIP"
     else
         PLANNER_PROVIDER=$(detect_planner_provider)
         if [ -z "$PLANNER_PROVIDER" ]; then
-            log_info "no LLM provider available (set OPENAI_API_KEY, ANTHROPIC_API_KEY, or run ollama), skipping crapi-planner"
+            log_info "no LLM provider available (set OPENAI_API_KEY, ANTHROPIC_API_KEY, or run ollama with the model pulled), skipping crapi-planner"
             set_status "crapi-planner" "SKIP"
         else
             log_info "Using LLM provider: ${PLANNER_PROVIDER}"
@@ -828,14 +835,21 @@ TOTAL_FAIL=0
 TOTAL_SKIP=0
 
 ALL_TARGETS=""
-if echo "$TARGETS" | grep -q "vulnerable-api"; then
+if targets_contains vulnerable-api; then
     ALL_TARGETS="vulnerable-api-bearer vulnerable-api-apikey vulnerable-api-basic vulnerable-api-cookie"
 fi
+# Exact membership (targets_contains) so the substring overlap between "crapi"
+# and "crapi-planner" no longer adds phantom rows.
 for extra in dvga grpc crapi crapi-planner; do
-    if echo "$TARGETS" | grep -q "${extra}"; then
+    if targets_contains "$extra"; then
         ALL_TARGETS="$ALL_TARGETS $extra"
     fi
 done
+# crapi runs as a prerequisite of crapi-planner; surface its row even when the
+# operator asked only for crapi-planner, so its PASS/SKIP/ERROR is visible.
+if targets_contains crapi-planner && ! targets_contains crapi; then
+    ALL_TARGETS="$ALL_TARGETS crapi"
+fi
 
 for target in $ALL_TARGETS; do
 

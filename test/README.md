@@ -275,6 +275,7 @@ test/
     crapi-helpers.sh       # Shared signup/login/spec-patch helpers
     test_crapi_resolve_spec.sh        # Unit test for crapi_resolve_spec
     test_crapi_patch_openapi_spec.sh  # Unit test for crapi_patch_openapi_spec
+    test_crapi_planner_inputs.sh      # Unit test for crapi_planner_inputs_ready (crapi-planner SKIP gate)
 ```
 
 ## Expected result

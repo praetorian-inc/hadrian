@@ -60,6 +60,9 @@ unset CRAPI_SPEC_FILE
 out=$(crapi_resolve_spec "$SRC_SPEC" 9999 "${TMPDIR_ROOT}/cache-s1" 2>/dev/null); rc=$?
 assert_eq    "S1 exit 0"             "0"                                          "$rc"
 assert_eq    "S1 echoes patched path" "${TMPDIR_ROOT}/cache-s1/crapi-openapi-spec.json" "$out"
+# Path-only assertions can't catch a resolver that returns the right path but a
+# wrongly-patched (or unpatched) file — assert the spec content carries the port.
+assert_eq    "S1 spec patched to port 9999" "localhost:9999" "$(grep -oE 'localhost:[0-9]+' "$out" | head -1)"
 
 # ---------------------------------------------------------------------------
 # S2: CRAPI_SPEC_FILE set but file missing → must re-patch
@@ -69,6 +72,7 @@ export CRAPI_SPEC_FILE="${TMPDIR_ROOT}/does-not-exist.json"
 out=$(crapi_resolve_spec "$SRC_SPEC" 9999 "${TMPDIR_ROOT}/cache-s2" 2>/dev/null); rc=$?
 assert_eq    "S2 exit 0"             "0"                                          "$rc"
 assert_eq    "S2 echoes patched path" "${TMPDIR_ROOT}/cache-s2/crapi-openapi-spec.json" "$out"
+assert_eq    "S2 spec patched to port 9999" "localhost:9999" "$(grep -oE 'localhost:[0-9]+' "$out" | head -1)"
 
 # ---------------------------------------------------------------------------
 # S3: cached spec exists and port matches exactly → echo cached path unchanged
@@ -88,6 +92,8 @@ export CRAPI_SPEC_FILE="$CACHED_8895"
 out=$(crapi_resolve_spec "$SRC_SPEC" 889 "${TMPDIR_ROOT}/cache-s4" 2>/dev/null); rc=$?
 assert_eq    "S4 exit 0"             "0"            "$rc"
 assert_eq    "S4 echoes patched path" "${TMPDIR_ROOT}/cache-s4/crapi-openapi-spec.json" "$out"
+# Re-patched to 889 from the SRC spec (8888), NOT the stale cached 8895.
+assert_eq    "S4 spec patched to port 889" "localhost:889" "$(grep -oE 'localhost:[0-9]+' "$out" | head -1)"
 
 # ---------------------------------------------------------------------------
 # S5: cached spec, port matches → idempotent (call twice, same path returned)

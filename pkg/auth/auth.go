@@ -190,11 +190,19 @@ var hardcodedSecretPatterns = []*regexp.Regexp{
 
 // detectHardcodedSecret identifies JWT, API keys, etc. (credential security)
 func detectHardcodedSecret(value string) bool {
-	if strings.HasPrefix(value, "${") {
-		return false // Environment variable reference
+	// Strip every ${VAR} reference. A value composed ENTIRELY of env-var
+	// references (e.g. "${TOKEN_VAR}" or "${A}${B}") leaves an empty
+	// remainder and is the safe pattern we want to allow without warning.
+	// A MIXED value such as "${UNSET}eyJ...jwt" leaves a literal secret
+	// behind once the refs are stripped; after expansion (${UNSET} -> "")
+	// it resolves to a hardcoded JWT, so it must NOT short-circuit — match
+	// the patterns against the stripped remainder to catch it.
+	stripped := envBraceRE.ReplaceAllString(value, "")
+	if strings.HasPrefix(value, "${") && stripped == "" {
+		return false // pure environment variable reference
 	}
 	for _, re := range hardcodedSecretPatterns {
-		if re.MatchString(value) {
+		if re.MatchString(value) || (stripped != value && re.MatchString(stripped)) {
 			return true
 		}
 	}
