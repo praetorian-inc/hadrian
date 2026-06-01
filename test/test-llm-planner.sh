@@ -105,18 +105,18 @@ if ! crapi_setup_users "$CRAPI_URL"; then
     exit 1
 fi
 
-ADMIN_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_ADMIN_EMAIL"    "$CRAPI_PASSWORD")
-USER_TOKEN=$(crapi_login  "$CRAPI_URL" "$CRAPI_USER_EMAIL"     "$CRAPI_PASSWORD")
-USER2_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_USER2_EMAIL"    "$CRAPI_PASSWORD")
-MECH_TOKEN=$(crapi_login  "$CRAPI_URL" "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
+CRAPI_ADMIN_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_ADMIN_EMAIL"    "$CRAPI_PASSWORD")
+CRAPI_USER_TOKEN=$(crapi_login     "$CRAPI_URL" "$CRAPI_USER_EMAIL"     "$CRAPI_PASSWORD")
+CRAPI_USER2_TOKEN=$(crapi_login    "$CRAPI_URL" "$CRAPI_USER2_EMAIL"    "$CRAPI_PASSWORD")
+CRAPI_MECHANIC_TOKEN=$(crapi_login "$CRAPI_URL" "$CRAPI_MECHANIC_EMAIL" "$CRAPI_PASSWORD")
 
 # All four tokens must be acquired so role-specific templates (BFLA
 # admin-video-delete, mechanic workflows) run with the correct identity.
 # Previously this script mapped admin -> USER_TOKEN, which silently
 # degraded admin-scoped templates in the planner test to regular-user
 # credentials.
-if [ -z "$ADMIN_TOKEN" ] || [ -z "$USER_TOKEN" ] \
-        || [ -z "$USER2_TOKEN" ] || [ -z "$MECH_TOKEN" ]; then
+if [ -z "$CRAPI_ADMIN_TOKEN" ] || [ -z "$CRAPI_USER_TOKEN" ] \
+        || [ -z "$CRAPI_USER2_TOKEN" ] || [ -z "$CRAPI_MECHANIC_TOKEN" ]; then
     log_fail "Failed to get crAPI tokens (admin/user1/user2/mechanic must all be non-empty)"
     exit 1
 fi
@@ -124,50 +124,36 @@ log_ok "Tokens acquired"
 
 mkdir -p "$OUTPUT_DIR"
 
-# Resolve the OpenAPI spec path. Prefer the patched copy that
-# setup-live-targets.sh wrote into .live-test-config, but only if its
-# baked-in port matches our current CRAPI_PORT — otherwise a runtime
-# CRAPI_PORT override against a stale config would silently mis-route.
-# When re-patching, write into the same SPEC_CACHE_DIR setup uses
-# (test/.live-test-cache/) so a planner-only run doesn't leave a cache
-# artifact in the .results directory.
+# Resolve the OpenAPI spec path. See crapi_resolve_spec for preference
+# rules (prefer cached if port matches, else re-patch).
 SPEC_CACHE_DIR="${SCRIPT_DIR}/.live-test-cache"
-# Anchor the port match on a non-digit / end-of-line boundary to avoid
-# substring false-matches (e.g. CRAPI_PORT=889 vs localhost:8895).
-if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "$CRAPI_SPEC_FILE" ] \
-        && grep -qE "localhost:${CRAPI_PORT}([^0-9]|\$)" "$CRAPI_SPEC_FILE"; then
-    CRAPI_SPEC="$CRAPI_SPEC_FILE"
-else
-    if [ -n "${CRAPI_SPEC_FILE:-}" ] && [ -f "$CRAPI_SPEC_FILE" ]; then
-        log_info "Cached spec at ${CRAPI_SPEC_FILE} does not match CRAPI_PORT=${CRAPI_PORT}; re-patching."
-    fi
-    mkdir -p "$SPEC_CACHE_DIR"
-    CRAPI_SPEC=$(crapi_patch_openapi_spec \
+if ! CRAPI_SPEC=$(crapi_resolve_spec \
         "${SCRIPT_DIR}/crapi/crapi-openapi-spec.json" \
         "$CRAPI_PORT" \
-        "$SPEC_CACHE_DIR")
-fi
-# Guard against silent failure of crapi_patch_openapi_spec (validation
-# branch returns 1 + empty stdout). An unchecked empty $CRAPI_SPEC would
-# pass `--api ""` to hadrian and produce an opaque downstream error.
-if [ -z "$CRAPI_SPEC" ] || [ ! -f "$CRAPI_SPEC" ]; then
-    log_fail "Could not resolve crAPI OpenAPI spec (empty path or missing file)"
+        "$SPEC_CACHE_DIR"); then
+    log_fail "Could not resolve crAPI OpenAPI spec"
     exit 1
 fi
 
 AUTH_FILE="${OUTPUT_DIR}/planner-auth.yaml"
-(umask 077; cat > "$AUTH_FILE" <<EOF
+# Export tokens as env vars so the YAML can reference them by name. The
+# YAML is emitted with a QUOTED heredoc terminator (`<<'EOF'`) so bash
+# does NOT substitute the ${...} text — hadrian's pkg/auth/auth.go
+# expands them via expandEnvSafe before detectHardcodedSecret fires,
+# which suppresses the SECURITY warning that fires on inline tokens.
+export CRAPI_ADMIN_TOKEN CRAPI_MECHANIC_TOKEN CRAPI_USER_TOKEN CRAPI_USER2_TOKEN
+(umask 077; cat > "$AUTH_FILE" <<'EOF'
 method: bearer
 location: header
 roles:
   admin:
-    token: "${ADMIN_TOKEN}"
+    token: "${CRAPI_ADMIN_TOKEN}"
   mechanic:
-    token: "${MECH_TOKEN}"
+    token: "${CRAPI_MECHANIC_TOKEN}"
   user:
-    token: "${USER_TOKEN}"
+    token: "${CRAPI_USER_TOKEN}"
   user2:
-    token: "${USER2_TOKEN}"
+    token: "${CRAPI_USER2_TOKEN}"
   anonymous:
     token: ""
 EOF

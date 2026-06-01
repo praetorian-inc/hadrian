@@ -2,9 +2,12 @@ package auth
 
 import (
 	"encoding/base64"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -298,6 +301,160 @@ func TestDetectHardcodedSecret_EnvironmentVariable(t *testing.T) {
 	envVar := "${TOKEN_VAR}"
 	if detectHardcodedSecret(envVar) {
 		t.Error("Expected environment variable reference to NOT be detected as hardcoded secret")
+	}
+}
+
+// TestDetectHardcodedSecret_MixedEnvVarPrefix guards the bug where a value
+// that merely STARTS with "${" short-circuited the check. A mixed value like
+// "${UNSET}<jwt>" expands to a literal JWT once the unset ref resolves to "",
+// so it must still be flagged. Pure refs (single or concatenated) must not.
+func TestDetectHardcodedSecret_MixedEnvVarPrefix(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  string
+		expect bool
+	}{
+		{"pure ref", "${TOKEN_VAR}", false},
+		{"concatenated pure refs", "${A}${B}", false},
+		{"env-var prefix then literal JWT", "${UNSET}" + fixtureJWT, true},
+		{"literal JWT then env-var suffix", fixtureJWT + "${UNSET}", true},
+		{"plain literal JWT", fixtureJWT, true},
+		{"literal dollar password (not a ref)", "pa$$word", false},
+		{"empty", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := detectHardcodedSecret(tc.value); got != tc.expect {
+				t.Errorf("detectHardcodedSecret(%q) = %v, want %v", tc.value, got, tc.expect)
+			}
+		})
+	}
+}
+
+const fixtureJWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+
+// stderrCaptureMu serializes captureAuthStderr calls. The helper swaps the
+// process-global os.Stderr, so two concurrent callers would clobber each
+// other's pipe. The mutex makes the helper safe even if a caller forgets the
+// "no t.Parallel()" rule below.
+var stderrCaptureMu sync.Mutex
+
+// NOTE: mutates global os.Stderr. Callers should not call t.Parallel(); the
+// stderrCaptureMu mutex serializes overlapping calls as a backstop.
+func captureAuthStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	stderrCaptureMu.Lock()
+	defer stderrCaptureMu.Unlock()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = old }()
+
+	fn()
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close pipe writer: %v", err)
+	}
+	out, _ := io.ReadAll(r)
+	_ = r.Close()
+	return string(out)
+}
+
+func writeTempAuthYAML(t *testing.T, body string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "auth.yaml")
+	if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+		t.Fatalf("write temp auth.yaml: %v", err)
+	}
+	return p
+}
+
+// TestLoad_HardcodedSecretWarning is the regression guard for the bug
+// where detectHardcodedSecret ran on post-expansion values, causing every
+// ${VAR} env-var ref that resolved to a JWT-shaped string to trip the
+// hardcoded-secret warning. The test is parametrized over all four
+// credential fields (token, api_key, cookie, credentials) because auth.go
+// applies the same pre-expansion-capture fix to each of them.
+func TestLoad_HardcodedSecretWarning(t *testing.T) {
+	cases := []struct {
+		name        string
+		yamlMethod  string
+		yamlField   string // YAML key under the role
+		envVarYAML  string // value that is a ${VAR} reference
+		inlineYAML  string // value that is an inline JWT literal
+		warnSnippet string // substring expected in the SECURITY warning
+	}{
+		{
+			name:        "token",
+			yamlMethod:  "bearer",
+			yamlField:   "token",
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded token",
+		},
+		{
+			name:        "api_key",
+			yamlMethod:  "api_key",
+			yamlField:   "api_key",
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded API key",
+		},
+		{
+			name:        "cookie",
+			yamlMethod:  "cookie",
+			yamlField:   "cookie",
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded cookie",
+		},
+		{
+			name:       "credentials",
+			yamlMethod: "basic",
+			yamlField:  "credentials",
+			// credentials is a *string; a ${VAR} ref is safe.
+			envVarYAML:  "${HADRIAN_TEST_TOKEN}",
+			inlineYAML:  fixtureJWT,
+			warnSnippet: "has hardcoded credentials",
+		},
+	}
+
+	const yamlTmpl = "method: %s\nlocation: header\nroles:\n  admin:\n    %s: %q\n"
+
+	for _, tc := range cases {
+		t.Run(tc.name+"/env_var_no_warning", func(t *testing.T) {
+			t.Setenv("HADRIAN_TEST_TOKEN", fixtureJWT)
+			yamlBody := fmt.Sprintf(yamlTmpl, tc.yamlMethod, tc.yamlField, tc.envVarYAML)
+			path := writeTempAuthYAML(t, yamlBody)
+
+			stderr := captureAuthStderr(t, func() {
+				if _, err := Load(path); err != nil {
+					t.Fatalf("Load returned error: %v", err)
+				}
+			})
+
+			if strings.Contains(stderr, "SECURITY: Role 'admin' "+tc.warnSnippet) {
+				t.Errorf("expected no %s warning for ${VAR} ref; got stderr:\n%s", tc.name, stderr)
+			}
+		})
+
+		t.Run(tc.name+"/inline_literal_warns", func(t *testing.T) {
+			yamlBody := fmt.Sprintf(yamlTmpl, tc.yamlMethod, tc.yamlField, tc.inlineYAML)
+			path := writeTempAuthYAML(t, yamlBody)
+
+			stderr := captureAuthStderr(t, func() {
+				if _, err := Load(path); err != nil {
+					t.Fatalf("Load returned error: %v", err)
+				}
+			})
+
+			if !strings.Contains(stderr, "SECURITY: Role 'admin' "+tc.warnSnippet) {
+				t.Errorf("expected %s warning for inline literal; got stderr:\n%s", tc.name, stderr)
+			}
+		})
 	}
 }
 
