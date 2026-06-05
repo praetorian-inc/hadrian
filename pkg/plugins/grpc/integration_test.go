@@ -101,8 +101,13 @@ func TestIntegration_AuthRequirementInference(t *testing.T) {
 	}
 
 	// Read operation should not require auth; write/create operation should.
-	assert.False(t, authRequired["GetOrder"], "GetOrder (read) should not require auth")
-	assert.True(t, authRequired["CreateOrder"], "CreateOrder (write) should require auth")
+	getOrderAuth, ok := authRequired["GetOrder"]
+	require.True(t, ok, "GetOrder operation should exist")
+	assert.False(t, getOrderAuth, "GetOrder (read) should not require auth")
+
+	createOrderAuth, ok := authRequired["CreateOrder"]
+	require.True(t, ok, "CreateOrder operation should exist")
+	assert.True(t, createOrderAuth, "CreateOrder (write) should require auth")
 }
 
 func TestIntegration_OperationPaths(t *testing.T) {

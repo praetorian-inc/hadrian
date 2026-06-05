@@ -65,6 +65,14 @@ func newVulnerableGraphQLServer(t *testing.T) *httptest.Server {
 		case strings.Contains(req.Query, "__typename"):
 			data["__typename"] = "Query"
 		case strings.Contains(req.Query, "systemHealth"):
+			// Require the exact Authorization header that the bearer executor sets
+			// (authInfo.Value is written verbatim: "Bearer test-admin-token").
+			// This makes TestIntegration_AuthenticatedRequest meaningful: a request
+			// with no auth or a wrong token will receive 401 instead of 200.
+			if r.Header.Get("Authorization") != "Bearer test-admin-token" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 			data["systemHealth"] = "ok"
 		case strings.Contains(req.Query, "users"):
 			data["users"] = []map[string]interface{}{{"id": "1", "username": "admin"}}
@@ -185,6 +193,12 @@ func TestIntegration_AuthenticatedRequest(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal([]byte(result.Body), &resp))
 	assert.Equal(t, "ok", resp.Data["systemHealth"])
+
+	// Negative case: no auth should yield 401, confirming the server actually
+	// enforces the auth gate and the test above is not a false positive.
+	unauthResult, err := executor.Execute(ctx, `query { systemHealth }`, nil, "", nil)
+	require.NoError(t, err)
+	assert.Equal(t, 401, unauthResult.StatusCode, "systemHealth without auth should return 401")
 }
 
 func TestIntegration_SchemaDiscovery(t *testing.T) {

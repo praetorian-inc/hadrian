@@ -63,12 +63,18 @@ func TestE2E_RequestIDsInTerminalOutput(t *testing.T) {
 		_ = w.Close()
 	})
 
+	var outputBuf bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&outputBuf, r)
+		close(done)
+	}()
+
 	err := runTest(context.Background(), config)
 
 	_ = w.Close()
 	os.Stdout = oldStdout
-	var outputBuf bytes.Buffer
-	_, _ = io.Copy(&outputBuf, r)
+	<-done
 
 	require.NoError(t, err)
 
