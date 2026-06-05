@@ -22,7 +22,7 @@ go test ./...
 # Run tests with race detection
 go test -race ./...
 
-# Run integration tests
+# Run integration tests (fully in-process via httptest fixtures — NO Docker required)
 go test -tags=integration ./...
 
 # Run tests for a specific package
@@ -31,6 +31,19 @@ go test ./pkg/runner/...
 # Run a single test
 go test -run TestFunctionName ./pkg/package/...
 ```
+
+### Integration tests (no Docker)
+
+The `integration`-tagged tests are fully in-process and require no Docker daemon
+or external target. `pkg/runner/fixtures_test.go` builds an `httptest`-backed
+vulnerable REST API (opaque static bearer tokens, no JWT) that seeds BOLA/IDOR
+(API1), broken authentication (API2), excessive data exposure / BOPLA (API3),
+and BFLA (API5). `pkg/runner/integration_test.go` runs the real `templates/rest/`
+templates against it via `runner.RunTest(...)` and asserts findings per OWASP
+category. `pkg/plugins/graphql/integration_test.go` stands up an in-process
+GraphQL service (introspection + DVGA-style queries/mutations); the gRPC
+integration tests parse local `.proto` fixtures under `test/grpc/`. The crAPI /
+DVGA Docker harnesses (below) are for optional *live* end-to-end testing only.
 
 ## Architecture
 
@@ -115,7 +128,11 @@ Built-in safeguards in `pkg/runner/ratelimit_client.go`:
 - Reactive backoff on 429/503 responses via `RateLimitingClient`
 - Audit logging to `.hadrian/audit.log`
 
-## Testing with crAPI
+## Live testing with crAPI (optional, Docker)
+
+> This is **optional** end-to-end testing against a real vulnerable target and is
+> **not** part of the Go test suite (`go test -tags=integration` needs no Docker —
+> see "Integration tests" above). Live-target harnesses are tracked separately.
 
 The `test/crapi/` directory contains a complete example for testing [OWASP crAPI](https://github.com/OWASP/crAPI), an intentionally vulnerable API. The supported flow is the wrapper scripts under `test/`:
 
