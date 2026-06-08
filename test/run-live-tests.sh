@@ -11,6 +11,15 @@
 # Every target is a local Go binary — no container runtime is required, so the
 # full suite runs in a fresh devcontainer (LAB-2750).
 #
+# !! CI SAFETY !!
+#   `vulnerable-graphql` runs real OS command execution and arbitrary file
+#   writes (as the invoking user) by design — Hadrian needs them live to detect
+#   the RCE/path-traversal. Do NOT run this suite in CI on untrusted or
+#   fork-triggered PRs: a job that executes it runs attacker-influenceable shell
+#   on the runner. If you must wire it into CI, use an ephemeral, isolated,
+#   trusted-PR-only runner with no secrets in the environment. Intended for
+#   local/devcontainer use, not as a default CI gate. See test/README.md.
+#
 # Prerequisites:
 #   - Run ./test/setup-live-targets.sh first (one-time build), or
 #   - Go 1.21+ and a built hadrian binary (this script can build them).

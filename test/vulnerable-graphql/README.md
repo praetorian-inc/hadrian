@@ -8,7 +8,14 @@ It exposes the same GraphQL surface as DVGA so all existing Hadrian templates fi
 
 ## WARNING
 
-This server performs **real OS command execution** and **real file writes with path traversal**. Run it only in isolated test environments. Never expose it on a public network.
+This server performs **real OS command execution** (`systemDiagnostics`) and **real file writes with path traversal** (`uploadPaste`), as the invoking user, on whatever host runs the binary. Run it only in isolated test environments. Never expose it on a public network.
+
+**Do not run this target (or `run-live-tests.sh`) in CI on untrusted or fork-triggered
+workflows.** Executing the suite runs attacker-influenceable shell and arbitrary file
+writes on the runner. If you must wire it into CI, restrict it to an ephemeral, isolated,
+trusted-PR-only runner with no secrets in the environment. The loopback bind and this
+warning are the only safeguards — the vulnerable resolvers are always live when the
+binary runs by design (Hadrian needs them to detect the RCE/traversal).
 
 ---
 
@@ -112,4 +119,4 @@ Key differences from DVGA:
 - No Docker required — single statically-linked Go binary
 - In-memory data store (no persistent DB)
 - `POST /api/reset` to restore seed data between test runs
-- Faster cold start for devcontainer CI
+- Faster cold start (no image pull) for **local** runs — see the CI warning above before using in any automated pipeline

@@ -158,10 +158,11 @@ The supported flow is the wrapper scripts under `test/`:
 # Stop any running target processes and remove the generated config.
 ./test/setup-live-targets.sh --teardown
 
-# Optional: exercise the LLM planner against crAPI (opt-in target).
-# Auto-selects provider: OpenAI > Anthropic > ollama; SKIPs cleanly when none available.
+# Optional: exercise the LLM planner / triage against vulnerable-rest-complex.
+# Standalone, LLM-gated scripts (not part of the default run); pass the provider.
 export OPENAI_API_KEY=sk-...    # set once in your shell
-./test/run-live-tests.sh --targets crapi,crapi-planner
+./test/test-llm-planner.sh openai
+./test/test-llm-triage.sh  openai
 ```
 
 Programmatic invocation (without the wrapper), e.g. the crAPI-shape REST target:

@@ -21,6 +21,19 @@ repository clone is required.** The full suite runs in a fresh devcontainer.
 > ONLY** — `vulnerable-graphql` performs real command execution and file
 > writes by design.
 
+### ⚠️ CI safety
+
+This suite launches intentionally vulnerable targets locally. `vulnerable-graphql`
+in particular runs **real OS command execution and arbitrary file writes** as the
+invoking user whenever the binary is running (Hadrian needs those live to detect the
+RCE/path-traversal). The targets bind loopback only, but that does not make them safe
+to run on shared automation.
+
+**Do not run this suite in CI on untrusted or fork-triggered PRs.** A job that executes
+it runs attacker-influenceable shell on the runner. If you must wire it into CI, restrict
+it to an **ephemeral, isolated, trusted-PR-only** runner with **no secrets in the
+environment**. This suite is intended for local/devcontainer use, not as a default CI gate.
+
 ## Quick Start
 
 ### 1. Setup (one-time)
@@ -57,9 +70,11 @@ The setup script handles:
 ./test/run-live-tests.sh --targets vulnerable-graphql
 ./test/run-live-tests.sh --targets vulnerable-rest-complex
 
-# Run crAPI + LLM planner (opt-in; requires OPENAI_API_KEY, ANTHROPIC_API_KEY,
-# or a running ollama instance — SKIPped cleanly when no provider is available).
-OPENAI_API_KEY=sk-... ./test/run-live-tests.sh --targets crapi,crapi-planner
+# Exercise the LLM planner / triage against vulnerable-rest-complex (opt-in;
+# requires OPENAI_API_KEY or ANTHROPIC_API_KEY, or a running ollama instance).
+# These are standalone, LLM-gated scripts — run setup first, then:
+OPENAI_API_KEY=sk-... ./test/test-llm-planner.sh openai
+OPENAI_API_KEY=sk-... ./test/test-llm-triage.sh  openai
 
 # Verbose output
 ./test/run-live-tests.sh --verbose
@@ -93,6 +108,11 @@ For each target, `run-live-tests.sh` automatically:
 5. **Collects results** as JSON in `test/.results/`
 6. **Prints summary** table with findings count and duration
 7. **Cleans up** — stops the launched processes
+
+> **Note:** the default `run-live-tests.sh` run reports *pre-triage* findings —
+> raw, mechanical template/role matches (e.g. "287 findings / 7-7 targets"). It
+> does **not** run LLM triage or the planner. Those are exercised only by the
+> standalone, LLM-gated `test-llm-triage.sh` / `test-llm-planner.sh` scripts.
 
 ### Auth Setup Per Target
 
