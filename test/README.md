@@ -288,6 +288,12 @@ test/
   vulnerable-rest-complex/ # crAPI-shape REST app (Go) + templates
 ```
 
+> `llm-helpers.sh` (`detect_planner_provider`) and `target-helpers.sh`
+> (`targets_contains`) are standalone, unit-tested utilities
+> (`test_detect_planner_provider.sh` / `test_targets_contains.sh`). They are
+> **not** sourced by `run-live-tests.sh` today — it does its own target
+> matching — so treat them as available helpers, not part of the default run.
+
 ## Expected result
 
 After running the e2e test shell script, you will see a table similar to the

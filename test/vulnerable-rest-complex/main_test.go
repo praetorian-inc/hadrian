@@ -232,6 +232,22 @@ func TestBFLA_AdminDeleteVehicle(t *testing.T) {
 	}
 }
 
+// TestBFLA_AdminDeleteVehicle_AnonymousRejected is a regression test for the
+// nil-deref guard: an unauthenticated DELETE must return 401, not panic on a
+// nil customer (the intentional BFLA only applies to AUTHENTICATED low-priv
+// callers; anonymous requests must be rejected like the sibling handlers).
+func TestBFLA_AdminDeleteVehicle_AnonymousRejected(t *testing.T) {
+	srv, cleanup := testServer(t)
+	defer cleanup()
+
+	resp := authDelete(t, srv, "/api/admin/vehicles/2", "") // empty bearer => nil customer
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("anonymous admin delete: expected 401, got %d", resp.StatusCode)
+	}
+}
+
 // TestAdminReports_ForbiddenForNonAdmin verifies that GET /api/admin/reports
 // returns 403 for a non-admin user (negative control).
 func TestAdminReports_ForbiddenForNonAdmin(t *testing.T) {
@@ -360,9 +376,15 @@ func TestCheckOTP_NoRateLimit(t *testing.T) {
 			t.Fatalf("check-otp request %d failed: %v", i, err)
 		}
 		resp.Body.Close()
-		// Any 200 or 400 is fine — we just confirm no 429 is returned
+		// No rate limiting: never a 429.
 		if resp.StatusCode == http.StatusTooManyRequests {
 			t.Fatalf("got unexpected 429 on request %d — rate limiting present (not expected)", i)
+		}
+		// And the endpoint must actually process each attempt (a client-level
+		// status), not error out — a 5xx would mean the attempt wasn't handled,
+		// which would mask whether rate limiting is truly absent.
+		if resp.StatusCode >= http.StatusInternalServerError {
+			t.Fatalf("got server error %d on request %d — check-otp did not process the attempt", resp.StatusCode, i)
 		}
 	}
 }

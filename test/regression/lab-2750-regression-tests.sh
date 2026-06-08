@@ -18,6 +18,12 @@
 #      Go target shares them.
 #   5. .live-test-config still matches the quoted-value safety regex.
 #
+# Scope note: this harness is intentionally shape-only (fast, no daemon, no
+# network). DETECTION-rate regressions are caught separately by the
+# finding_floor guard in run-live-tests.sh (a target dropping below its
+# documented baseline fails the run), so the two layers together cover AC2
+# without this harness having to boot targets.
+#
 # This is the "LAB-2247 re-evaluation" the ticket calls for: the LAB-2247
 # regression harness tested crAPI compose-patching, crAPI user provisioning,
 # and Docker teardown — all removed by LAB-2750 — so it was retired and the

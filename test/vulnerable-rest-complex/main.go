@@ -641,6 +641,10 @@ func handleAdminDeleteVehicle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := getCustomer(r)
+	if c == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 	// BFLA VULNERABILITY: We should check c.Role == "admin" but we don't.
 	log.Printf("[BFLA] Admin delete vehicle ID %d by %s (role: %s) — admin-only endpoint!", id, c.Username, c.Role)
 

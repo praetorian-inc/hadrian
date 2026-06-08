@@ -154,6 +154,22 @@ get_findings() { echo "${FINDINGS[$1]:-0}"; }
 set_duration() { DURATION["$1"]="$2"; }
 get_duration() { echo "${DURATION[$1]:-0}"; }
 
+# finding_floor — minimum findings each target must produce. This is the
+# detection-regression guard for AC2 ("detection baseline preserved"): a PASS
+# is downgraded to FAIL if a target silently drops below its floor, so a
+# regression to ~0 findings cannot pass on exit-code alone. Values track the
+# documented baseline in test/README.md; raise them only when the baseline
+# genuinely increases.
+finding_floor() {
+    case "$1" in
+        vulnerable-api-*)        echo 61 ;;
+        vulnerable-graphql)      echo 10 ;;
+        grpc)                    echo 8  ;;
+        vulnerable-rest-complex) echo 25 ;;
+        *)                       echo 1  ;;
+    esac
+}
+
 # ==== Helper functions ====
 
 # All log_* helpers write to stderr so they don't collide with values
@@ -728,10 +744,19 @@ for target in $ALL_TARGETS; do
 
     case "$status" in
         PASS)
-            status_color="${GREEN}"
-            TOTAL_PASS=$((TOTAL_PASS + 1))
-            if [ "$findings" != "?" ]; then
-                TOTAL_FINDINGS=$((TOTAL_FINDINGS + findings))
+            floor="$(finding_floor "$target")"
+            if [ "$findings" != "?" ] && [ "$findings" -lt "$floor" ]; then
+                # Detection regressed below the documented baseline (AC2).
+                status="FAIL"
+                status_color="${RED}"
+                TOTAL_FAIL=$((TOTAL_FAIL + 1))
+                echo -e "${RED}[REGRESSION] ${target}: ${findings} findings is below the baseline floor of ${floor} — detection degraded.${NC}" >&2
+            else
+                status_color="${GREEN}"
+                TOTAL_PASS=$((TOTAL_PASS + 1))
+                if [ "$findings" != "?" ]; then
+                    TOTAL_FINDINGS=$((TOTAL_FINDINGS + findings))
+                fi
             fi
             ;;
         ERROR)

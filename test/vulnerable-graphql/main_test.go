@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -312,15 +313,18 @@ func TestCreatePasteStoresPaste(t *testing.T) {
 		t.Fatalf("createPaste did not return a paste: %v", data)
 	}
 	paste := cp["paste"].(map[string]interface{})
-	newID := paste["id"]
-	if newID == nil || paste["title"] != "hello" {
+	if paste["id"] == nil || paste["title"] != "hello" {
 		t.Fatalf("unexpected createPaste result: %v", paste)
 	}
-	// The paste must actually be retrievable (i.e. it was stored, not dropped).
-	resp2 := gqlDo(t, srv, `{ paste(id: 5) { id title } }`, token)
+	// The paste must actually be retrievable by its returned id (i.e. it was
+	// stored, not dropped). Use the id from the response rather than a literal
+	// so the test does not couple to the seed-paste count. graphql.ID
+	// serialises as a string/number, so format it generically.
+	newID := fmt.Sprintf("%v", paste["id"])
+	resp2 := gqlDo(t, srv, fmt.Sprintf(`{ paste(id: %s) { id title } }`, newID), token)
 	data2 := resp2["data"].(map[string]interface{})
 	if data2["paste"] == nil {
-		t.Errorf("newly created paste (id 5) should be retrievable, got nil: %v", resp2)
+		t.Errorf("newly created paste (id %s) should be retrievable, got nil: %v", newID, resp2)
 	}
 }
 
@@ -439,4 +443,87 @@ func TestConcurrentGraphQLAccess(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// TestMeReturnsAuthenticatedUser covers the `me` resolver happy path: the
+// logged-in identity is reflected back from the bearer token.
+func TestMeReturnsAuthenticatedUser(t *testing.T) {
+	srv := setupTestServer(t)
+	token := loginAndGetToken(t, srv, "user1", "user1pass")
+	resp := gqlDo(t, srv, `{ me { id username } }`, token)
+	data := resp["data"].(map[string]interface{})
+	me, ok := data["me"].(map[string]interface{})
+	if !ok || me == nil {
+		t.Fatalf("me resolver returned nil: %v", resp)
+	}
+	if me["username"] != "user1" {
+		t.Errorf("me.username = %v, want user1", me["username"])
+	}
+}
+
+// TestPastesListReturnsSeedPastes covers the `pastes` list resolver happy path:
+// the seed pastes are returned.
+func TestPastesListReturnsSeedPastes(t *testing.T) {
+	srv := setupTestServer(t)
+	token := loginAndGetToken(t, srv, "user1", "user1pass")
+	resp := gqlDo(t, srv, `{ pastes { id title } }`, token)
+	data := resp["data"].(map[string]interface{})
+	list, ok := data["pastes"].([]interface{})
+	if !ok || len(list) == 0 {
+		t.Fatalf("pastes resolver returned no pastes: %v", resp)
+	}
+}
+
+// TestCreateUserMutation covers the `createUser` mutation happy path: a new
+// account is created and echoed back.
+func TestCreateUserMutation(t *testing.T) {
+	srv := setupTestServer(t)
+	token := loginAndGetToken(t, srv, "user1", "user1pass")
+	resp := gqlDo(t, srv, `mutation { createUser(userData: {username: "newbie", email: "n@example.com", password: "pw"}) { user { id username } } }`, token)
+	if resp["errors"] != nil {
+		t.Fatalf("createUser returned errors: %v", resp["errors"])
+	}
+	data := resp["data"].(map[string]interface{})
+	cu := data["createUser"].(map[string]interface{})
+	user, ok := cu["user"].(map[string]interface{})
+	if !ok || user["username"] != "newbie" {
+		t.Fatalf("unexpected createUser result: %v", data)
+	}
+}
+
+// TestUsernameCapitalize covers the username(capitalize:true) field branch and
+// its empty-username guard (regression: an empty username must not panic the
+// resolver). It creates a user with an empty username, then reads it back with
+// capitalize:true via the users list.
+func TestUsernameCapitalize(t *testing.T) {
+	srv := setupTestServer(t)
+	token := loginAndGetToken(t, srv, "user1", "user1pass")
+
+	// Normal username is capitalized.
+	resp := gqlDo(t, srv, `{ me { username(capitalize: true) } }`, token)
+	me := resp["data"].(map[string]interface{})["me"].(map[string]interface{})
+	if me["username"] != "User1" {
+		t.Errorf("capitalize: got %v, want User1", me["username"])
+	}
+
+	// Empty username must not panic (returns ""), proving the len-guard holds.
+	if r := gqlDo(t, srv, `mutation { createUser(userData: {username: "", email: "e@example.com", password: "pw"}) { user { id } } }`, token); r["errors"] != nil {
+		t.Fatalf("createUser with empty username errored: %v", r["errors"])
+	}
+	resp2 := gqlDo(t, srv, `{ users { username(capitalize: true) } }`, token)
+	if resp2["errors"] != nil {
+		t.Fatalf("username(capitalize) panicked/errored on empty username: %v", resp2["errors"])
+	}
+}
+
+// TestSystemDebugInfoDisclosure covers the systemDebug resolver (intentional
+// information disclosure) happy path.
+func TestSystemDebugInfoDisclosure(t *testing.T) {
+	srv := setupTestServer(t)
+	token := loginAndGetToken(t, srv, "user1", "user1pass")
+	resp := gqlDo(t, srv, `{ systemDebug(arg: "x") }`, token)
+	data := resp["data"].(map[string]interface{})
+	if s, _ := data["systemDebug"].(string); !strings.Contains(s, "DEBUG:") {
+		t.Errorf("systemDebug = %q, want a DEBUG string", s)
+	}
 }
