@@ -485,7 +485,11 @@ func buildSchema() (graphql.Schema, error) {
 				},
 			},
 
-			// deleteAllPastes — BFLA: dangerous, no authorisation
+			// deleteAllPastes — BFLA: dangerous, no authorisation.
+			// Deliberately exposed as a Query field (not a Mutation): real-world
+			// schemas sometimes misplace state-changing operations under Query,
+			// and Hadrian's BFLA templates exercise it here, so the placement is
+			// part of the fixture, not an oversight.
 			"deleteAllPastes": &graphql.Field{
 				Type: graphql.Boolean,
 				Resolve: func(p graphql.ResolveParams) (interface{}, error) {
@@ -676,8 +680,18 @@ func buildSchema() (graphql.Schema, error) {
 					username, _ := userData["username"].(string)
 					password, _ := userData["password"].(string)
 					mu.Lock()
+					// Derive the next ID from the current max rather than
+					// len(users)+1 so it stays unique even if a user is later
+					// removed (len+1 would reuse a live ID). Mirrors the
+					// monotonic intent of nextPasteID.
+					nextID := 1
+					for _, u := range users {
+						if u.ID >= nextID {
+							nextID = u.ID + 1
+						}
+					}
 					newUser := &UserRecord{
-						ID:       len(users) + 1,
+						ID:       nextID,
 						Username: username,
 						Password: password,
 						Role:     "user",
@@ -855,6 +869,8 @@ func main() {
 	fmt.Printf("Upload dir: %s\n", uploadDir)
 	fmt.Println()
 	fmt.Println("--- Seed Users ---")
+	// No mutex needed: this banner runs in main() before http.ListenAndServe
+	// below, so no request goroutine can touch `users` concurrently yet.
 	for _, u := range users {
 		fmt.Printf("  %s (id=%d, role=%s, password=%s)\n", u.Username, u.ID, u.Role, u.Password)
 	}

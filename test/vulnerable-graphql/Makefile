@@ -30,11 +30,13 @@ deps:
 	go mod download
 	go mod tidy
 
-# Run unit tests (with the race detector — the in-memory store is mutex-guarded
-# and exercised concurrently by TestConcurrentGraphQLAccess).
+# Run tests (with the race detector — the in-memory store is mutex-guarded and
+# exercised concurrently by TestConcurrentGraphQLAccess). These boot HTTP
+# handlers and exercise real shell/file-write behavior, so they are gated behind
+# the `integration` build tag and do NOT run on a bare `go test ./...`.
 test:
 	@echo "Running tests..."
-	go test -race -v ./...
+	go test -tags=integration -race -v ./...
 
 # Help
 help:

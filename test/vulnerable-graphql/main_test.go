@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package main
 
 import (
@@ -501,7 +504,14 @@ func TestUsernameCapitalize(t *testing.T) {
 
 	// Normal username is capitalized.
 	resp := gqlDo(t, srv, `{ me { username(capitalize: true) } }`, token)
-	me := resp["data"].(map[string]interface{})["me"].(map[string]interface{})
+	data, ok := resp["data"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("me query returned no data: %v", resp)
+	}
+	me, ok := data["me"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("me query returned no me object: %v", resp)
+	}
 	if me["username"] != "User1" {
 		t.Errorf("capitalize: got %v, want User1", me["username"])
 	}

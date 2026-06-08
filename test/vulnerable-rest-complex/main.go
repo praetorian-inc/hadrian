@@ -507,10 +507,23 @@ func handleOrders(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := getCustomer(r)
+	if c == nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	mu.Lock()
+	// Derive the next ID from the current max rather than len(orders)+1 so it
+	// stays unique even if an order is later removed (len+1 would reuse a live
+	// ID).
+	nextOrderID := 1
+	for _, o := range orders {
+		if o.ID >= nextOrderID {
+			nextOrderID = o.ID + 1
+		}
+	}
 	newOrder := Order{
-		ID:         len(orders) + 1,
+		ID:         nextOrderID,
 		CustomerID: c.ID,
 		Status:     "pending",
 	}
