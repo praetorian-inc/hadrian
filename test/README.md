@@ -57,6 +57,10 @@ The setup script handles:
 ./test/run-live-tests.sh --targets vulnerable-graphql
 ./test/run-live-tests.sh --targets vulnerable-rest-complex
 
+# Run crAPI + LLM planner (opt-in; requires OPENAI_API_KEY, ANTHROPIC_API_KEY,
+# or a running ollama instance — SKIPped cleanly when no provider is available).
+OPENAI_API_KEY=sk-... ./test/run-live-tests.sh --targets crapi,crapi-planner
+
 # Verbose output
 ./test/run-live-tests.sh --verbose
 
@@ -246,6 +250,10 @@ test/
   run-live-tests.sh        # End-to-end test runner
   test-llm-planner.sh      # LLM-planner test (vs vulnerable-rest-complex)
   test-llm-triage.sh       # LLM-triage test (vs vulnerable-rest-complex)
+  llm-helpers.sh           # LLM provider detection helper (detect_planner_provider)
+  test_detect_planner_provider.sh  # Unit test for detect_planner_provider
+  target-helpers.sh        # Target-selection helper (targets_contains)
+  test_targets_contains.sh # Unit test for targets_contains
   README.md                # This file
   .live-test-config        # Auto-generated port config (gitignored)
   .live-test-cache/        # Patched OpenAPI specs (gitignored)

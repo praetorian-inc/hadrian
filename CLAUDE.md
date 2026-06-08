@@ -22,7 +22,7 @@ go test ./...
 # Run tests with race detection
 go test -race ./...
 
-# Run integration tests
+# Run integration tests (fully in-process via httptest fixtures — NO Docker required)
 go test -tags=integration ./...
 
 # Run tests for a specific package
@@ -31,6 +31,19 @@ go test ./pkg/runner/...
 # Run a single test
 go test -run TestFunctionName ./pkg/package/...
 ```
+
+### Integration tests (no Docker)
+
+The `integration`-tagged tests are fully in-process and require no Docker daemon
+or external target. `pkg/runner/fixtures_test.go` builds an `httptest`-backed
+vulnerable REST API (opaque static bearer tokens, no JWT) that seeds BOLA/IDOR
+(API1), broken authentication (API2), excessive data exposure / BOPLA (API3),
+and BFLA (API5). `pkg/runner/integration_test.go` runs the real `templates/rest/`
+templates against it via `runner.RunTest(...)` and asserts findings per OWASP
+category. `pkg/plugins/graphql/integration_test.go` stands up an in-process
+GraphQL service (introspection + DVGA-style queries/mutations); the gRPC
+integration tests parse local `.proto` fixtures under `test/grpc/`. The crAPI /
+DVGA Docker harnesses (below) are for optional *live* end-to-end testing only.
 
 ## Architecture
 
@@ -117,6 +130,11 @@ Built-in safeguards in `pkg/runner/ratelimit_client.go`:
 
 ## Live Test Targets
 
+> These are **optional** end-to-end harnesses against locally-built vulnerable
+> targets and are **not** part of the Go test suite (`go test -tags=integration`
+> needs no live targets). Do **not** wire them into CI on untrusted/fork PRs — see
+> the CI safety note in `test/README.md`.
+
 The `test/` directory ships four in-house vulnerable targets, each a self-contained
 Go binary with its own `go.mod` (no Docker daemon, image pull, or repo clone required —
 the full suite runs in a fresh devcontainer):
@@ -139,6 +157,11 @@ The supported flow is the wrapper scripts under `test/`:
 
 # Stop any running target processes and remove the generated config.
 ./test/setup-live-targets.sh --teardown
+
+# Optional: exercise the LLM planner against crAPI (opt-in target).
+# Auto-selects provider: OpenAI > Anthropic > ollama; SKIPs cleanly when none available.
+export OPENAI_API_KEY=sk-...    # set once in your shell
+./test/run-live-tests.sh --targets crapi,crapi-planner
 ```
 
 Programmatic invocation (without the wrapper), e.g. the crAPI-shape REST target:
