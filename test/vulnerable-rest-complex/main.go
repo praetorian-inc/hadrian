@@ -622,12 +622,20 @@ func handleServiceRequest(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[BFLA] Service request submitted by %s (role: %s) — mechanic-only endpoint!", c.Username, c.Role)
 
 	mu.Lock()
+	// Derive the next ID from the current max rather than len()+1 so it stays
+	// unique even if a request is later removed (matches createUser/handleOrders).
+	nextSRID := 1
+	for _, existing := range serviceRequests {
+		if existing.ID >= nextSRID {
+			nextSRID = existing.ID + 1
+		}
+	}
 	sr := ServiceRequest{
-		ID:         len(serviceRequests) + 1,
+		ID:         nextSRID,
 		CustomerID: c.ID,
 		VehicleID:  req.VehicleID,
 		Problem:    req.Problem,
-		ReportID:   fmt.Sprintf("RPT-%05d", len(serviceRequests)+1),
+		ReportID:   fmt.Sprintf("RPT-%05d", nextSRID),
 	}
 	serviceRequests = append(serviceRequests, sr)
 	mu.Unlock()

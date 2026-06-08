@@ -475,6 +475,17 @@ func TestPastesListReturnsSeedPastes(t *testing.T) {
 	if !ok || len(list) == 0 {
 		t.Fatalf("pastes resolver returned no pastes: %v", resp)
 	}
+	// Assert a known seed paste is actually present, not just a non-empty list.
+	found := false
+	for _, p := range list {
+		if pm, ok := p.(map[string]interface{}); ok && pm["title"] == "User1 Private Paste" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected seed paste \"User1 Private Paste\" in list, got: %v", list)
+	}
 }
 
 // TestCreateUserMutation covers the `createUser` mutation happy path: a new
@@ -491,6 +502,15 @@ func TestCreateUserMutation(t *testing.T) {
 	user, ok := cu["user"].(map[string]interface{})
 	if !ok || user["username"] != "newbie" {
 		t.Fatalf("unexpected createUser result: %v", data)
+	}
+	// A second createUser must get a distinct id — exercises the max-scan ID
+	// logic (a regression to len(users)+1 without this assertion would still
+	// produce distinct ids here, but a broken scan returning a fixed id would
+	// be caught).
+	resp2 := gqlDo(t, srv, `mutation { createUser(userData: {username: "newbie2", email: "n2@example.com", password: "pw"}) { user { id } } }`, token)
+	user2 := resp2["data"].(map[string]interface{})["createUser"].(map[string]interface{})["user"].(map[string]interface{})
+	if user["id"] == nil || user2["id"] == nil || user["id"] == user2["id"] {
+		t.Errorf("createUser produced non-unique ids: %v vs %v", user["id"], user2["id"])
 	}
 }
 
