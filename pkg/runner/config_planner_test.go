@@ -47,8 +47,8 @@ func TestSetDefaults_PlannerTimeoutPositive(t *testing.T) {
 // validTestConfig returns a Config that passes Validate() using existing fixture files.
 func validTestConfig() Config {
 	return Config{
-		API:                  "../../test/crapi/crapi-openapi-spec.json",
-		Roles:                "../../test/crapi/roles.yaml",
+		API:                  "../../test/vulnerable-rest-complex/openapi.yaml",
+		Roles:                "../../test/vulnerable-rest-complex/roles.yaml",
 		Output:               "terminal",
 		RateLimit:            5.0,
 		RateLimitBackoff:     "exponential",

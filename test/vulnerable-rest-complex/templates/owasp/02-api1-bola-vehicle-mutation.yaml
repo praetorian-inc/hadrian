@@ -1,0 +1,54 @@
+id: api1-bola-vehicle-mutation
+
+info:
+  name: "BOLA - Access Other Customer's Vehicle (Mutation)"
+  category: "API1:2023"
+  severity: "HIGH"
+  requires_llm_triage: false
+  test_pattern: "mutation"
+  tags: ["owasp", "owasp-api-top10", "bola"]
+
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["GET"]
+  path_pattern: ".*/vehicles/.*"
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+test_phases:
+  setup:
+    path: "/api/dashboard"
+    operation: "read"
+    auth: "victim"
+    store_response_field: "vehicle_id"
+    expected_status: 200
+
+  attack:
+    path: "/api/vehicles/{vehicle_id}"
+    operation: "read"
+    auth: "attacker"
+    use_stored_field: "vehicle_id"
+    check_field: "vin"
+    expected_status: 200
+
+  verify:
+    path: "/api/vehicles/{vehicle_id}"
+    operation: "read"
+    auth: "victim"
+    use_stored_field: "vehicle_id"
+    expected_status: 200
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      status_code: 200
+    - type: "body_field"
+      body_field: "vin"
+      exists: true
+  vulnerability_pattern: "Attacker can access victim's vehicle"
+  conditions:
+    - attack_phase_status:
+        - 200

@@ -226,19 +226,22 @@ The `store_response_fields` directive uses JSON path expressions to extract valu
 hadrian test graphql --target https://api.example.com --template-dir ./my-templates
 ```
 
-## Example: Testing DVGA
+## Example: Testing vulnerable-graphql
 
-[DVGA (Damn Vulnerable GraphQL Application)](https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application) is an intentionally vulnerable GraphQL application for testing.
+`test/vulnerable-graphql/` is an in-house, intentionally vulnerable GraphQL
+target shipped with Hadrian. It is a self-contained Go binary (no Docker
+required) that mirrors the role DVGA used to play in the live-test harness:
+introspection enabled, BOLA on paste resolvers, BFLA via the `promoteUser`
+admin mutation, `UserObject.password` exposure, real command injection via
+`systemDiagnostics`, and path traversal via `uploadPaste`.
 
-### Setup DVGA
+### Run the target
 
 ```bash
-# Clone and run DVGA
-git clone https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git
-cd Damn-Vulnerable-GraphQL-Application
-docker-compose up -d
+# Build + run on port 5013 (FOR TESTING ONLY — performs real command execution)
+(cd test/vulnerable-graphql && go build -o vulnerable-graphql . && PORT=5013 ./vulnerable-graphql)
 
-# DVGA runs at http://localhost:5013/graphql
+# The GraphQL endpoint is at http://localhost:5013/graphql
 ```
 
 ### Run Hadrian
@@ -252,6 +255,9 @@ hadrian test graphql --target http://localhost:5013
 # [HIGH] no-depth-limit: Server allows deeply nested queries (depth 10)
 # [MEDIUM] no-batching-limit: Server allows batched queries with 100 operations
 ```
+
+The full live-test harness (`./test/setup-live-targets.sh && ./test/run-live-tests.sh`)
+drives this target with its bundled templates and acquires role tokens automatically.
 
 ## Output Formats
 
