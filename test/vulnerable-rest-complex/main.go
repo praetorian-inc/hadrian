@@ -174,6 +174,9 @@ func findCustomerByCredentials(username, password string) *Customer {
 	defer mu.Unlock()
 	for _, c := range customers {
 		if c.Username == username && c.Password == password {
+			// Return a pointer to the loop COPY, not &customers[i] — same
+			// race-safety rationale as validateJWT (caller uses it after mu
+			// releases; a slice pointer could race with a concurrent append).
 			return &c
 		}
 	}
@@ -628,7 +631,7 @@ func handleServiceRequest(w http.ResponseWriter, r *http.Request) {
 
 	mu.Lock()
 	// Derive the next ID from the current max rather than len()+1 so it stays
-	// unique even if a request is later removed (matches createUser/handleOrders).
+	// unique even if a request is later removed (matches handleOrders).
 	nextSRID := 1
 	for _, existing := range serviceRequests {
 		if existing.ID >= nextSRID {

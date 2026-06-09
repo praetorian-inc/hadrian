@@ -24,9 +24,14 @@ HADRIAN_BIN="${HADRIAN_BIN:-${REPO_ROOT}/hadrian}"
 OUTPUT_DIR="${SCRIPT_DIR}/.results"
 CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
-# Pick up the port assigned by setup-live-targets.sh if present.
-if [ -f "$CONFIG_FILE" ] && \
-   ! grep -qvE '^[[:space:]]*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*="[A-Za-z0-9_./:@,+ -]*"$' "$CONFIG_FILE"; then
+# Pick up the port assigned by setup-live-targets.sh if present. Fail fast on
+# unsafe content rather than silently skipping it — same quoted-value-only
+# guard as run-live-tests.sh / test-llm-planner.sh.
+if [ -f "$CONFIG_FILE" ]; then
+    if grep -qvE '^[[:space:]]*(#.*)?$|^[A-Za-z_][A-Za-z0-9_]*="[A-Za-z0-9_./:@,+ -]*"$' "$CONFIG_FILE"; then
+        echo "ERROR: $CONFIG_FILE contains unsafe content. Expected only comments, blank lines, or KEY=\"VALUE\" assignments. Re-run setup-live-targets.sh to regenerate." >&2
+        exit 1
+    fi
     # shellcheck disable=SC1090
     . "$CONFIG_FILE"
 fi
@@ -40,9 +45,9 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-log_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
-log_ok()   { echo -e "${GREEN}[OK]${NC} $1"; }
-log_fail() { echo -e "${RED}[FAIL]${NC} $1"; }
+log_info() { echo -e "${CYAN}[INFO]${NC} $1" >&2; }
+log_ok()   { echo -e "${GREEN}[OK]${NC} $1" >&2; }
+log_fail() { echo -e "${RED}[FAIL]${NC} $1" >&2; }
 
 # Parse provider argument
 PROVIDER="${1:-openai}"
