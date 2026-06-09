@@ -280,6 +280,7 @@ test/
   .results/                # JSON test results (gitignored)
   lib/
     port-helpers.sh        # Shared generic port helpers (sourced by the scripts)
+    rest-complex-helpers.sh # Shared vulnerable-rest-complex login helper (LLM scripts)
   regression/
     lab-2750-regression-tests.sh   # Shape harness for the LAB-2750 change
   vulnerable-api/          # REST vulnerable API (Go) + templates

@@ -472,6 +472,13 @@ func TestMassAssignment_Order(t *testing.T) {
 	if gotStatus != "completed" {
 		t.Fatalf("expected status=completed (mass assignment), got %q", gotStatus)
 	}
+
+	// The order must receive a valid server-assigned id from the max-scan logic
+	// (a broken scan yielding 0/empty would fail here). After-delete uniqueness
+	// isn't asserted because the target exposes no order-delete endpoint.
+	if id, ok := result["id"].(float64); !ok || id <= 0 {
+		t.Errorf("expected a positive server-assigned order id, got %v", result["id"])
+	}
 }
 
 // TestBFLA_ServiceRequest verifies that a non-mechanic user can submit a service request.

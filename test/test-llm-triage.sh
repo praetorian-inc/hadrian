@@ -81,14 +81,8 @@ fi
 # Setup users and tokens
 log_info "Setting up vulnerable-rest-complex tokens..."
 
-rest_complex_login() {
-    local username="$1" password="$2"
-    printf '{"username":"%s","password":"%s"}' "$username" "$password" | \
-        curl -sf -X POST "${REST_COMPLEX_URL}/api/auth/login" \
-            -H "Content-Type: application/json" \
-            --data-binary @- 2>/dev/null | \
-        python3 -c "import json,sys; print(json.load(sys.stdin).get('token',''))" 2>/dev/null || echo ""
-}
+# shellcheck source=test/lib/rest-complex-helpers.sh
+. "${SCRIPT_DIR}/lib/rest-complex-helpers.sh"
 
 ADMIN_TOKEN=$(rest_complex_login "admin" "admin123")
 USER_TOKEN=$(rest_complex_login "user1" "user1pass")

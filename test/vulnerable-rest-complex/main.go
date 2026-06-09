@@ -158,6 +158,11 @@ func validateJWT(tokenString string) (*Customer, error) {
 	defer mu.Unlock()
 	for _, c := range customers {
 		if c.ID == customerID {
+			// Deliberately return a pointer to the loop COPY, not &customers[i]:
+			// callers use it after this function returns (mu is released here),
+			// so a pointer into the live slice could race with a concurrent
+			// append (reslice/realloc). The copy is identity-only (id/role/etc.)
+			// and race-safe. Do not "simplify" this to &customers[i].
 			return &c, nil
 		}
 	}
