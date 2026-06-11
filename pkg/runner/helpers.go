@@ -26,6 +26,14 @@ import (
 // PUBLIC API (Helper functions for CLI workflow)
 // =============================================================================
 
+// sarifLacksTemplates reports whether a SARIF run will fall back to wiki
+// metadata because no templates were loaded — the condition the gRPC/GraphQL
+// runners warn the operator about. Pure predicate so the branch is testable
+// without standing up a full protocol run.
+func sarifLacksTemplates(output string, templateCount int) bool {
+	return output == "sarif" && templateCount == 0
+}
+
 // warnDuplicateTemplateIDs logs a warning for each template id declared by more
 // than one file in a loaded set. Two templates sharing an id collapse to a
 // single SARIF rule (buildRules keeps the first seen) and, when they match the

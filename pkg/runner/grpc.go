@@ -308,7 +308,7 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 
 	// When emitting SARIF without any compiled templates, warn that rules will
 	// degrade to wiki-fallback metadata; this matches the GraphQL behavior.
-	if config.Output == "sarif" && len(templateFiles) == 0 {
+	if sarifLacksTemplates(config.Output, len(templateFiles)) {
 		log.Warn("SARIF: no templates loaded from %s — rules will use wiki fallback metadata", templateDir)
 	}
 

@@ -76,6 +76,22 @@ type GraphQLConfig struct {
 	Headers         []string   // Custom HTTP headers (format: "Key: Value")
 }
 
+// Validate checks GraphQL output configuration before test execution, mirroring
+// the REST and gRPC runners: the output format must be supported and SARIF
+// requires --output-file. An empty Output is tolerated (REST's Config.Validate
+// defaults "" → "json" before validating, and the CLI flag defaults to
+// "terminal"), so tolerating "" here keeps the three protocols consistent.
+func (c *GraphQLConfig) Validate() error {
+	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
+	if c.Output != "" && !validFormats[c.Output] {
+		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)
+	}
+	if c.Output == "sarif" && c.OutputFile == "" {
+		return fmt.Errorf("--output sarif requires --output-file")
+	}
+	return nil
+}
+
 // newTestGraphQLCmd creates the "test graphql" subcommand
 func newTestGraphQLCmd() *cobra.Command {
 	var config GraphQLConfig
@@ -186,6 +202,12 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 // runGraphQLTest executes GraphQL security tests
 func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	startTime := time.Now()
+
+	// Surface output/format errors (e.g. --output sarif without --output-file)
+	// here rather than later at reporter construction.
+	if err := config.Validate(); err != nil {
+		return err
+	}
 
 	// Enable verbose logging if requested
 	log.SetVerbose(config.Verbose)

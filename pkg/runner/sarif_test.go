@@ -174,6 +174,31 @@ func TestSARIFReporter_PartialFingerprintsAreStable(t *testing.T) {
 		"fingerprints should not depend on transient state")
 }
 
+// A finding with no TemplateID is emitted with ruleId "hadrian.unknown"; its
+// fingerprint must hash that same normalized id (not the raw empty string), so
+// the ruleId in the SARIFResult and the value the fingerprint derives from stay
+// consistent. Pins the buildResults/buildPartialFingerprints normalization.
+func TestSARIFReporter_PartialFingerprints_NormalizeMissingTemplateID(t *testing.T) {
+	empty := sampleFinding()
+	empty.TemplateID = ""
+
+	named := sampleFinding()
+	named.TemplateID = "hadrian.unknown"
+
+	assert.Equal(t,
+		buildPartialFingerprints(named)["primaryLocationHash/v1"],
+		buildPartialFingerprints(empty)["primaryLocationHash/v1"],
+		"empty TemplateID must fingerprint as the normalized 'hadrian.unknown' rule id")
+
+	// And it must NOT collide with the literal empty-string hash that the old
+	// (raw f.TemplateID) behavior produced.
+	rawEmpty := sampleFinding()
+	rawEmpty.TemplateID = "\x00sentinel-not-equal" // any value != hadrian.unknown
+	assert.NotEqual(t,
+		buildPartialFingerprints(empty)["primaryLocationHash/v1"],
+		buildPartialFingerprints(rawEmpty)["primaryLocationHash/v1"])
+}
+
 func TestSARIFReporter_PartialFingerprintsDifferWhenIdentityChanges(t *testing.T) {
 	base := sampleFinding()
 	cases := []struct {

@@ -71,3 +71,10 @@ func TestWarnDuplicateTemplateIDs(t *testing.T) {
 			"second and third file each warn against the first-seen path")
 	})
 }
+
+func TestSarifLacksTemplates(t *testing.T) {
+	assert.True(t, sarifLacksTemplates("sarif", 0), "sarif with no templates → warn")
+	assert.False(t, sarifLacksTemplates("sarif", 3), "sarif with templates → no warn")
+	assert.False(t, sarifLacksTemplates("json", 0), "non-sarif output → no warn regardless of count")
+	assert.False(t, sarifLacksTemplates("terminal", 0))
+}

@@ -204,12 +204,29 @@ func (r *SARIFReporter) build(findings []*model.Finding) SARIFReport {
 				},
 			},
 			Results: results,
+			// Static run id. GitHub Code Scanning separates runs by the
+			// upload-sarif `category` parameter (see the example workflow), not
+			// by automationDetails.id, so a constant value is intentional here —
+			// it is not a per-run unique identifier.
 			AutomationDetails: &SARIFRunAutomation{
 				ID: "hadrian",
 			},
 			ColumnKind: "utf16CodeUnits",
 		}},
 	}
+}
+
+// ruleID returns the SARIF rule identifier for a finding: its TemplateID, or
+// the "hadrian.unknown" sentinel when the finding carries no template ID.
+// buildRules, buildResults, and buildPartialFingerprints all route through this
+// so a result's ruleId and its partialFingerprint can never derive from
+// different values (an empty TemplateID would otherwise hash "" while the rule
+// is named "hadrian.unknown").
+func ruleID(f *model.Finding) string {
+	if f.TemplateID == "" {
+		return "hadrian.unknown"
+	}
+	return f.TemplateID
 }
 
 // buildResults maps findings to SARIF results given a TemplateID→index map.
@@ -223,21 +240,18 @@ func (r *SARIFReporter) build(findings []*model.Finding) SARIFReport {
 func (r *SARIFReporter) buildResults(findings []*model.Finding, ruleIndex map[string]int) []SARIFResult {
 	results := make([]SARIFResult, 0, len(findings))
 	for _, f := range findings {
-		ruleID := f.TemplateID
-		if ruleID == "" {
-			ruleID = "hadrian.unknown"
-		}
-		idx, ok := ruleIndex[ruleID]
+		rid := ruleID(f)
+		idx, ok := ruleIndex[rid]
 		if !ok {
 			// buildRules walks the same finding set, so this branch indicates
 			// an invariant violation (refactor regression, future loader bug,
 			// concurrent mutation). Surface it rather than silently emitting a
 			// SARIF result that points at the wrong rule.
-			log.Warn("SARIF: dropping finding with ruleID %q — no matching entry in driver.rules (invariant violation)", ruleID)
+			log.Warn("SARIF: dropping finding with ruleID %q — no matching entry in driver.rules (invariant violation)", rid)
 			continue
 		}
 		results = append(results, SARIFResult{
-			RuleID:              ruleID,
+			RuleID:              rid,
 			RuleIndex:           idx,
 			Level:               severityToSARIFLevel(f.Severity),
 			Message:             SARIFMessage{Text: r.redactor.Redact(buildResultMessage(f))},
@@ -258,10 +272,7 @@ func (r *SARIFReporter) buildRules(findings []*model.Finding) ([]SARIFRule, map[
 	uniq := map[string]seen{}
 	order := []string{}
 	for _, f := range findings {
-		id := f.TemplateID
-		if id == "" {
-			id = "hadrian.unknown"
-		}
+		id := ruleID(f)
 		if _, ok := uniq[id]; !ok {
 			uniq[id] = seen{first: f}
 			order = append(order, id)
@@ -287,6 +298,8 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 		Name: id,
 	}
 
+	// Template-enriched path: a CompiledTemplate is registered for this id, so
+	// description/helpUri/tags/severity come from its author-controlled metadata.
 	if tmpl, ok := r.templates[id]; ok {
 		rule.ShortDescription = &SARIFMessage{Text: tmpl.Info.Name}
 		if tmpl.Info.Description != "" {
@@ -314,6 +327,9 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 		return rule
 	}
 
+	// Finding-derived fallback: no template registered (e.g. the GraphQL
+	// non-template scanner), so synthesize a minimal rule from a sample finding
+	// and point helpUri at the wiki.
 	if sample != nil {
 		if sample.Name != "" {
 			rule.ShortDescription = &SARIFMessage{Text: sample.Name}
@@ -447,7 +463,10 @@ func buildLocations(f *model.Finding) []SARIFLocation {
 // existing alerts are not orphaned).
 func buildPartialFingerprints(f *model.Finding) map[string]string {
 	parts := []string{
-		f.TemplateID,
+		// Use the normalized rule id (not the raw TemplateID) so the fingerprint
+		// matches the ruleId emitted in the same SARIFResult — an empty
+		// TemplateID must hash "hadrian.unknown", not "".
+		ruleID(f),
 		strings.ToUpper(f.Method),
 		f.Endpoint,
 		f.AttackerRole,
