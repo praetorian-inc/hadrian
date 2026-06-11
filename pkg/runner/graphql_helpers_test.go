@@ -547,6 +547,14 @@ graphql:
 		require.Len(t, got, 2, "empty filter must keep every template")
 		ids := []string{got[0].ID, got[1].ID}
 		assert.ElementsMatch(t, []string{"t-one", "t-two"}, ids)
+		// The loader must propagate the source path onto the compiled template
+		// (so helpUri resolves to the GitHub blob and duplicate-id warnings name
+		// real files). A regression dropping `c.FilePath = t.FilePath` would
+		// leave these empty.
+		paths := []string{got[0].FilePath, got[1].FilePath}
+		assert.ElementsMatch(t,
+			[]string{filepath.Join(dir, "one.yaml"), filepath.Join(dir, "two.yaml")},
+			paths, "compiled templates must carry their source FilePath")
 	})
 
 	t.Run("filter narrows the set", func(t *testing.T) {
