@@ -287,12 +287,18 @@ func TestTemplateHelpURI(t *testing.T) {
 		{"built-in rest", "templates/rest/01-api1-bola-read.yaml", templateBaseURL + "templates/rest/01-api1-bola-read.yaml"},
 		{"built-in graphql with leading ./", "./templates/graphql/foo.yaml", templateBaseURL + "templates/graphql/foo.yaml"},
 		{"built-in grpc with Windows separators", "templates\\rest\\01-api1-bola-read.yaml", templateBaseURL + "templates/rest/01-api1-bola-read.yaml"},
-		// QUAL-005 fix: absolute paths that contain "templates/" as a non-prefix
-		// segment must NOT be mapped to hadrian's GitHub blob — they are custom
-		// templates that live outside the built-in tree.
-		{"custom abs path with templates/ as a non-prefix segment", "/abs/path/templates/grpc/bar.yaml", templateWikiURL},
+		// N1 fix: the canonical blob URL must resolve for built-in templates no
+		// matter how the loader reached them — anchoring on the
+		// templates/{rest,graphql,grpc}/ segment (not a leading prefix) covers
+		// absolute --template-dir, $HADRIAN_TEMPLATES, and ../../ relative paths.
+		{"built-in via absolute --template-dir", "/opt/hadrian/templates/grpc/bar.yaml", templateBaseURL + "templates/grpc/bar.yaml"},
+		{"built-in via ../../ relative path", "../../templates/rest/01-api1-bola-read.yaml", templateBaseURL + "templates/rest/01-api1-bola-read.yaml"},
+		// Custom layouts whose path merely contains "templates" as a fragment of
+		// another directory name must still fall back to the wiki — the segment
+		// only matches on a path boundary (start of string or after "/").
 		{"custom path with sub-templates dir", "/opt/work/sub-templates/api.yaml", templateWikiURL},
 		{"custom path with my-templates dir", "/home/user/my-templates/foo.yaml", templateWikiURL},
+		{"custom path with my-templates/rest dir", "/home/user/my-templates/rest/foo.yaml", templateWikiURL},
 		{"completely custom path", "/some/custom/path/my-template.yaml", templateWikiURL},
 	}
 	for _, tc := range cases {

@@ -271,6 +271,7 @@ func loadAndCompileGraphQLTemplates(dir string, filters []string) ([]*templates.
 		}
 		out = append(out, c)
 	}
+	warnDuplicateTemplateIDs(out)
 	return out, nil
 }
 

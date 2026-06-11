@@ -261,6 +261,8 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 		return result[i].FilePath < result[j].FilePath
 	})
 
+	warnDuplicateTemplateIDs(result)
+
 	return result, nil
 }
 

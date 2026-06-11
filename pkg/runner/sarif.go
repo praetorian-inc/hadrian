@@ -34,12 +34,6 @@ const (
 	templateBaseURL       = "https://github.com/praetorian-inc/hadrian/blob/main/"
 	templateWikiURL       = "https://github.com/praetorian-inc/hadrian/wiki/Template-System"
 
-	// builtInTemplatePrefix gates templateHelpURI: only paths rooted at
-	// "templates/" map to the hadrian GitHub blob URL. A custom template at
-	// /home/user/my-templates/foo.yaml would otherwise match a naive substring
-	// search and produce a broken URL.
-	builtInTemplatePrefix = "templates/"
-
 	// fingerprintFieldSep separates identity fields when computing
 	// partialFingerprints. NUL is used because it cannot legitimately appear in
 	// any of the inputs (template IDs, HTTP methods, paths, role names) — joining
@@ -353,13 +347,26 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 	return rule
 }
 
+// builtInTemplateDirs are the canonical subdirectories of Hadrian's built-in
+// template tree. A FilePath that contains one of these as a path segment is
+// linked to its GitHub blob, regardless of how the loader reached it.
+var builtInTemplateDirs = []string{"templates/rest/", "templates/graphql/", "templates/grpc/"}
+
 // templateHelpURI returns a stable GitHub URL for built-in templates and a
 // fallback wiki URL otherwise.
 //
-// A built-in template is identified by a FilePath rooted at "templates/"
-// (optionally prefixed with "./"). Earlier versions of this function matched
-// the substring "templates/" anywhere in the path, which produced broken URLs
-// for legitimate custom layouts like /home/user/my-templates/foo.yaml.
+// A built-in template is identified by a FilePath that contains one of
+// builtInTemplateDirs as a path segment. Anchoring on the
+// templates/{rest,graphql,grpc}/ segment (rather than a leading "templates/"
+// prefix) is what lets the canonical blob URL resolve no matter how the loader
+// reached the file: the relative default ("templates/rest/x.yaml"), an absolute
+// --template-dir ("/opt/hadrian/templates/grpc/x.yaml"), $HADRIAN_TEMPLATES, or
+// a "../../templates/rest/x.yaml" relative path all map to the same blob.
+//
+// The segment must sit on a path boundary (string start or after a "/"), so
+// custom layouts like /home/user/my-templates/foo.yaml or
+// /opt/work/sub-templates/api.yaml still fall through to the wiki URL instead
+// of producing a broken blob link.
 func templateHelpURI(filePath string) string {
 	if filePath == "" {
 		return templateWikiURL
@@ -367,8 +374,11 @@ func templateHelpURI(filePath string) string {
 	// Normalize Windows separators and strip a leading "./" so a built-in
 	// template loaded via the default relative path still matches.
 	normalized := strings.TrimPrefix(strings.ReplaceAll(filePath, "\\", "/"), "./")
-	if strings.HasPrefix(normalized, builtInTemplatePrefix) {
-		return templateBaseURL + normalized
+	for _, seg := range builtInTemplateDirs {
+		i := strings.LastIndex(normalized, seg)
+		if i == 0 || (i > 0 && normalized[i-1] == '/') {
+			return templateBaseURL + normalized[i:]
+		}
 	}
 	return templateWikiURL
 }
@@ -421,6 +431,16 @@ func buildLocations(f *model.Finding) []SARIFLocation {
 // Fields are joined with NUL (\x00) so that no user-controllable value can
 // shift the boundary between fields and produce a collision with a different
 // (template, endpoint, role) tuple.
+//
+// INVARIANT: one (TemplateID, Method, Endpoint, AttackerRole, VictimRole) tuple
+// must map to at most one finding. Category and Severity are deliberately NOT
+// part of the hash — today that tuple uniquely identifies a finding, so adding
+// them would only churn fingerprints (and reopen GitHub Code Scanning alerts)
+// without improving uniqueness. If a future change ever lets the same tuple
+// emit two findings that differ only by Category or Severity, they will collide
+// to a single alert and one will be hidden; at that point Category/Severity
+// must be folded into the hash here (a new "/v2" key, leaving v1 intact so
+// existing alerts are not orphaned).
 func buildPartialFingerprints(f *model.Finding) map[string]string {
 	parts := []string{
 		f.TemplateID,

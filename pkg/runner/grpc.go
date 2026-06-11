@@ -694,6 +694,8 @@ func loadGRPCTemplates(dir string) ([]*templates.CompiledTemplate, error) {
 		return nil, err
 	}
 
+	warnDuplicateTemplateIDs(result)
+
 	return result, nil
 }
 

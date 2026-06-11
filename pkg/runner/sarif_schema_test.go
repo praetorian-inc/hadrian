@@ -93,3 +93,29 @@ func TestSARIFReporter_ValidatesAgainstSchema_Empty(t *testing.T) {
 	require.NoError(t, rep.GenerateReport(nil, &Stats{}))
 	validateAgainstSARIFSchema(t, schema, out)
 }
+
+// TestSARIFSchema_RejectsInvalidDocuments proves the schema validator is not a
+// no-op: documents that violate the SARIF v2.1.0 schema must fail validation.
+// Without this, a regression that loaded an empty/permissive schema would let
+// TestSARIFReporter_ValidatesAgainstSchema pass against anything.
+func TestSARIFSchema_RejectsInvalidDocuments(t *testing.T) {
+	schema := loadSARIFSchema(t)
+	cases := []struct {
+		name string
+		doc  string
+	}{
+		{"missing required runs", `{"version": "2.1.0"}`},
+		{"runs is wrong type", `{"version": "2.1.0", "runs": "not-an-array"}`},
+		{"missing version", `{"runs": []}`},
+		{"empty object", `{}`},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			var doc any
+			require.NoError(t, json.Unmarshal([]byte(tc.doc), &doc))
+			require.Error(t, schema.Validate(doc),
+				"expected schema to reject invalid SARIF document %q", tc.doc)
+		})
+	}
+}

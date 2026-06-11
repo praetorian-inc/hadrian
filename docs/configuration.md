@@ -443,7 +443,7 @@ The output validates against [sarif-2.1.0.json](https://json.schemastore.org/sar
 - `level` — derived from severity: `CRITICAL`/`HIGH` → `error`, `MEDIUM` → `warning`, `LOW`/`INFO` → `note`
 - `locations[].physicalLocation.artifactLocation.uri` — the API endpoint path
 - `locations[].logicalLocations[].name` — `METHOD PATH` (e.g. `GET /api/users/{id}`)
-- `partialFingerprints["primaryLocationHash/v1"]` — SHA-256 of `templateID|method|endpoint|attackerRole|victimRole`, stable across runs
+- `partialFingerprints["primaryLocationHash/v1"]` — SHA-256 over `templateID`, `method`, `endpoint`, `attackerRole`, and `victimRole` (NUL-joined), stable across runs
 - `properties` — category, attackerRole, victimRole, confidence, LLM analysis
 
 Rules link to the source template via `helpUri`. For built-in templates this resolves to `https://github.com/praetorian-inc/hadrian/blob/main/templates/<protocol>/<file>.yaml`; for custom templates it falls back to the [Template System](https://github.com/praetorian-inc/hadrian/wiki/Template-System) wiki page.
@@ -458,6 +458,8 @@ To upload the report to GitHub Code Scanning, use the canonical upload action:
 ```
 
 A complete example workflow ships in [`.github/workflows/example-sarif-upload.yml`](../.github/workflows/example-sarif-upload.yml).
+
+> **Templates in CI:** the `hadrian` binary does not embed templates — `go install` ships only the executable. In a workflow you must make the templates available (check out the Hadrian repo or vendor them) and point `--template-dir`/`$HADRIAN_TEMPLATES` at `templates/<protocol>/`. Pin the template ref to the same release as the installed binary so they don't drift. The example workflow shows this.
 
 ### Output Flags
 

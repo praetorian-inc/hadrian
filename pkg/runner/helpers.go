@@ -26,6 +26,27 @@ import (
 // PUBLIC API (Helper functions for CLI workflow)
 // =============================================================================
 
+// warnDuplicateTemplateIDs logs a warning for each template id declared by more
+// than one file in a loaded set. Two templates sharing an id collapse to a
+// single SARIF rule (buildRules keeps the first seen) and, when they match the
+// same operation+role pair, to a single partialFingerprint — silently hiding
+// the second finding. This only happens with a misconfigured template set, so
+// it is a warning (surfacing the conflict) rather than a hard load failure.
+// It is shared by the rest, graphql, and grpc loaders.
+func warnDuplicateTemplateIDs(tmpls []*templates.CompiledTemplate) {
+	seen := make(map[string]string, len(tmpls))
+	for _, t := range tmpls {
+		if t == nil || t.ID == "" {
+			continue
+		}
+		if first, ok := seen[t.ID]; ok {
+			log.Warn("Duplicate template id %q: %q and %q declare the same id; only the first surfaces in SARIF rules and fingerprints", t.ID, first, t.FilePath)
+			continue
+		}
+		seen[t.ID] = t.FilePath
+	}
+}
+
 // parseAPISpec parses API specification using registered plugins
 func parseAPISpec(path string) (*model.APISpec, error) {
 	data, err := os.ReadFile(path)

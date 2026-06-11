@@ -166,10 +166,45 @@ func TestValidate_OutputFormats(t *testing.T) {
 				RateLimitMaxRetries:  maxRetries,
 				RateLimitStatusCodes: statusCodes,
 			}
+			// sarif is a file-only format and requires --output-file (see
+			// TestValidate_SARIFRequiresOutputFile for the negative case).
+			if format == "sarif" {
+				c.OutputFile = filepath.Join(tmpDir, "report.sarif")
+			}
 			if err := c.Validate(); err != nil {
 				t.Errorf("Validate(Output=%q) = %v; want nil", format, err)
 			}
 		})
+	}
+}
+
+// TestValidate_SARIFRequiresOutputFile asserts the --output sarif / --output-file
+// pairing is enforced at validation time (N3) rather than deferred to reporter
+// construction, so the error surfaces alongside the other format checks.
+func TestValidate_SARIFRequiresOutputFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	apiSpec := filepath.Join(tmpDir, "api.yaml")
+	rolesFile := filepath.Join(tmpDir, "roles.yaml")
+	if err := os.WriteFile(apiSpec, []byte("openapi: 3.0.0"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rolesFile, []byte("roles: []"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	rate, backoff, maxWait, maxRetries, statusCodes := validRateLimitDefaults()
+
+	c := &Config{
+		API:                  apiSpec,
+		Roles:                rolesFile,
+		Output:               "sarif",
+		RateLimit:            rate,
+		RateLimitBackoff:     backoff,
+		RateLimitMaxWait:     maxWait,
+		RateLimitMaxRetries:  maxRetries,
+		RateLimitStatusCodes: statusCodes,
+	}
+	if err := c.Validate(); err == nil {
+		t.Error("Validate(Output=sarif, OutputFile=\"\") = nil; want error")
 	}
 }
 
