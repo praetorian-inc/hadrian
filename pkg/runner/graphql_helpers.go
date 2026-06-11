@@ -269,6 +269,10 @@ func loadAndCompileGraphQLTemplates(dir string, filters []string) ([]*templates.
 			log.Warn("Failed to compile GraphQL template %s: %v", t.ID, cerr)
 			continue
 		}
+		// Mirror the REST/gRPC loaders: carry the source path onto the compiled
+		// template so helpUri resolves to the GitHub blob for built-in templates
+		// and duplicate-id warnings name real files.
+		c.FilePath = t.FilePath
 		out = append(out, c)
 	}
 	warnDuplicateTemplateIDs(out)

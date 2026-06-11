@@ -34,6 +34,12 @@ const (
 	templateBaseURL       = "https://github.com/praetorian-inc/hadrian/blob/main/"
 	templateWikiURL       = "https://github.com/praetorian-inc/hadrian/wiki/Template-System"
 
+	// defaultPrecision is the SARIF rule precision Hadrian reports. Hadrian
+	// templates don't carry a per-rule precision signal today, so "medium" is a
+	// conservative default that avoids overstating confidence to SARIF consumers
+	// (GitHub UI, Code Scanning APIs).
+	defaultPrecision = "medium"
+
 	// fingerprintFieldSep separates identity fields when computing
 	// partialFingerprints. NUL is used because it cannot legitimately appear in
 	// any of the inputs (template IDs, HTTP methods, paths, role names) — joining
@@ -318,11 +324,8 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 		}
 		tags = append(tags, tmpl.Info.Tags...)
 		rule.Properties = &SARIFRuleProperties{
-			Tags: dedupeStrings(tags),
-			// Hadrian templates don't carry a per-rule precision signal today;
-			// "medium" is a conservative default that avoids overstating
-			// confidence to SARIF consumers (GitHub UI, Code Scanning APIs).
-			Precision: "medium",
+			Tags:      dedupeStrings(tags),
+			Precision: defaultPrecision,
 		}
 		return rule
 	}
@@ -351,11 +354,8 @@ func (r *SARIFReporter) ruleFor(id string, sample *model.Finding) SARIFRule {
 			tags = append(tags, sample.Category)
 		}
 		rule.Properties = &SARIFRuleProperties{
-			Tags: dedupeStrings(tags),
-			// Hadrian templates don't carry a per-rule precision signal today;
-			// "medium" is a conservative default that avoids overstating
-			// confidence to SARIF consumers (GitHub UI, Code Scanning APIs).
-			Precision: "medium",
+			Tags:      dedupeStrings(tags),
+			Precision: defaultPrecision,
 		}
 	} else {
 		rule.HelpURI = templateWikiURL

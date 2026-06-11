@@ -192,6 +192,7 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse template %s: %w", name, err)
 		}
+		tmpl.FilePath = filePath
 
 		tmplList = append(tmplList, tmpl)
 	}

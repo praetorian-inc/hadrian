@@ -585,6 +585,10 @@ func TestSARIFReporter_ResultProperties_CategoryOmittedWhenEmpty(t *testing.T) {
 		props := readSARIF(t, out).Runs[0].Results[0].Properties
 		assert.Equal(t, "API1:2023", props["category"])
 		assert.Equal(t, true, props["isVulnerability"])
+		// Role/confidence properties (sampleFinding sets attacker/victim and 0.9).
+		assert.Equal(t, "attacker", props["attackerRole"])
+		assert.Equal(t, "victim", props["victimRole"])
+		assert.InDelta(t, 0.9, props["confidence"], 1e-9)
 	})
 
 	t.Run("category omitted when empty", func(t *testing.T) {
@@ -598,6 +602,36 @@ func TestSARIFReporter_ResultProperties_CategoryOmittedWhenEmpty(t *testing.T) {
 		assert.NotContains(t, props, "category")
 		assert.Equal(t, true, props["isVulnerability"], "non-optional props still present")
 	})
+}
+
+// The fingerprint upper-cases Method so a scan emitting "get" and a later scan
+// emitting "GET" for the same operation dedupe to one GitHub alert. A dropped
+// ToUpper would silently reopen alerts; this pins the normalization.
+func TestSARIFReporter_PartialFingerprints_MethodCaseInsensitive(t *testing.T) {
+	lower := sampleFinding()
+	lower.Method = "get"
+	upper := sampleFinding()
+	upper.Method = "GET"
+	assert.Equal(t,
+		buildPartialFingerprints(upper)["primaryLocationHash/v1"],
+		buildPartialFingerprints(lower)["primaryLocationHash/v1"],
+		"method case must not change the fingerprint")
+}
+
+// Run-level metadata (columnKind, automationDetails.id) and the rule precision
+// are schema-optional, so the schema test won't catch their removal. Pin them.
+func TestSARIFReporter_RunLevelMetadata(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "meta.sarif")
+	tmpl := sampleTemplate("01-api1-bola-read")
+	rep, err := NewSARIFReporter(out, []*templates.CompiledTemplate{tmpl})
+	require.NoError(t, err)
+	require.NoError(t, rep.GenerateReport([]*model.Finding{sampleFinding()}, &Stats{}))
+	run := readSARIF(t, out).Runs[0]
+	assert.Equal(t, "utf16CodeUnits", run.ColumnKind)
+	require.NotNil(t, run.AutomationDetails)
+	assert.Equal(t, "hadrian", run.AutomationDetails.ID)
+	require.NotNil(t, run.Tool.Driver.Rules[0].Properties)
+	assert.Equal(t, "medium", run.Tool.Driver.Rules[0].Properties.Precision)
 }
 
 // ruleFor has conditional branches for missing template description / sample

@@ -9,6 +9,13 @@ type Template struct {
 	ID   string       `yaml:"id"`
 	Info TemplateInfo `yaml:"info"`
 
+	// FilePath is the source path the template was loaded from. It is set by the
+	// loader (not the YAML); yaml:"-" keeps the strict decoder (KnownFields)
+	// from treating it as an input key. The GraphQL loader copies it to
+	// CompiledTemplate.FilePath so helpUri resolution and duplicate-id
+	// diagnostics work the same as for REST/gRPC.
+	FilePath string `yaml:"-"`
+
 	// Endpoint selection criteria
 	EndpointSelector EndpointSelector `yaml:"endpoint_selector"`
 
