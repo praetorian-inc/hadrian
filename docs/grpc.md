@@ -741,6 +741,20 @@ hadrian grpc \
   --output-file results.json
 ```
 
+### Output to SARIF (GitHub Code Scanning)
+
+```bash
+hadrian grpc \
+  --server localhost:50051 \
+  --template-dir templates/grpc/ \
+  --auth auth.yaml \
+  --roles roles.yaml \
+  --output sarif \
+  --output-file results.sarif
+```
+
+The output validates against the SARIF v2.1.0 schema and carries stable `partialFingerprints` so re-running the scan does not produce duplicate alerts. See [Configuration → SARIF](configuration.md#sarif-github-code-scanning) for the full schema, helpUri behaviour, and an example GitHub Actions workflow.
+
 ### Dry Run (Show What Would Be Tested)
 
 ```bash

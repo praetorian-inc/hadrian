@@ -58,7 +58,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
    - Execute HTTP test using `templates.Executor`
    - Evaluate `Detection` rules to determine vulnerability
 5. Optionally triage findings with LLM
-6. Generate report (terminal/JSON/markdown)
+6. Generate report (terminal/JSON/markdown/SARIF)
 
 ### Key Packages
 
@@ -68,7 +68,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 - **pkg/roles**: Permission model with `<action>:<object>:<scope>` format and role-based filtering
 - **pkg/model**: Data structures for `Finding`, `Operation`, `Evidence`, `Severity`
 - **pkg/matchers**: Response matching (status codes, word/regex patterns)
-- **pkg/reporter**: Output formatters (terminal, JSON, markdown) with finding redaction
+- **pkg/reporter**: Output formatters (terminal, JSON, markdown) with finding redaction. SARIF v2.1.0 output lives at `pkg/runner/sarif.go` (it depends on the templates list, which is only available inside `pkg/runner`).
 - **pkg/llm**: LLM triage integration (Ollama, OpenAI, Anthropic)
 
 ### Template System

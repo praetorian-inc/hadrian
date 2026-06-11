@@ -87,7 +87,7 @@ func newTestRestCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.RateLimitMaxRetries, "rate-limit-max-retries", 5, "Maximum retry attempts on rate limit response")
 	cmd.Flags().IntSliceVar(&config.RateLimitStatusCodes, "rate-limit-status-codes", []int{429, 503}, "Status codes that trigger rate limit retry")
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout (seconds)")
-	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
+	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown, sarif")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Write findings to file")
 	cmd.Flags().StringSliceVar(&config.Categories, "category", []string{"owasp"}, "Filter by template metadata — exact match against info.category and info.tags (case-insensitive, default: owasp)")
 	cmd.Flags().StringVar(&config.TemplateDir, "template-dir", "", "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)")
@@ -136,7 +136,7 @@ func runTest(ctx context.Context, config Config) error {
 	rolesCfg := inputs.rolesCfg
 	tmplFiles := inputs.tmplFiles
 
-	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
+	rep, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit, tmplFiles)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
@@ -260,6 +260,8 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].FilePath < result[j].FilePath
 	})
+
+	warnDuplicateTemplateIDs(result)
 
 	return result, nil
 }

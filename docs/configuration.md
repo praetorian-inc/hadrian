@@ -429,12 +429,44 @@ hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file 
 hadrian test rest --api api.yaml --roles roles.yaml --output markdown --output-file report.md
 ```
 
+### SARIF (GitHub Code Scanning)
+
+[SARIF v2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) is the format GitHub Code Scanning consumes. Hadrian emits one SARIF rule per security template and one result per finding, with stable `partialFingerprints` so re-running the scan doesn't create duplicate alerts.
+
+```bash
+hadrian test rest --api api.yaml --roles roles.yaml --output sarif --output-file report.sarif
+```
+
+The output validates against [sarif-2.1.0.json](https://json.schemastore.org/sarif-2.1.0.json). For each finding Hadrian populates:
+
+- `ruleId` — the template ID that produced the finding (e.g. `01-api1-bola-read`)
+- `level` — derived from severity: `CRITICAL`/`HIGH` → `error`, `MEDIUM` → `warning`, `LOW`/`INFO` → `note`
+- `locations[].physicalLocation.artifactLocation.uri` — the API endpoint path
+- `locations[].logicalLocations[].name` — `METHOD PATH` (e.g. `GET /api/users/{id}`)
+- `partialFingerprints["primaryLocationHash/v1"]` — SHA-256 over `templateID`, `method`, `endpoint`, `attackerRole`, and `victimRole` (NUL-joined), stable across runs
+- `properties` — category, attackerRole, victimRole, confidence, LLM analysis
+
+Rules link to the source template via `helpUri`. For built-in templates this resolves to `https://github.com/praetorian-inc/hadrian/blob/main/templates/<protocol>/<file>.yaml`; for custom templates it falls back to the [Template System](https://github.com/praetorian-inc/hadrian/wiki/Template-System) wiki page.
+
+To upload the report to GitHub Code Scanning, use the canonical upload action:
+
+```yaml
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: report.sarif
+    category: hadrian
+```
+
+A complete example workflow ships in [`.github/workflows/example-sarif-upload.yml`](../.github/workflows/example-sarif-upload.yml).
+
+> **Templates in CI:** the `hadrian` binary does not embed templates — `go install` ships only the executable. In a workflow you must make the templates available (check out the Hadrian repo or vendor them) and point `--template-dir`/`$HADRIAN_TEMPLATES` at `templates/<protocol>/`. Pin the template ref to the same release as the installed binary so they don't drift. The example workflow shows this.
+
 ### Output Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--output <format>` | terminal | Output format: `terminal`, `json`, `markdown` |
-| `--output-file <file>` | - | Write findings to file (stdout if omitted) |
+| `--output <format>` | terminal | Output format: `terminal`, `json`, `markdown`, `sarif` |
+| `--output-file <file>` | - | Write findings to file (stdout if omitted; **required for `sarif`**) |
 | `--request-ids <n>` | 1 | Number of request IDs per finding (0 = all) |
 
 ## Environment Variables

@@ -35,9 +35,17 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate output format
-	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true}
+	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
 	if !validFormats[c.Output] {
-		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown)", c.Output)
+		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)
+	}
+
+	// SARIF is a file-only format (it has no meaningful terminal rendering and
+	// GitHub Code Scanning consumes a file), so it requires --output-file.
+	// Validate the pairing here rather than deferring to reporter construction
+	// so the error surfaces alongside the other format checks.
+	if c.Output == "sarif" && c.OutputFile == "" {
+		return fmt.Errorf("--output sarif requires --output-file")
 	}
 
 	// Validate rate limit configuration

@@ -436,6 +436,7 @@ func TestBuildGRPCFinding(t *testing.T) {
 		finding := buildGRPCFinding(tmpl, op, "attacker", "victim")
 
 		assert.Equal(t, "test-template-id", finding.ID)
+		assert.Equal(t, "test-template-id", finding.TemplateID, "TemplateID is the stable SARIF ruleId — regression would silently collapse all gRPC findings to hadrian.unknown in SARIF")
 		assert.Equal(t, "BOLA", finding.Category)
 		assert.Equal(t, "test-template-id", finding.Name)
 		assert.Equal(t, model.Severity("HIGH"), finding.Severity)
@@ -461,6 +462,7 @@ func TestBuildGRPCFinding(t *testing.T) {
 		finding := buildGRPCFinding(tmpl, op, "user1", "user2")
 
 		assert.Equal(t, "default-template", finding.ID)
+		assert.Equal(t, "default-template", finding.TemplateID, "TemplateID must propagate even when template lacks an info.category")
 		assert.Equal(t, "default-template", finding.Category) // Uses ID as category
 		assert.Equal(t, model.Severity("MEDIUM"), finding.Severity)
 		assert.Equal(t, "user1", finding.AttackerRole)
@@ -740,6 +742,42 @@ func TestGRPCConfigValidate(t *testing.T) {
 			},
 			wantError: true,
 			errorMsg:  "rate-limit must be positive",
+		},
+		{
+			name: "invalid output format",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: 5.0,
+				Output:    "xml",
+			},
+			wantError: true,
+			errorMsg:  "invalid output format",
+		},
+		{
+			name: "sarif without output-file",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: 5.0,
+				Output:    "sarif",
+			},
+			wantError: true,
+			errorMsg:  "--output sarif requires --output-file",
+		},
+		{
+			name: "sarif with output-file",
+			config: GRPCConfig{
+				Target:     "localhost:50051",
+				Proto:      "test.proto",
+				Timeout:    30,
+				RateLimit:  5.0,
+				Output:     "sarif",
+				OutputFile: "report.sarif",
+			},
+			wantError: false,
 		},
 	}
 

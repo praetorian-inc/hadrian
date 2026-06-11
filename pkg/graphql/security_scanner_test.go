@@ -38,6 +38,11 @@ func TestSecurityScanner_CheckIntrospection(t *testing.T) {
 		// Assert finding exists with correct properties
 		assert.NotNil(t, finding)
 		assert.Equal(t, FindingTypeIntrospectionDisclosure.String(), finding.Name)
+		// TemplateID drives the SARIF ruleId; a regression in newFinding's
+		// `TemplateID: name` assignment would collapse every GraphQL
+		// non-template finding to rule "hadrian.unknown" and break GitHub
+		// Code Scanning dedup.
+		assert.Equal(t, FindingTypeIntrospectionDisclosure.String(), finding.TemplateID)
 		assert.Equal(t, model.SeverityMedium, finding.Severity)
 		assert.Equal(t, CategoryAPI8, finding.Category)
 	})

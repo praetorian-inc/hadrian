@@ -332,6 +332,7 @@ func TestCreateFinding(t *testing.T) {
 
 		// Assert
 		assert.NotEmpty(t, finding.ID)
+		assert.Equal(t, "api1-bola-read", finding.TemplateID, "TemplateID is the stable SARIF ruleId — a regression would silently collapse findings to hadrian.unknown")
 		assert.Equal(t, "API1:2023", finding.Category)
 		assert.Equal(t, "BOLA - Cross-User Resource Access", finding.Name)
 		assert.Equal(t, model.SeverityHigh, finding.Severity)

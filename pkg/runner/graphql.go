@@ -76,6 +76,22 @@ type GraphQLConfig struct {
 	Headers         []string   // Custom HTTP headers (format: "Key: Value")
 }
 
+// Validate checks GraphQL output configuration before test execution, mirroring
+// the REST and gRPC runners: the output format must be supported and SARIF
+// requires --output-file. An empty Output is tolerated (REST's Config.Validate
+// defaults "" → "json" before validating, and the CLI flag defaults to
+// "terminal"), so tolerating "" here keeps the three protocols consistent.
+func (c *GraphQLConfig) Validate() error {
+	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
+	if c.Output != "" && !validFormats[c.Output] {
+		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)
+	}
+	if c.Output == "sarif" && c.OutputFile == "" {
+		return fmt.Errorf("--output sarif requires --output-file")
+	}
+	return nil
+}
+
 // newTestGraphQLCmd creates the "test graphql" subcommand
 func newTestGraphQLCmd() *cobra.Command {
 	var config GraphQLConfig
@@ -118,7 +134,7 @@ func newTestGraphQLCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
 
 	// Output options
-	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
+	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown, sarif")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Output file path")
 	cmd.Flags().IntVar(&config.RequestIDsLimit, "request-ids-limit", 1, "Limit request IDs in output (0 = show all)")
 	cmd.Flags().BoolVar(&config.Verbose, "verbose", false, "Verbose output")
@@ -176,6 +192,7 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse template %s: %w", name, err)
 		}
+		tmpl.FilePath = filePath
 
 		tmplList = append(tmplList, tmpl)
 	}
@@ -186,6 +203,12 @@ func loadGraphQLTemplates(dir string) ([]*templates.Template, error) {
 // runGraphQLTest executes GraphQL security tests
 func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 	startTime := time.Now()
+
+	// Surface output/format errors (e.g. --output sarif without --output-file)
+	// here rather than later at reporter construction.
+	if err := config.Validate(); err != nil {
+		return err
+	}
 
 	// Enable verbose logging if requested
 	log.SetVerbose(config.Verbose)
@@ -238,8 +261,24 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	reportAuthConfigsLoaded(config.Auth, config.Roles, authConfig, rolesConfig, authConfigs, config.Verbose)
 
+	// Load + compile GraphQL templates once and feed the same slice to both
+	// the reporter (for SARIF rule enrichment) and the test executor. Avoids
+	// the previous double-load and guarantees the SARIF rules section matches
+	// the templates actually exercised at runtime.
+	gqlTemplateDir := config.TemplateDir
+	if gqlTemplateDir == "" {
+		gqlTemplateDir = getTemplateDir("./templates/graphql")
+	}
+	compiledTemplates, lerr := loadAndCompileGraphQLTemplates(gqlTemplateDir, config.Templates)
+	if lerr != nil {
+		// Treat as non-fatal: the GraphQL command runs scanner-based checks
+		// even when no templates are available. Surface so the operator can
+		// see why the SARIF rules section is empty.
+		log.Warn("GraphQL: failed to load templates from %s: %v", gqlTemplateDir, lerr)
+	}
+
 	// Create reporter based on output format (using REST reporter pattern)
-	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit)
+	reporter, err := createReporter(config.Output, config.OutputFile, config.RequestIDsLimit, compiledTemplates)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
@@ -247,7 +286,7 @@ func runGraphQLTest(ctx context.Context, config GraphQLConfig) error {
 
 	// Run security checks with rate-limited client
 	endpoint := config.Target + config.Endpoint
-	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders)
+	modelFindings, templatesLoaded := runSecurityChecks(ctx, schema, rateLimitedClient, endpoint, config, authConfigs, reporter, customHeaders, compiledTemplates)
 
 	// Compute unified LLM-enabled flag (same logic as REST command)
 	graphqlLLMEnabled := hasLLMConfig() || (config.LLMProvider != "" && config.LLMProvider != "ollama") || config.LLMHost != "" || config.LLMModel != "" || config.LLMTriageClient != nil

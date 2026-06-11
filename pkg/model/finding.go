@@ -5,7 +5,8 @@ import "time"
 // Finding represents a security issue discovered during testing
 type Finding struct {
 	ID              string   `json:"id"`
-	Category        string   `json:"category"` // API1, API2, etc.
+	TemplateID      string   `json:"template_id,omitempty"` // Stable identifier of the template/check that produced the finding (used for SARIF ruleId and cross-run dedup)
+	Category        string   `json:"category"`              // API1, API2, etc.
 	Name            string   `json:"name"`
 	Description     string   `json:"description"`
 	Severity        Severity `json:"severity"`

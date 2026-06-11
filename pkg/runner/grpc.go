@@ -72,6 +72,19 @@ func (c *GRPCConfig) Validate() error {
 		return fmt.Errorf("--rate-limit must be positive (got %f)", c.RateLimit)
 	}
 
+	// Output format must be supported, and SARIF requires a file target, so the
+	// error surfaces here rather than later at reporter construction. An empty
+	// Output is tolerated: REST's Config.Validate defaults "" → "json" via
+	// setDefaults before this check, so tolerating "" here (the CLI always
+	// supplies "terminal") keeps gRPC consistent with REST rather than stricter.
+	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
+	if c.Output != "" && !validFormats[c.Output] {
+		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)
+	}
+	if c.Output == "sarif" && c.OutputFile == "" {
+		return fmt.Errorf("--output sarif requires --output-file")
+	}
+
 	// Validate custom headers format
 	if len(c.Headers) > 0 {
 		if _, err := ParseCustomHeaders(c.Headers); err != nil {
@@ -122,7 +135,7 @@ func newTestGRPCCmd() *cobra.Command {
 	cmd.Flags().IntVar(&config.Timeout, "timeout", 30, "Request timeout in seconds")
 
 	// Output options
-	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown")
+	cmd.Flags().StringVar(&config.Output, "output", "terminal", "Output format: terminal, json, markdown, sarif")
 	cmd.Flags().StringVar(&config.OutputFile, "output-file", "", "Output file path")
 	cmd.Flags().BoolVar(&config.Verbose, "verbose", false, "Verbose output")
 	cmd.Flags().BoolVar(&config.DryRun, "dry-run", false, "Dry run (don't execute tests)")
@@ -293,8 +306,14 @@ func runGRPCTest(ctx context.Context, config GRPCConfig) error {
 		mutationExecutor = orchestrator.NewGRPCMutationExecutor(adapter)
 	}
 
+	// When emitting SARIF without any compiled templates, warn that rules will
+	// degrade to wiki-fallback metadata; this matches the GraphQL behavior.
+	if sarifLacksTemplates(config.Output, len(templateFiles)) {
+		log.Warn("SARIF: no templates loaded from %s — rules will use wiki fallback metadata", templateDir)
+	}
+
 	// Create reporter based on output format
-	rep, err := createReporter(config.Output, config.OutputFile, 0)
+	rep, err := createReporter(config.Output, config.OutputFile, 0, templateFiles)
 	if err != nil {
 		return fmt.Errorf("failed to create reporter: %w", err)
 	}
@@ -470,6 +489,7 @@ func buildGRPCFinding(tmpl *templates.CompiledTemplate, op *model.Operation, att
 
 	return &model.Finding{
 		ID:              tmpl.ID,
+		TemplateID:      tmpl.ID,
 		Category:        category,
 		Name:            tmpl.ID,
 		Severity:        severity,
@@ -686,6 +706,8 @@ func loadGRPCTemplates(dir string) ([]*templates.CompiledTemplate, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	warnDuplicateTemplateIDs(result)
 
 	return result, nil
 }

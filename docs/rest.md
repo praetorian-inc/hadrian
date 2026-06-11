@@ -16,6 +16,9 @@ hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
 # Verbose output with JSON report
 hadrian test rest --api api.yaml --roles roles.yaml --verbose --output json --output-file report.json
+
+# SARIF output for GitHub Code Scanning
+hadrian test rest --api api.yaml --roles roles.yaml --output sarif --output-file report.sarif
 ```
 
 ## Command Options
