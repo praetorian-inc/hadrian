@@ -743,6 +743,42 @@ func TestGRPCConfigValidate(t *testing.T) {
 			wantError: true,
 			errorMsg:  "rate-limit must be positive",
 		},
+		{
+			name: "invalid output format",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: 5.0,
+				Output:    "xml",
+			},
+			wantError: true,
+			errorMsg:  "invalid output format",
+		},
+		{
+			name: "sarif without output-file",
+			config: GRPCConfig{
+				Target:    "localhost:50051",
+				Proto:     "test.proto",
+				Timeout:   30,
+				RateLimit: 5.0,
+				Output:    "sarif",
+			},
+			wantError: true,
+			errorMsg:  "--output sarif requires --output-file",
+		},
+		{
+			name: "sarif with output-file",
+			config: GRPCConfig{
+				Target:     "localhost:50051",
+				Proto:      "test.proto",
+				Timeout:    30,
+				RateLimit:  5.0,
+				Output:     "sarif",
+				OutputFile: "report.sarif",
+			},
+			wantError: false,
+		},
 	}
 
 	for _, tt := range tests {

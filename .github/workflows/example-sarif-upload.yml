@@ -42,6 +42,10 @@ jobs:
   hadrian-rest:
     name: Hadrian REST scan
     runs-on: ubuntu-latest
+    env:
+      # Single source of truth: the binary and the templates are both pinned to
+      # this Hadrian release so they never drift. Bump to the release you want.
+      HADRIAN_VERSION: v1.2.3
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,19 +59,19 @@ jobs:
           go-version: "stable"
 
       - name: Install Hadrian
-        # Pin @VERSION to a Hadrian release tag and use the SAME tag for the
-        # template checkout below so the binary and templates stay in sync.
-        run: go install github.com/praetorian-inc/hadrian/cmd/hadrian@latest
+        run: go install "github.com/praetorian-inc/hadrian/cmd/hadrian@${HADRIAN_VERSION}"
 
       - name: Fetch Hadrian templates
         # The binary does not embed templates, so check out the Hadrian repo to
-        # get templates/{rest,graphql,grpc}/. Pin `ref` to the release that
-        # matches the version installed above.
+        # get templates/{rest,graphql,grpc}/ at the SAME release as the binary.
         uses: actions/checkout@v4
         with:
           repository: praetorian-inc/hadrian
           path: .hadrian-src
-          ref: main # pin to a release tag in production, e.g. v1.2.3
+          ref: ${{ env.HADRIAN_VERSION }}
+          # This is a second repo's checkout; don't leave its credentials on the
+          # runner for later steps.
+          persist-credentials: false
 
       - name: Run Hadrian (SARIF output)
         env:

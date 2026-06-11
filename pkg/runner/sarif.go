@@ -407,7 +407,11 @@ func buildLocations(f *model.Finding) []SARIFLocation {
 	if uri == "" {
 		uri = "unknown"
 	}
-	logical := strings.TrimSpace(strings.ToUpper(f.Method) + " " + f.Endpoint)
+	logical := formatMethodEndpoint(f)
+	if logical == "" {
+		// Mirror the physical URI fallback so the logical name is never blank.
+		logical = "unknown"
+	}
 	return []SARIFLocation{{
 		PhysicalLocation: &SARIFPhysicalLocation{
 			ArtifactLocation: SARIFArtifactLocation{
@@ -455,6 +459,13 @@ func buildPartialFingerprints(f *model.Finding) map[string]string {
 	}
 }
 
+// formatMethodEndpoint renders a finding's operation as "METHOD /path" (method
+// upper-cased, surrounding whitespace trimmed). Returns "" when both fields are
+// empty. Shared by buildLocations (logical-location name) and buildResultMessage.
+func formatMethodEndpoint(f *model.Finding) string {
+	return strings.TrimSpace(strings.ToUpper(f.Method) + " " + f.Endpoint)
+}
+
 // buildResultMessage renders the human-readable message for a SARIF result.
 func buildResultMessage(f *model.Finding) string {
 	header := f.Name
@@ -469,7 +480,7 @@ func buildResultMessage(f *model.Finding) string {
 	b.WriteString(header)
 	if f.Method != "" || f.Endpoint != "" {
 		b.WriteString(" on ")
-		b.WriteString(strings.TrimSpace(strings.ToUpper(f.Method) + " " + f.Endpoint))
+		b.WriteString(formatMethodEndpoint(f))
 	}
 	if f.AttackerRole != "" {
 		b.WriteString(" (attacker=")
@@ -491,8 +502,10 @@ func buildResultMessage(f *model.Finding) string {
 // (e.g., GitHub Code Scanning UI) display under "Properties".
 func buildResultProperties(f *model.Finding) map[string]any {
 	props := map[string]any{
-		"category":        f.Category,
 		"isVulnerability": f.IsVulnerability,
+	}
+	if f.Category != "" {
+		props["category"] = f.Category
 	}
 	if f.AttackerRole != "" {
 		props["attackerRole"] = f.AttackerRole

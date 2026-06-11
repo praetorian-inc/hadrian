@@ -533,6 +533,22 @@ func TestSARIFReporter_HandlesEmptyEndpoint(t *testing.T) {
 	assert.Equal(t, "unknown", doc.Runs[0].Results[0].Locations[0].PhysicalLocation.ArtifactLocation.URI)
 }
 
+// When both Method and Endpoint are empty, the logical-location name must fall
+// back to "unknown" rather than the empty string, mirroring the physical URI.
+func TestSARIFReporter_LogicalNameFallsBackWhenMethodAndEndpointEmpty(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "noop.sarif")
+	rep, err := NewSARIFReporter(out, nil)
+	require.NoError(t, err)
+	f := sampleFinding()
+	f.Method = ""
+	f.Endpoint = ""
+	require.NoError(t, rep.GenerateReport([]*model.Finding{f}, &Stats{}))
+	doc := readSARIF(t, out)
+	loc := doc.Runs[0].Results[0].Locations[0]
+	assert.Equal(t, "unknown", loc.PhysicalLocation.ArtifactLocation.URI)
+	assert.Equal(t, "unknown", loc.LogicalLocations[0].Name)
+}
+
 // ruleFor has conditional branches for missing template description / sample
 // name. Both should emit a valid (if minimal) rule object.
 func TestSARIFReporter_RuleForEmptyBranches(t *testing.T) {

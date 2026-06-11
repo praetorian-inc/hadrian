@@ -72,6 +72,17 @@ func (c *GRPCConfig) Validate() error {
 		return fmt.Errorf("--rate-limit must be positive (got %f)", c.RateLimit)
 	}
 
+	// Output format must be supported, and SARIF requires a file target. This
+	// mirrors REST Config.Validate so the error surfaces here rather than later
+	// at reporter construction.
+	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
+	if c.Output != "" && !validFormats[c.Output] {
+		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)
+	}
+	if c.Output == "sarif" && c.OutputFile == "" {
+		return fmt.Errorf("--output sarif requires --output-file")
+	}
+
 	// Validate custom headers format
 	if len(c.Headers) > 0 {
 		if _, err := ParseCustomHeaders(c.Headers); err != nil {
