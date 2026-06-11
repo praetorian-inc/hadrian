@@ -72,9 +72,11 @@ func (c *GRPCConfig) Validate() error {
 		return fmt.Errorf("--rate-limit must be positive (got %f)", c.RateLimit)
 	}
 
-	// Output format must be supported, and SARIF requires a file target. This
-	// mirrors REST Config.Validate so the error surfaces here rather than later
-	// at reporter construction.
+	// Output format must be supported, and SARIF requires a file target, so the
+	// error surfaces here rather than later at reporter construction. An empty
+	// Output is tolerated: REST's Config.Validate defaults "" → "json" via
+	// setDefaults before this check, so tolerating "" here (the CLI always
+	// supplies "terminal") keeps gRPC consistent with REST rather than stricter.
 	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
 	if c.Output != "" && !validFormats[c.Output] {
 		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)

@@ -36,7 +36,9 @@ import (
 func warnDuplicateTemplateIDs(tmpls []*templates.CompiledTemplate) {
 	seen := make(map[string]string, len(tmpls))
 	for _, t := range tmpls {
-		if t == nil || t.ID == "" {
+		// t.ID reads through the embedded *Template, so guard the nil embedded
+		// pointer too — a directly-constructed CompiledTemplate{} would panic.
+		if t == nil || t.Template == nil || t.ID == "" {
 			continue
 		}
 		if first, ok := seen[t.ID]; ok {

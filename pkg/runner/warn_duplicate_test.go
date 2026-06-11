@@ -46,10 +46,11 @@ func TestWarnDuplicateTemplateIDs(t *testing.T) {
 		assert.NotContains(t, out, "Duplicate template id")
 	})
 
-	t.Run("nil and empty-id entries are skipped without warning", func(t *testing.T) {
+	t.Run("nil, nil-embedded-Template, and empty-id entries are skipped without warning or panic", func(t *testing.T) {
 		out := captureStderr(func() {
 			warnDuplicateTemplateIDs([]*templates.CompiledTemplate{
 				nil,
+				{FilePath: "templates/rest/no-template.yaml"}, // nil embedded *Template
 				ct("", "templates/rest/empty1.yaml"),
 				ct("", "templates/rest/empty2.yaml"),
 			})

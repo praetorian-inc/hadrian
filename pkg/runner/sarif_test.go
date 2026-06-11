@@ -549,6 +549,32 @@ func TestSARIFReporter_LogicalNameFallsBackWhenMethodAndEndpointEmpty(t *testing
 	assert.Equal(t, "unknown", loc.LogicalLocations[0].Name)
 }
 
+// buildResultProperties emits "category" only when non-empty (consistent with
+// the other optional properties). Both branches are pinned here.
+func TestSARIFReporter_ResultProperties_CategoryOmittedWhenEmpty(t *testing.T) {
+	t.Run("category present when set", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "cat.sarif")
+		rep, err := NewSARIFReporter(out, nil)
+		require.NoError(t, err)
+		require.NoError(t, rep.GenerateReport([]*model.Finding{sampleFinding()}, &Stats{}))
+		props := readSARIF(t, out).Runs[0].Results[0].Properties
+		assert.Equal(t, "API1:2023", props["category"])
+		assert.Equal(t, true, props["isVulnerability"])
+	})
+
+	t.Run("category omitted when empty", func(t *testing.T) {
+		out := filepath.Join(t.TempDir(), "nocat.sarif")
+		rep, err := NewSARIFReporter(out, nil)
+		require.NoError(t, err)
+		f := sampleFinding()
+		f.Category = ""
+		require.NoError(t, rep.GenerateReport([]*model.Finding{f}, &Stats{}))
+		props := readSARIF(t, out).Runs[0].Results[0].Properties
+		assert.NotContains(t, props, "category")
+		assert.Equal(t, true, props["isVulnerability"], "non-optional props still present")
+	})
+}
+
 // ruleFor has conditional branches for missing template description / sample
 // name. Both should emit a valid (if minimal) rule object.
 func TestSARIFReporter_RuleForEmptyBranches(t *testing.T) {
