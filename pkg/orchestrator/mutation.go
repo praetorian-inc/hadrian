@@ -249,13 +249,17 @@ func (e *MutationExecutor) executePhase(
 	if err != nil {
 		return nil, err
 	}
-	if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	}
 
 	// Add custom headers (auth headers take precedence)
 	for key, value := range e.customHeaders {
 		req.Header.Set(key, value)
+	}
+
+	// Set the body's Content-Type after custom headers so the body Hadrian built
+	// (default application/json, or the phase's content_type) is authoritative for
+	// the request it belongs to, rather than being clobbered by a global header.
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	// Add auth based on method

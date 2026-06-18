@@ -218,8 +218,20 @@ test_phases:
 
 - **endpoint_selector**: Filter which endpoints to test
   - `has_path_parameter`: Require path parameters (e.g., `/users/{id}`)
+  - `has_query_parameter`: Require at least one query parameter
+  - `has_body_field`: Require a request body with at least one field
+  - `query_parameter_names`: Require a query parameter named one of these (case-insensitive) — for parameter-scoped BOLA where the identity is in a query param (e.g., `filter[user-ids]`)
+  - `body_field_names`: Require a request-body field named one of these (case-insensitive) — for parameter-scoped BOLA where the identity is in a body field (e.g., `username`)
   - `requires_auth`: Require authentication
   - `methods`: HTTP methods to match
+  - `path_pattern`: Regex the path must match
+  - `tags`: Match operations carrying any of these OpenAPI tags
+
+- **test_phases** (mutation tests): each phase supports
+  - `path`, `operation` (`read`/`create`/`update`/`patch`/`write`/`delete`), `auth` (`attacker`/`victim`)
+  - `body`: raw request body (REST); supports `{alias}` placeholder substitution from stored fields
+  - `content_type`: Content-Type for `body` (defaults to `application/json`)
+  - `store_response_fields`, `use_stored_field`, `check_field`, `expected_value`, `expected_status`
 
 - **role_selector**: Define attacker/victim role combinations
   - `attacker_permission_level`: "lower", "higher", "all", "none"
