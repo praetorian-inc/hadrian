@@ -1,0 +1,65 @@
+# Example: BOLA where the user/owner identity is carried in a REQUEST-BODY FIELD
+# (e.g. {"username": "<victim>"}) rather than the URL path.
+#
+# This is an EXAMPLE template, not a default. Run it via:
+#   HADRIAN_TEMPLATES=examples/param-scoped-bola ./hadrian test --api spec.yaml --roles roles.yaml --auth auth.yaml
+# Adapt the literal phase paths/body shape to your target.
+#
+# The endpoint_selector targets endpoints whose request body declares a user-scoping
+# field (see body_field_names). The attack substitutes the victim's identity (captured
+# in setup) into the body field using the attacker's credentials. This exercises the
+# mutation-phase `body` support: a raw body with {alias} placeholders.
+
+id: example-api1-bola-body-field-scope
+
+info:
+  name: "BOLA via user-scoping request-body field"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  description: |
+    Parameter-scoped Broken Object Level Authorization. The endpoint trusts a
+    caller-supplied identity field in the request body (e.g. username, user_id,
+    video_id) instead of deriving the subject from the authenticated session, so a
+    low-privileged caller can read another user's data by sending the victim's
+    identity. The attacker replays the request with the victim's identity in the body.
+  tags: ["bola", "owasp-api-top10", "api1", "authorization", "parameter-scoped"]
+  test_pattern: "mutation"
+
+# Target authenticated POST endpoints whose request body declares a user-scoping field.
+endpoint_selector:
+  requires_auth: true
+  methods: ["POST"]
+  has_body_field: true
+  body_field_names: ["username", "user_id", "video_id", "owner"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+test_phases:
+  setup:
+    - path: "/api/v5/userInfo"
+      operation: "read"
+      auth: "victim"
+      store_response_fields:
+        victim_username: "username"
+  attack:
+    path: "/api/v5/fetchRequestHistory"
+    operation: "create" # POST; use "write" for a PATCH endpoint
+    auth: "attacker"
+    body: '{"username":"{victim_username}"}'
+    expected_status: 200
+  # No verify phase: a 200 returning the victim's data is itself the signal.
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      status_code: 200
+  failure_indicators:
+    - type: "status_code"
+      status_code: 403
+  vulnerability_pattern: "cross_user_access_via_body_field"
+  conditions:
+    - attack_phase_status:
+        - 200

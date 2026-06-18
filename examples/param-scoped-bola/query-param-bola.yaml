@@ -1,0 +1,63 @@
+# Example: BOLA where the user/owner identity is carried in a QUERY PARAMETER
+# (e.g. ?filter[user-ids]=<victim>) rather than the URL path.
+#
+# This is an EXAMPLE template, not a default. Run it via:
+#   HADRIAN_TEMPLATES=examples/param-scoped-bola ./hadrian test --api spec.yaml --roles roles.yaml --auth auth.yaml
+# Adapt the literal phase paths/param names to your target — like all REST
+# mutation templates, the phases use concrete paths.
+#
+# The endpoint_selector targets search/list endpoints that expose a user-scoping
+# query parameter (see query_parameter_names). The attack substitutes the victim's
+# identity (captured in setup) into that parameter using the attacker's credentials.
+
+id: example-api1-bola-query-param-scope
+
+info:
+  name: "BOLA via user-scoping query parameter"
+  category: "API1:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  description: |
+    Parameter-scoped Broken Object Level Authorization. The user/owner identity is
+    supplied in a query parameter (e.g. filter[user-ids], user_id) instead of the
+    path, so path-parameter BOLA templates miss it. The attacker queries the victim's
+    identity and receives the victim's records instead of a 403.
+  tags: ["bola", "owasp-api-top10", "api1", "authorization", "parameter-scoped"]
+  test_pattern: "mutation"
+
+# Target authenticated GET endpoints that expose a user-scoping query parameter.
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET"]
+  has_query_parameter: true
+  query_parameter_names: ["filter[user-ids]", "user_id", "user-ids", "owner_id"]
+
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+test_phases:
+  setup:
+    - path: "/me"
+      operation: "read"
+      auth: "victim"
+      store_response_fields:
+        victim_id: "data.id"
+  attack:
+    path: "/lists/search?filter[user-ids]={victim_id}"
+    operation: "read"
+    auth: "attacker"
+    expected_status: 200
+  # No verify phase: a 200 returning the victim's records is itself the signal.
+
+detection:
+  success_indicators:
+    - type: "status_code"
+      status_code: 200
+  failure_indicators:
+    - type: "status_code"
+      status_code: 403
+  vulnerability_pattern: "cross_user_access_via_query_parameter"
+  conditions:
+    - attack_phase_status:
+        - 200

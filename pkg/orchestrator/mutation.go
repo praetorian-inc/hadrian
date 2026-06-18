@@ -161,6 +161,13 @@ func operationToMethod(op string) string {
 		return http.MethodPost
 	case "update":
 		return http.MethodPut
+	case "patch":
+		return http.MethodPatch
+	case "write":
+		// "write" is a body-modifying operation without a fixed verb; PATCH is the
+		// least-destructive choice and the common case for mass-assignment / BOPLA
+		// and body-field BOLA templates.
+		return http.MethodPatch
 	case "delete":
 		return http.MethodDelete
 	default: // "read" or empty
@@ -216,10 +223,34 @@ func (e *MutationExecutor) executePhase(
 	// Build full URL
 	url := strings.TrimSuffix(baseURL, "/") + path
 
+	// Build request body from phase.Body (REST), substituting {alias} placeholders
+	// from stored fields just like the path pass above. We intentionally do NOT run
+	// HasUnresolvedPlaceholders on the body: JSON bodies legitimately contain "{" and
+	// "}" (object syntax) that would be misread as unresolved placeholders. A typo'd
+	// {alias} therefore passes through as a literal — review the request in proxy logs.
+	var bodyReader io.Reader
+	contentType := ""
+	if phase.Body != "" {
+		body := phase.Body
+		for _, alias := range e.tracker.GetAllKeys() {
+			if storedValue := e.tracker.GetResource(alias); storedValue != "" {
+				body = strings.ReplaceAll(body, "{"+alias+"}", storedValue)
+			}
+		}
+		bodyReader = strings.NewReader(body)
+		contentType = phase.ContentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+	}
+
 	// Build request
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return nil, err
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	// Add custom headers (auth headers take precedence)
