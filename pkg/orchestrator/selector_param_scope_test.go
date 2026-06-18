@@ -76,9 +76,9 @@ func TestMatchesEndpointSelector_ParameterScoped(t *testing.T) {
 
 	t.Run("new selectors compose with existing ones (AND semantics)", func(t *testing.T) {
 		sel := templates.EndpointSelector{
-			RequiresAuth:        true,
-			Methods:             []string{"POST"},
-			BodyFieldNames:      []string{"username"},
+			RequiresAuth:   true,
+			Methods:        []string{"POST"},
+			BodyFieldNames: []string{"username"},
 		}
 		assert.True(t, MatchesEndpointSelector(bodyOp, sel))
 		// wrong method → no match even though the body field is present
