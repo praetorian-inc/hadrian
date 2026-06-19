@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
@@ -207,13 +208,9 @@ func (e *MutationExecutor) executePhase(
 	}
 
 	// Also substitute ALL stored fields (supports multiple placeholders in path)
-	// This allows paths like "/api/{video_id}/comments/{comment_id}"
-	for _, alias := range e.tracker.GetAllKeys() {
-		storedValue := e.tracker.GetResource(alias)
-		if storedValue != "" {
-			path = strings.ReplaceAll(path, "{"+alias+"}", storedValue)
-		}
-	}
+	// This allows paths like "/api/{video_id}/comments/{comment_id}".
+	// Paths take the RAW stored value (identity escape) - byte-for-byte unchanged.
+	path = e.substituteStoredFields(path, identityEscape)
 
 	// Check for unresolved placeholders - error if any remain
 	if placeholder := util.HasUnresolvedPlaceholders(path); placeholder != "" {
@@ -223,26 +220,8 @@ func (e *MutationExecutor) executePhase(
 	// Build full URL
 	url := strings.TrimSuffix(baseURL, "/") + path
 
-	// Build request body from phase.Body (REST), substituting {alias} placeholders
-	// from stored fields just like the path pass above. We intentionally do NOT run
-	// HasUnresolvedPlaceholders on the body: JSON bodies legitimately contain "{" and
-	// "}" (object syntax) that would be misread as unresolved placeholders. A typo'd
-	// {alias} therefore passes through as a literal — review the request in proxy logs.
-	var bodyReader io.Reader
-	contentType := ""
-	if phase.Body != "" {
-		body := phase.Body
-		for _, alias := range e.tracker.GetAllKeys() {
-			if storedValue := e.tracker.GetResource(alias); storedValue != "" {
-				body = strings.ReplaceAll(body, "{"+alias+"}", storedValue)
-			}
-		}
-		bodyReader = strings.NewReader(body)
-		contentType = phase.ContentType
-		if contentType == "" {
-			contentType = "application/json"
-		}
-	}
+	// Build the request body (with {alias} substitution) and its Content-Type.
+	bodyReader, contentType := e.buildRequestBody(phase)
 
 	// Build request
 	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
@@ -299,6 +278,75 @@ func (e *MutationExecutor) executePhase(
 		Body:       string(body),
 		Size:       len(body),
 	}, nil
+}
+
+// buildRequestBody builds the HTTP request body for a phase from phase.Body (REST),
+// substituting {alias} placeholders from stored fields. It returns the body reader
+// (nil when the phase has no body) and the effective Content-Type.
+//
+// We intentionally do NOT run HasUnresolvedPlaceholders on the body: JSON bodies
+// legitimately contain "{" and "}" (object syntax) that would be misread as
+// unresolved placeholders. A typo'd {alias} therefore passes through as a literal —
+// review the request in proxy logs.
+//
+// When the effective Content-Type indicates JSON, substituted values are escaped so
+// they are safe inside a JSON string literal (placeholders sit inside already-quoted
+// strings, e.g. {"username":"{victim_username}"}). Non-JSON bodies receive the RAW value.
+func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, string) {
+	if phase.Body == "" {
+		return nil, ""
+	}
+
+	contentType := phase.ContentType
+	if contentType == "" {
+		contentType = "application/json"
+	}
+
+	escape := identityEscape
+	if strings.Contains(contentType, "json") {
+		escape = jsonStringEscape
+	}
+
+	body := e.substituteStoredFields(phase.Body, escape)
+	return strings.NewReader(body), contentType
+}
+
+// aliasPlaceholderRe matches an innermost brace-delimited token with no inner
+// braces, e.g. {victim_username}. Because the inner group forbids braces, JSON
+// object syntax like {"username":"{victim_username}"} matches only the inner
+// {victim_username}, never the whole brace group.
+var aliasPlaceholderRe = regexp.MustCompile(`\{([^{}]+)\}`)
+
+// substituteStoredFields replaces every {alias} placeholder in s with its stored
+// value, applying escape to each stored value before substitution. Pass
+// identityEscape to substitute the raw value (e.g. for paths).
+//
+// It walks s left-to-right in a single pass: each {token} is replaced at most
+// once and substituted text is never re-scanned, so a stored value that itself
+// contains {anotherAlias} is not re-substituted and the result is deterministic.
+// Unknown/typo'd aliases and empty stored values leave the {...} literal.
+func (e *MutationExecutor) substituteStoredFields(s string, escape func(string) string) string {
+	return aliasPlaceholderRe.ReplaceAllStringFunc(s, func(match string) string {
+		alias := match[1 : len(match)-1] // strip the braces
+		storedValue := e.tracker.GetResource(alias)
+		if storedValue == "" {
+			return match // unknown/typo'd alias or empty value -> leave literal
+		}
+		return escape(storedValue)
+	})
+}
+
+// identityEscape returns the value unchanged (raw substitution).
+func identityEscape(s string) string { return s }
+
+// jsonStringEscape escapes s so it is safe inside a JSON string literal, without
+// adding surrounding quotes.
+func jsonStringEscape(s string) string {
+	// json.Marshal never errors for a string input (invalid UTF-8 is replaced with
+	// U+FFFD, not errored) and always returns a quoted string of length >= 2, so the
+	// discarded error and the b[1:len(b)-1] slice are both safe.
+	b, _ := json.Marshal(s)
+	return string(b[1 : len(b)-1])
 }
 
 // extractField extracts a field from JSON response body

@@ -222,6 +222,8 @@ test_phases:
   - `has_body_field`: Require a request body with at least one field
   - `query_parameter_names`: Require a query parameter named one of these (case-insensitive) — for parameter-scoped BOLA where the identity is in a query param (e.g., `filter[user-ids]`)
   - `body_field_names`: Require a request-body field named one of these (case-insensitive) — for parameter-scoped BOLA where the identity is in a body field (e.g., `username`)
+
+  For **query-parameter-scoped BOLA**, the identity is injected by embedding the full query string in the attack phase `path` (e.g. `/lists/search?filter[user-ids]={victim_id}`) and reusing path `{alias}` substitution. Note the escaping semantics differ by location: `{alias}` values substituted into a `path` are **not** URL-encoded (the template author is responsible for any encoding), whereas `{alias}` values substituted into a JSON `body` **are** JSON-string-escaped automatically so the body stays valid JSON.
   - `requires_auth`: Require authentication
   - `methods`: HTTP methods to match
   - `path_pattern`: Regex the path must match

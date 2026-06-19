@@ -74,6 +74,20 @@ func TestMatchesEndpointSelector_ParameterScoped(t *testing.T) {
 		}))
 	})
 
+	t.Run("HasBodyField is false when BodySchema is non-nil but Properties is empty", func(t *testing.T) {
+		emptyBodyOp := &model.Operation{
+			Method:       "POST",
+			Path:         "/api/v5/empty",
+			RequiresAuth: true,
+			BodySchema: &model.Schema{
+				Type:       "object",
+				Properties: map[string]*model.SchemaProperty{},
+			},
+		}
+		assert.False(t, MatchesEndpointSelector(emptyBodyOp, templates.EndpointSelector{HasBodyField: true}))
+		assert.False(t, MatchesEndpointSelector(emptyBodyOp, templates.EndpointSelector{BodyFieldNames: []string{"username"}}))
+	})
+
 	t.Run("new selectors compose with existing ones (AND semantics)", func(t *testing.T) {
 		sel := templates.EndpointSelector{
 			RequiresAuth:   true,

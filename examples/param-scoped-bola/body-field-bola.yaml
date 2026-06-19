@@ -52,6 +52,10 @@ test_phases:
     expected_status: 200
   # No verify phase: a 200 returning the victim's data is itself the signal.
 
+# For mutation-pattern templates the runtime vulnerability decision keys off the
+# attack phase status (the `attack_phase_status` condition below, matched against the
+# attack phase `expected_status`). The `success_indicators`/`failure_indicators`
+# blocks document intent and are not what drives the runtime decision here.
 detection:
   success_indicators:
     - type: "status_code"
