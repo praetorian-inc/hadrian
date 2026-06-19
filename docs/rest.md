@@ -223,7 +223,7 @@ test_phases:
   - `query_parameter_names`: Require a query parameter named one of these (case-insensitive) — for parameter-scoped BOLA where the identity is in a query param (e.g., `filter[user-ids]`)
   - `body_field_names`: Require a request-body field named one of these (case-insensitive) — for parameter-scoped BOLA where the identity is in a body field (e.g., `username`)
 
-  For **query-parameter-scoped BOLA**, the identity is injected by embedding the full query string in the attack phase `path` (e.g. `/lists/search?filter[user-ids]={victim_id}`) and reusing path `{alias}` substitution. Note the escaping semantics differ by location: `{alias}` values substituted into a `path` are **not** URL-encoded (the template author is responsible for any encoding), whereas `{alias}` values substituted into a JSON `body` **are** JSON-string-escaped automatically so the body stays valid JSON.
+  For **query-parameter-scoped BOLA**, the identity is injected by embedding the full query string in the attack phase `path` (e.g. `/lists/search?filter[user-ids]={victim_id}`) and reusing path `{alias}` substitution. Escaping is context-aware: each `{alias}` value is escaped for the location it is substituted into so an attacker-controlled stored value cannot break out of its position. Path-segment `{alias}` values are URL-path-escaped, query-string `{alias}` values are URL-query-escaped, JSON `body` values are JSON-string-escaped (so the body stays valid JSON), and `application/x-www-form-urlencoded` `body` values are URL-query-escaped. Other content types receive the raw value.
   - `requires_auth`: Require authentication
   - `methods`: HTTP methods to match
   - `path_pattern`: Regex the path must match

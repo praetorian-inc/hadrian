@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -293,22 +292,21 @@ func TestExecuteMutation_BodyValueJSONEscaped(t *testing.T) {
 	assert.JSONEq(t, `{"username":"ev\"il"}`, string(bodyBytes))
 }
 
-// TestExecuteMutation_QueryParamRawSubstitutionContract documents the DOCUMENTED
-// contract from docs/rest.md: {alias} values substituted into the attack-phase path
-// (including the query string) are inserted RAW / not URL-encoded. The template
-// author is responsible for any required percent-encoding. This is intentional; the
-// test pins that Hadrian never silently encodes query-significant characters.
-func TestExecuteMutation_QueryParamRawSubstitutionContract(t *testing.T) {
-	// The stored value contains a space and an ampersand — both are query-significant
-	// characters. identityEscape leaves them byte-for-byte unchanged.
-	setupResp := newMockResponse(200, `{"id":"a b&c"}`)
+// TestExecuteMutation_QueryParamValueEscaped pins the security fix: a stored value
+// substituted into a query-string {alias} is URL-query-escaped, so query-significant
+// characters in an attacker-controlled stored value cannot break out of the parameter
+// value and inject extra query parameters or alter existing ones.
+func TestExecuteMutation_QueryParamValueEscaped(t *testing.T) {
+	// The stored value contains a space, an ampersand, and an '=' that, if substituted
+	// raw, would inject a second query parameter (injected=1) and corrupt 'owner'.
+	setupResp := newMockResponse(200, `{"id":"a b&injected=1"}`)
 	attackResp := newMockResponse(200, `{}`)
 	client := &MockHTTPClient{responses: []*http.Response{setupResp, attackResp}}
 
 	executor := NewMutationExecutor(client, nil)
 
 	tmpl := &templates.Template{
-		ID: "raw-query-param-contract",
+		ID: "query-param-value-escaped",
 		TestPhases: &templates.TestPhases{
 			Setup: templates.SetupPhases{
 				&templates.Phase{
@@ -319,7 +317,7 @@ func TestExecuteMutation_QueryParamRawSubstitutionContract(t *testing.T) {
 				},
 			},
 			Attack: &templates.Phase{
-				Path:           "/search?owner={victim_id}",
+				Path:           "/x?owner={victim_id}",
 				Operation:      "read",
 				Auth:           "attacker",
 				ExpectedStatus: 200,
@@ -340,12 +338,116 @@ func TestExecuteMutation_QueryParamRawSubstitutionContract(t *testing.T) {
 	require.Len(t, client.requests, 2)
 
 	attackReq := client.requests[1]
-	// The contract: substitution is raw (identity escape). The stored value "a b&c"
-	// must appear literally in RawQuery — Hadrian never percent-encodes it.
-	// Template authors must encode values themselves if needed.
-	rawQuery := attackReq.URL.RawQuery
-	assert.True(t, strings.Contains(rawQuery, "owner=a b&c"),
-		"expected raw query to contain literal 'owner=a b&c' (no URL-encoding), got: %q", rawQuery)
+	// The full stored value round-trips intact inside 'owner' (query-unescaped).
+	assert.Equal(t, "a b&injected=1", attackReq.URL.Query().Get("owner"))
+	// No extra parameter was injected by the embedded '&injected=1'.
+	assert.Equal(t, "", attackReq.URL.Query().Get("injected"))
+}
+
+// TestExecuteMutation_PathSegmentValueEscaped pins the security fix for path-segment
+// substitution: a stored value containing '/' or '?' is URL-path-escaped, so it stays
+// a single path segment and cannot inject extra segments or a query string.
+func TestExecuteMutation_PathSegmentValueEscaped(t *testing.T) {
+	// The stored value contains '/' and '?' — raw substitution would alter the path
+	// structure and start a query string.
+	setupResp := newMockResponse(200, `{"id":"a/b?c"}`)
+	attackResp := newMockResponse(200, `{}`)
+	client := &MockHTTPClient{responses: []*http.Response{setupResp, attackResp}}
+
+	executor := NewMutationExecutor(client, nil)
+
+	tmpl := &templates.Template{
+		ID: "path-segment-value-escaped",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:                "/me",
+					Operation:           "read",
+					Auth:                "victim",
+					StoreResponseFields: map[string]string{"id": "id"},
+				},
+			},
+			Attack: &templates.Phase{
+				Path:           "/users/{id}",
+				Operation:      "read",
+				Auth:           "attacker",
+				ExpectedStatus: 200,
+			},
+		},
+	}
+
+	_, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"read",
+		"attacker@example.com",
+		"victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"),
+		"http://localhost:8080",
+	)
+	require.NoError(t, err)
+	require.Len(t, client.requests, 2)
+
+	attackReq := client.requests[1]
+	// No query string was injected by the embedded '?'.
+	assert.Equal(t, "", attackReq.URL.RawQuery)
+	// The path decodes back to a single "/users/a/b?c" segment value: EscapedPath
+	// retains the percent-encoding, while Path (decoded) shows the original value.
+	assert.Equal(t, "/users/a%2Fb%3Fc", attackReq.URL.EscapedPath())
+	assert.Equal(t, "/users/a/b?c", attackReq.URL.Path)
+}
+
+// TestExecuteMutation_FormBodyValueEscaped pins the security fix for
+// application/x-www-form-urlencoded bodies: a stored value is URL-query-escaped, so an
+// attacker-controlled value cannot inject extra form fields.
+func TestExecuteMutation_FormBodyValueEscaped(t *testing.T) {
+	// The stored value contains '&' and '=' that, if substituted raw, would inject an
+	// 'admin=true' form field.
+	setupResp := newMockResponse(200, `{"id":"x&admin=true"}`)
+	attackResp := newMockResponse(200, `{}`)
+	client := &MockHTTPClient{responses: []*http.Response{setupResp, attackResp}}
+
+	executor := NewMutationExecutor(client, nil)
+
+	tmpl := &templates.Template{
+		ID: "form-body-value-escaped",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{
+					Path:                "/me",
+					Operation:           "read",
+					Auth:                "victim",
+					StoreResponseFields: map[string]string{"victim_id": "id"},
+				},
+			},
+			Attack: &templates.Phase{
+				Path:        "/api/v1/resource",
+				Operation:   "write",
+				Auth:        "attacker",
+				Body:        "field={victim_id}",
+				ContentType: "application/x-www-form-urlencoded",
+			},
+		},
+	}
+
+	_, err := executor.ExecuteMutation(
+		context.Background(),
+		tmpl,
+		"write",
+		"attacker@example.com",
+		"victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"),
+		"http://localhost:8080",
+	)
+	require.NoError(t, err)
+	require.Len(t, client.requests, 2)
+
+	attackReq := client.requests[1]
+	require.NotNil(t, attackReq.Body)
+	bodyBytes, err := io.ReadAll(attackReq.Body)
+	require.NoError(t, err)
+	// The value is query-escaped: '&' -> %26, '=' -> %3D. No 'admin' field injected.
+	assert.Equal(t, "field=x%26admin%3Dtrue", string(bodyBytes))
 }
 
 // TestExecuteMutation_NoSecondOrderAliasResubstitution pins the single-pass

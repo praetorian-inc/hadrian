@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -197,20 +198,21 @@ func (e *MutationExecutor) executePhase(
 		return nil, fmt.Errorf("phase path is required")
 	}
 
-	// Substitute stored values into path
-	// Support backwards compatibility: if UseStoredField is set, use it
-	if phase.UseStoredField != "" {
-		storedValue := e.tracker.GetResource(phase.UseStoredField)
-		if storedValue != "" {
-			// Replace {fieldName} with stored value
-			path = strings.ReplaceAll(path, "{"+phase.UseStoredField+"}", storedValue)
-		}
+	// Substitute stored values into the path, escaping each value for its context:
+	// path-segment values are URL-path-escaped, query-string values are URL-query-
+	// escaped. Split on the first '?' (a literal in the template marking the query
+	// boundary) so a stored value containing '?', '&', '=', '/', or spaces cannot
+	// break out of its position and inject extra path segments or query parameters.
+	// The general substitution also covers a {UseStoredField} placeholder (its alias
+	// is a stored resource), so the prior raw UseStoredField pass is removed — every
+	// substituted value now goes through escaping.
+	pathPart, queryPart := path, ""
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		pathPart, queryPart = path[:i], path[i:] // queryPart keeps the leading '?'
 	}
-
-	// Also substitute ALL stored fields (supports multiple placeholders in path)
-	// This allows paths like "/api/{video_id}/comments/{comment_id}".
-	// Paths take the RAW stored value (identity escape) - byte-for-byte unchanged.
-	path = e.substituteStoredFields(path, identityEscape)
+	pathPart = e.substituteStoredFields(pathPart, url.PathEscape)
+	queryPart = e.substituteStoredFields(queryPart, url.QueryEscape)
+	path = pathPart + queryPart
 
 	// Check for unresolved placeholders - error if any remain
 	if placeholder := util.HasUnresolvedPlaceholders(path); placeholder != "" {
@@ -291,7 +293,9 @@ func (e *MutationExecutor) executePhase(
 //
 // When the effective Content-Type indicates JSON, substituted values are escaped so
 // they are safe inside a JSON string literal (placeholders sit inside already-quoted
-// strings, e.g. {"username":"{victim_username}"}). Non-JSON bodies receive the RAW value.
+// strings, e.g. {"username":"{victim_username}"}). For application/x-www-form-urlencoded
+// bodies, substituted values are URL-query-escaped so a value cannot inject extra form
+// fields. Other (non-JSON, non-form) bodies receive the RAW value.
 func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, string) {
 	if phase.Body == "" {
 		return nil, ""
@@ -303,8 +307,11 @@ func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, 
 	}
 
 	escape := identityEscape
-	if strings.Contains(contentType, "json") {
+	switch {
+	case strings.Contains(contentType, "json"):
 		escape = jsonStringEscape
+	case strings.Contains(contentType, "x-www-form-urlencoded"):
+		escape = url.QueryEscape
 	}
 
 	body := e.substituteStoredFields(phase.Body, escape)
