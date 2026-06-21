@@ -5,7 +5,7 @@ info:
   severity: "HIGH"
   author: "hadrian"
   description: "Tests for circular fragment reference vulnerabilities in GraphQL. Circular or deeply nested fragments can cause infinite loops, stack overflow, or excessive processing during query parsing and execution."
-  tags: ["graphql", "dos", "fragments", "circular-reference", "recursion"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "dos", "fragments", "circular-reference", "recursion"]
   requires_llm_triage: true
   test_pattern: "simple"
 

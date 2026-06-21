@@ -1,0 +1,84 @@
+id: api3_bopla_mass_assignment
+
+info:
+  name: "BOPLA - Mass Assignment via customer_id Field Injection"
+  category: "API3:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  tags: ["bopla", "owasp", "owasp-api-top10", "api3", "mass-assignment", "property-injection"]
+  requires_llm_triage: true
+  test_pattern: "mutation"
+
+# Role configuration: lower-privileged user attempts to inject victim's vehicle ID.
+role_selector:
+  attacker_permission_level: "lower"
+  victim_permission_level: "higher"
+
+# Target vehicle update endpoints (PUT with path parameter).
+endpoint_selector:
+  has_path_parameter: true
+  requires_auth: true
+  methods: ["PUT"]
+  path_pattern: ".*/vehicles/.*"
+
+# Multi-phase mutation test: setup (attacker) → setup (victim) → attack → verify
+test_phases:
+  setup:
+    # Setup 1: get attacker's vehicle_id from their dashboard
+    - path: "/api/dashboard"
+      operation: "read"
+      auth: "attacker"
+      store_response_fields:
+        attacker_vehicle_id: "vehicle_id"
+      expected_status: 200
+
+    # Setup 2: get victim's vehicle_id from their dashboard
+    - path: "/api/dashboard"
+      operation: "read"
+      auth: "victim"
+      store_response_fields:
+        victim_vehicle_id: "vehicle_id"
+      expected_status: 200
+
+  # Attack: PUT to attacker's own vehicle URL, but inject victim's vehicle_id in body.
+  # This tests whether the API improperly processes the 'id' field from the request body,
+  # allowing an attacker to modify a different vehicle than the one in the URL path.
+  attack:
+    path: "/api/vehicles/{attacker_vehicle_id}"
+    operation: "write"
+    auth: "attacker"
+    use_stored_field: "attacker_vehicle_id"
+    data:
+      id: "{victim_vehicle_id}"
+      customer_id: 999
+      vin: "MASS_ASSIGNMENT_EXPLOIT"
+    expected_status: 200
+
+  # Verify: check if victim's vehicle was modified (should NOT happen if API is secure)
+  verify:
+    path: "/api/vehicles/{victim_vehicle_id}"
+    operation: "read"
+    auth: "victim"
+    use_stored_field: "victim_vehicle_id"
+    check_field: "vin"
+    expected_value: "MASS_ASSIGNMENT_EXPLOIT"
+    expected_status: 200
+
+# Vulnerability detection logic
+detection:
+  # Confirmed when:
+  # 1. Attack phase returns 200 (update accepted)
+  # 2. Verify phase shows victim's vehicle was modified
+  success_indicators:
+    - type: "status_code"
+      status_code: 200
+    - type: "body_field"
+      body_field: "vin"
+      value: "MASS_ASSIGNMENT_EXPLOIT"
+
+  vulnerability_pattern: "mass_assignment_id_field_injection"
+
+  conditions:
+    - attack_phase_status:
+        - 200
+    - verify_field_changed: true

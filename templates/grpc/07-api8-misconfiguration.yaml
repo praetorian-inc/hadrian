@@ -4,7 +4,7 @@ info:
   category: "API8:2023 Security Misconfiguration"
   severity: "MEDIUM"
   author: "hadrian"
-  tags: ["grpc", "misconfiguration", "api8", "reflection"]
+  tags: ["grpc", "owasp", "owasp-api-top10", "misconfiguration", "api8", "reflection"]
   requires_llm_triage: false
   test_pattern: "simple"
 

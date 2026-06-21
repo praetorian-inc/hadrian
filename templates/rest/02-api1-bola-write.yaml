@@ -15,7 +15,7 @@ info:
     Attempts to modify resources belonging to a victim user using an attacker's credentials.
     A successful test indicates the API does not properly validate object-level permissions
     for write operations, which could lead to unauthorized data modification.
-  tags: ["bola", "owasp-api-top10", "api1", "authorization", "write"]
+  tags: ["bola", "owasp", "owasp-api-top10", "api1", "authorization", "write"]
   requires_llm_triage: true
   test_pattern: "simple"
 

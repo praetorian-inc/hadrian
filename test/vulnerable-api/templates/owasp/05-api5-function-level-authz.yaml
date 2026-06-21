@@ -9,7 +9,7 @@ info:
   category: "API5:2023"
   severity: "CRITICAL"
   author: "hadrian"
-  tags: ["bfla", "owasp-api-top10", "api5", "admin"]
+  tags: ["bfla", "owasp", "owasp-api-top10", "api5", "admin"]
   requires_llm_triage: true
   test_pattern: "simple"
 

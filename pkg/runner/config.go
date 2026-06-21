@@ -35,9 +35,17 @@ func (c *Config) Validate() error {
 	}
 
 	// Validate output format
-	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true}
+	validFormats := map[string]bool{"terminal": true, "json": true, "markdown": true, "sarif": true}
 	if !validFormats[c.Output] {
-		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown)", c.Output)
+		return fmt.Errorf("invalid output format: %s (valid: terminal, json, markdown, sarif)", c.Output)
+	}
+
+	// SARIF is a file-only format (it has no meaningful terminal rendering and
+	// GitHub Code Scanning consumes a file), so it requires --output-file.
+	// Validate the pairing here rather than deferring to reporter construction
+	// so the error surfaces alongside the other format checks.
+	if c.Output == "sarif" && c.OutputFile == "" {
+		return fmt.Errorf("--output sarif requires --output-file")
 	}
 
 	// Validate rate limit configuration
@@ -60,6 +68,11 @@ func (c *Config) Validate() error {
 
 	if len(c.RateLimitStatusCodes) == 0 {
 		return fmt.Errorf("rate limit status codes must not be empty")
+	}
+
+	// Validate planner flags
+	if c.PlannerOnly && !c.PlannerEnabled {
+		return fmt.Errorf("--planner-only requires --planner to be set")
 	}
 
 	// Validate custom headers format
@@ -95,6 +108,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Timeout <= 0 {
 		c.Timeout = 30
+	}
+	if c.PlannerTimeout <= 0 {
+		c.PlannerTimeout = 120
 	}
 	if len(c.Categories) == 0 {
 		c.Categories = []string{"owasp"}

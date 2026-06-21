@@ -122,6 +122,32 @@ func TestColorConstants_AreExported(t *testing.T) {
 	assert.Equal(t, "\033[1m", ColorBold)
 }
 
+func TestInfo_ProducesCyanInfoPrefix(t *testing.T) {
+	output := captureStderr(t, func() {
+		Info("info message")
+	})
+	assert.Contains(t, output, "[INFO]")
+	assert.Contains(t, output, ColorCyan+"[INFO]"+ColorReset)
+	assert.Contains(t, output, "info message")
+	assert.True(t, strings.HasSuffix(output, "\n"))
+}
+
+func TestInfo_FormatStringSubstitution(t *testing.T) {
+	output := captureStderr(t, func() {
+		Info("value=%d name=%s", 42, "test")
+	})
+	assert.Contains(t, output, "value=42 name=test")
+}
+
+func TestInfo_AlwaysDisplayed(t *testing.T) {
+	// Info should display regardless of verbose setting
+	SetVerbose(false)
+	output := captureStderr(t, func() {
+		Info("always visible")
+	})
+	assert.Contains(t, output, "always visible")
+}
+
 func TestSetVerbose_ControlsOutput(t *testing.T) {
 	// Test that Warn always produces output (it now always prints to stderr)
 	SetVerbose(false)

@@ -3,19 +3,28 @@
 # setup-live-targets.sh
 #
 # One-time setup for all Hadrian live test targets.
-# Pulls Docker images, clones repos, builds binaries, starts services,
-# and writes a config file for run-live-tests.sh.
+# Builds the in-house Go target binaries and hadrian itself, then writes a
+# config file (port assignments) for run-live-tests.sh.
+#
+# All four targets are in-house Go binaries — no container runtime, image
+# pull, or repository clone is required. This means the full live-test suite
+# runs in a fresh devcontainer with no container daemon (LAB-2750).
 #
 # Usage:
 #   ./test/setup-live-targets.sh [options]
 #
 # Options:
 #   --targets <list>   Comma-separated targets (default: all)
-#                      Valid: vulnerable-api,dvga,grpc,crapi
-#   --crapi-dir <dir>  Path to existing crAPI repo (skips clone)
-#   --skip-start       Only build/pull, don't start services
-#   --teardown         Stop and remove all running targets
+#                      Valid: vulnerable-api,vulnerable-graphql,grpc,vulnerable-rest-complex
+#   --no-build         Skip rebuilding hadrian and Go targets if binaries exist
+#   --teardown         Stop any running target processes and remove config
 #   --help             Show this help message
+#
+# Environment overrides:
+#   VULN_API_PORT_OVERRIDE           Force a specific port for vulnerable-api
+#   VULN_GRAPHQL_PORT_OVERRIDE       Force a specific port for vulnerable-graphql
+#   GRPC_PORT_OVERRIDE               Force a specific port for grpc-server
+#   VULN_REST_COMPLEX_PORT_OVERRIDE  Force a specific port for vulnerable-rest-complex
 # =============================================================================
 
 set -euo pipefail
@@ -24,17 +33,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/.live-test-config"
 
-# Default ports
-VULN_API_PORT=8889
-DVGA_PORT=5013
-GRPC_PORT=50051
-CRAPI_PORT=8888
+# Default ports. The script will pick these unless they're already in use,
+# in which case find_available_port walks forward until it finds a free one
+# (skipping any ports already claimed earlier in the same run).
+DEFAULT_VULN_API_PORT=9889
+DEFAULT_VULN_GRAPHQL_PORT=5013
+DEFAULT_GRPC_PORT=50051
+DEFAULT_VULN_REST_COMPLEX_PORT=8888
+
+VULN_API_PORT=$DEFAULT_VULN_API_PORT
+VULN_GRAPHQL_PORT=$DEFAULT_VULN_GRAPHQL_PORT
+GRPC_PORT=$DEFAULT_GRPC_PORT
+VULN_REST_COMPLEX_PORT=$DEFAULT_VULN_REST_COMPLEX_PORT
 
 # Defaults
-TARGETS="vulnerable-api,dvga,grpc,crapi"
-CRAPI_DIR=""
+TARGETS="vulnerable-api,vulnerable-graphql,grpc,vulnerable-rest-complex"
 SKIP_START=false
 TEARDOWN=false
+DO_BUILD=true
 
 # Colors
 RED='\033[0;31m'
@@ -45,23 +61,28 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# All log_* helpers write to stderr. Several functions in this script
+# (find_available_port, resolve_target_port) echo their result on stdout for
+# capture via `$(...)`. If log_* wrote to stdout, an error message during a
+# port walk would silently end up inside the captured port value — a real
+# bug seen during code review.
 log_header() {
-    echo ""
-    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BOLD}${BLUE}  $1${NC}"
-    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}"
+    echo "" >&2
+    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}" >&2
+    echo -e "${BOLD}${BLUE}  $1${NC}" >&2
+    echo -e "${BOLD}${BLUE}════════════════════════════════════════════════════════════════${NC}" >&2
 }
-log_info()  { echo -e "${CYAN}[INFO]${NC} $1"; }
-log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
-log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
-log_fail()  { echo -e "${RED}[FAIL]${NC} $1"; }
+log_info()  { echo -e "${CYAN}[INFO]${NC} $1" >&2; }
+log_ok()    { echo -e "${GREEN}[OK]${NC} $1" >&2; }
+log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1" >&2; }
+log_fail()  { echo -e "${RED}[FAIL]${NC} $1" >&2; }
 
 # ==== Argument parsing ====
 while [ $# -gt 0 ]; do
     case $1 in
         --targets)    TARGETS="$2"; shift 2 ;;
-        --crapi-dir)  CRAPI_DIR="$2"; shift 2 ;;
         --skip-start) SKIP_START=true; shift ;;
+        --no-build)   DO_BUILD=false; shift ;;
         --teardown)   TEARDOWN=true; shift ;;
         --help)
             sed -n '2,/^# =====/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
@@ -72,65 +93,75 @@ while [ $# -gt 0 ]; do
 done
 
 # ==== Teardown ====
+# Every target is a local Go process now, so teardown just kills them by name
+# and removes the generated config. No containers or volumes to clean.
 if [ "$TEARDOWN" = true ]; then
     log_header "Tearing Down Live Targets"
 
-    pkill -f "vulnerable-api$" 2>/dev/null && log_ok "Stopped vulnerable-api" || true
-    pkill -f "grpc-server$" 2>/dev/null && log_ok "Stopped grpc-server" || true
-
-    if command -v docker >/dev/null 2>&1; then
-        docker rm -f hadrian-dvga 2>/dev/null && log_ok "Removed dvga container" || true
-        CRAPI_COMPOSE="${CRAPI_DIR:-${SCRIPT_DIR}/.crapi-repo}/deploy/docker"
-        (cd "$CRAPI_COMPOSE" 2>/dev/null && \
-            docker compose down 2>/dev/null && log_ok "Stopped crapi containers") || true
-    fi
+    pkill -f "/vulnerable-api$" 2>/dev/null && log_ok "Stopped vulnerable-api" || true
+    pkill -f "/vulnerable-graphql$" 2>/dev/null && log_ok "Stopped vulnerable-graphql" || true
+    pkill -f "/grpc-server$" 2>/dev/null && log_ok "Stopped grpc-server" || true
+    pkill -f "/vulnerable-rest-complex$" 2>/dev/null && log_ok "Stopped vulnerable-rest-complex" || true
 
     rm -f "$CONFIG_FILE"
-    log_ok "Removed config file"
+    # Remove any stale spec cache left by older versions of this script.
+    rm -rf "${SCRIPT_DIR}/.live-test-cache"
+    log_ok "Removed config file and spec cache"
     echo ""
     exit 0
 fi
 
 # ==== Port helpers ====
-port_in_use() {
-    if command -v lsof >/dev/null 2>&1; then
-        lsof -i :"$1" >/dev/null 2>&1
-    elif command -v ss >/dev/null 2>&1; then
-        ss -ltn | grep -q ":$1 "
-    else
-        # Fallback: try to connect
-        (echo >/dev/tcp/localhost/"$1") 2>/dev/null
-    fi
-}
-
-find_available_port() {
-    local base_port=$1
-    local port=$base_port
-    while port_in_use "$port"; do
-        port=$((port + 1))
-        if [ $((port - base_port)) -gt 20 ]; then
-            echo ""
-            return 1
-        fi
-    done
-    echo "$port"
-}
+# port_in_use, find_available_port, _port_excluded, and resolve_target_port
+# live in test/lib/port-helpers.sh so the regression harness can source the
+# same definitions and any prod-source change automatically affects what the
+# harness asserts.
+# shellcheck source=test/lib/port-helpers.sh
+. "${SCRIPT_DIR}/lib/port-helpers.sh"
 
 # ==== Prerequisite checks ====
 log_header "Checking Prerequisites"
 
-if ! command -v go >/dev/null 2>&1; then
-    log_fail "Go is not installed. Install Go 1.21+ from https://go.dev/dl/"
-    exit 1
+# All targets are Go binaries, so Go is required iff we're going to build at
+# least one binary in this run (DO_BUILD=true) or a needed binary is missing.
+need_go=false
+if [ "$DO_BUILD" = true ]; then
+    need_go=true
+elif [ ! -x "${REPO_ROOT}/hadrian" ]; then
+    need_go=true
 fi
-log_ok "Go $(go version | awk '{print $3}')"
+# Split per Go target so `--targets vulnerable-api --no-build` doesn't require
+# Go just because another target's binary happens to be missing.
+if echo "$TARGETS" | grep -q "vulnerable-api" && \
+       { [ "$DO_BUILD" = true ] \
+         || [ ! -x "${SCRIPT_DIR}/vulnerable-api/vulnerable-api" ]; }; then
+    need_go=true
+fi
+if echo "$TARGETS" | grep -q "vulnerable-graphql" && \
+       { [ "$DO_BUILD" = true ] \
+         || [ ! -x "${SCRIPT_DIR}/vulnerable-graphql/vulnerable-graphql" ]; }; then
+    need_go=true
+fi
+if echo "$TARGETS" | grep -q "grpc" && \
+       { [ "$DO_BUILD" = true ] \
+         || [ ! -x "${SCRIPT_DIR}/grpc-server/grpc-server" ]; }; then
+    need_go=true
+fi
+if echo "$TARGETS" | grep -q "vulnerable-rest-complex" && \
+       { [ "$DO_BUILD" = true ] \
+         || [ ! -x "${SCRIPT_DIR}/vulnerable-rest-complex/vulnerable-rest-complex" ]; }; then
+    need_go=true
+fi
 
-if echo "$TARGETS" | grep -qE "dvga|crapi"; then
-    if ! command -v docker >/dev/null 2>&1; then
-        log_fail "Docker is not installed. Install from https://docker.com"
+if [ "$need_go" = true ]; then
+    if ! command -v go >/dev/null 2>&1; then
+        log_fail "Go is not installed. Install Go 1.21+ from https://go.dev/dl/"
+        log_info "Or re-run with --no-build if all target binaries already exist."
         exit 1
     fi
-    log_ok "Docker available"
+    log_ok "Go $(go version | awk '{print $3}')"
+else
+    log_ok "Go check skipped (no Go build required)"
 fi
 
 if echo "$TARGETS" | grep -q "grpc"; then
@@ -177,199 +208,141 @@ fi
 # ==== Find available ports ====
 log_header "Resolving Ports"
 
+# CLAIMED_PORTS tracks every port assigned in this run so subsequent
+# find_available_port calls won't hand out the same number to a different
+# target. Without this, two targets can both end up on (e.g.) 8889 when
+# 8888 is taken on the host: the OS still says 8889 is free between the
+# two assignments because nothing has actually bound it yet.
+CLAIMED_PORTS=()
+
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    VULN_API_PORT=$(find_available_port 8889)
-    if [ -z "$VULN_API_PORT" ]; then
-        log_fail "No available port near 8889 for vulnerable-api"
-        exit 1
-    fi
+    VULN_API_PORT=$(resolve_target_port "${VULN_API_PORT_OVERRIDE:-}" \
+        "$DEFAULT_VULN_API_PORT" "vulnerable-api" \
+        "${CLAIMED_PORTS[@]+"${CLAIMED_PORTS[@]}"}") || exit 1
+    CLAIMED_PORTS+=("$VULN_API_PORT")
     log_ok "vulnerable-api -> port $VULN_API_PORT"
 fi
 
-if echo "$TARGETS" | grep -q "dvga"; then
-    DVGA_PORT=$(find_available_port 5013)
-    if [ -z "$DVGA_PORT" ]; then
-        log_fail "No available port near 5013 for dvga"
-        exit 1
-    fi
-    log_ok "dvga -> port $DVGA_PORT"
+if echo "$TARGETS" | grep -q "vulnerable-graphql"; then
+    VULN_GRAPHQL_PORT=$(resolve_target_port "${VULN_GRAPHQL_PORT_OVERRIDE:-}" \
+        "$DEFAULT_VULN_GRAPHQL_PORT" "vulnerable-graphql" \
+        "${CLAIMED_PORTS[@]+"${CLAIMED_PORTS[@]}"}") || exit 1
+    CLAIMED_PORTS+=("$VULN_GRAPHQL_PORT")
+    log_ok "vulnerable-graphql -> port $VULN_GRAPHQL_PORT"
 fi
 
 if echo "$TARGETS" | grep -q "grpc"; then
-    GRPC_PORT=$(find_available_port 50051)
-    if [ -z "$GRPC_PORT" ]; then
-        log_fail "No available port near 50051 for grpc-server"
-        exit 1
-    fi
+    GRPC_PORT=$(resolve_target_port "${GRPC_PORT_OVERRIDE:-}" \
+        "$DEFAULT_GRPC_PORT" "grpc-server" \
+        "${CLAIMED_PORTS[@]+"${CLAIMED_PORTS[@]}"}") || exit 1
+    CLAIMED_PORTS+=("$GRPC_PORT")
     log_ok "grpc-server -> port $GRPC_PORT"
 fi
 
-if echo "$TARGETS" | grep -q "crapi"; then
-    CRAPI_PORT=$(find_available_port 8888)
-    if [ -z "$CRAPI_PORT" ]; then
-        log_fail "No available port near 8888 for crapi"
-        exit 1
-    fi
-    log_ok "crapi -> port $CRAPI_PORT"
+if echo "$TARGETS" | grep -q "vulnerable-rest-complex"; then
+    VULN_REST_COMPLEX_PORT=$(resolve_target_port "${VULN_REST_COMPLEX_PORT_OVERRIDE:-}" \
+        "$DEFAULT_VULN_REST_COMPLEX_PORT" "vulnerable-rest-complex" \
+        "${CLAIMED_PORTS[@]+"${CLAIMED_PORTS[@]}"}") || exit 1
+    CLAIMED_PORTS+=("$VULN_REST_COMPLEX_PORT")
+    log_ok "vulnerable-rest-complex -> port $VULN_REST_COMPLEX_PORT"
 fi
 
 # ==== Build Go targets ====
 log_header "Building Hadrian and Go Targets"
 
-log_info "Building hadrian..."
-(cd "$REPO_ROOT" && go build -o hadrian ./cmd/hadrian)
-log_ok "hadrian built"
+if [ "$DO_BUILD" = true ] || [ ! -x "${REPO_ROOT}/hadrian" ]; then
+    log_info "Building hadrian..."
+    (cd "$REPO_ROOT" && go build -o hadrian ./cmd/hadrian)
+    log_ok "hadrian built"
+else
+    log_ok "hadrian binary exists (--no-build, skipping)"
+fi
 
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    log_info "Building vulnerable-api..."
-    (cd "${SCRIPT_DIR}/vulnerable-api" && go build -o vulnerable-api .)
-    log_ok "vulnerable-api built"
+    if [ "$DO_BUILD" = true ] || [ ! -x "${SCRIPT_DIR}/vulnerable-api/vulnerable-api" ]; then
+        log_info "Building vulnerable-api..."
+        (cd "${SCRIPT_DIR}/vulnerable-api" && go build -o vulnerable-api .)
+        log_ok "vulnerable-api built"
+    else
+        log_ok "vulnerable-api binary exists (--no-build, skipping)"
+    fi
+fi
+
+if echo "$TARGETS" | grep -q "vulnerable-graphql"; then
+    if [ "$DO_BUILD" = true ] || [ ! -x "${SCRIPT_DIR}/vulnerable-graphql/vulnerable-graphql" ]; then
+        log_info "Building vulnerable-graphql..."
+        (cd "${SCRIPT_DIR}/vulnerable-graphql" && go build -o vulnerable-graphql .)
+        log_ok "vulnerable-graphql built"
+    else
+        log_ok "vulnerable-graphql binary exists (--no-build, skipping)"
+    fi
 fi
 
 if echo "$TARGETS" | grep -q "grpc"; then
-    log_info "Building grpc-server..."
-    (cd "${SCRIPT_DIR}/grpc-server" && {
-        # Check for actual generated files, not just directory existence
-        # This handles the case where pb/ exists but is empty from a failed run
-        if [ ! -f pb/service.pb.go ] || [ ! -f pb/service_grpc.pb.go ]; then
-            log_info "Generating protobuf code..."
-            # Clean up any empty/corrupted pb directory from previous failed runs
-            rm -rf pb
-            mkdir -p pb
-            if ! protoc --go_out=pb --go_opt=paths=source_relative \
-                --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
-                service.proto; then
-                log_fail "protoc failed to generate Go code"
-                rm -rf pb  # Clean up on failure
-                exit 1
+    if [ "$DO_BUILD" = true ] || [ ! -x "${SCRIPT_DIR}/grpc-server/grpc-server" ]; then
+        log_info "Building grpc-server..."
+        (cd "${SCRIPT_DIR}/grpc-server" && {
+            # Check for actual generated files, not just directory existence
+            # This handles the case where pb/ exists but is empty from a failed run
+            if [ ! -f pb/service.pb.go ] || [ ! -f pb/service_grpc.pb.go ]; then
+                log_info "Generating protobuf code..."
+                # Clean up any empty/corrupted pb directory from previous failed runs
+                rm -rf pb
+                mkdir -p pb
+                if ! protoc --go_out=pb --go_opt=paths=source_relative \
+                    --go-grpc_out=pb --go-grpc_opt=paths=source_relative \
+                    service.proto; then
+                    log_fail "protoc failed to generate Go code"
+                    rm -rf pb  # Clean up on failure
+                    exit 1
+                fi
+                log_ok "Protobuf code generated"
             fi
-            log_ok "Protobuf code generated"
-        fi
-        go build -o grpc-server .
-    })
-    log_ok "grpc-server built"
-fi
-
-# ==== Pull Docker images ====
-if echo "$TARGETS" | grep -q "dvga"; then
-    log_header "Setting Up dvga"
-    log_info "Pulling dvga image..."
-    docker pull dolevf/dvga:latest
-    log_ok "dvga image ready"
-fi
-
-# ==== Set up crAPI ====
-if echo "$TARGETS" | grep -q "crapi"; then
-    log_header "Setting Up crapi"
-
-    if [ -z "$CRAPI_DIR" ]; then
-        CRAPI_DIR="${SCRIPT_DIR}/.crapi-repo"
-    fi
-
-    if [ ! -d "$CRAPI_DIR" ]; then
-        log_info "Cloning crAPI repository..."
-        git clone --depth 1 https://github.com/OWASP/crAPI.git "$CRAPI_DIR"
-        log_ok "crAPI cloned to $CRAPI_DIR"
+            go build -o grpc-server .
+        })
+        log_ok "grpc-server built"
     else
-        log_ok "crAPI repo exists at $CRAPI_DIR"
-    fi
-
-    COMPOSE_DIR="${CRAPI_DIR}/deploy/docker"
-
-    # Reset docker-compose.yml to original state (undo any previous sed patches)
-    if [ -d "${CRAPI_DIR}/.git" ]; then
-        (cd "$CRAPI_DIR" && git checkout -- deploy/docker/docker-compose.yml 2>/dev/null) || true
-        log_info "Reset docker-compose.yml to original"
-    elif [ -f "${COMPOSE_DIR}/docker-compose.yml.bak" ]; then
-        cp "${COMPOSE_DIR}/docker-compose.yml.bak" "${COMPOSE_DIR}/docker-compose.yml"
-        log_info "Restored docker-compose.yml from backup"
-    fi
-
-    # Patch docker-compose port if not default (crAPI hardcodes 8888)
-    if [ "$CRAPI_PORT" != "8888" ]; then
-        log_info "Patching crAPI docker-compose to use port $CRAPI_PORT..."
-        sed -i.bak "s/8888:80/${CRAPI_PORT}:80/g" "${COMPOSE_DIR}/docker-compose.yml"
-        log_ok "Patched crAPI to port $CRAPI_PORT"
+        log_ok "grpc-server binary exists (--no-build, skipping)"
     fi
 fi
 
-# ==== Start services ====
-if [ "$SKIP_START" = false ]; then
-    log_header "Starting Services"
-
-    if echo "$TARGETS" | grep -q "dvga"; then
-        docker rm -f hadrian-dvga 2>/dev/null || true
-        log_info "Starting dvga on port $DVGA_PORT..."
-        docker run -d -p "${DVGA_PORT}:5013" -e WEB_HOST=0.0.0.0 --name hadrian-dvga dolevf/dvga:latest >/dev/null
-        log_ok "dvga container started"
+if echo "$TARGETS" | grep -q "vulnerable-rest-complex"; then
+    if [ "$DO_BUILD" = true ] || [ ! -x "${SCRIPT_DIR}/vulnerable-rest-complex/vulnerable-rest-complex" ]; then
+        log_info "Building vulnerable-rest-complex..."
+        (cd "${SCRIPT_DIR}/vulnerable-rest-complex" && go build -o vulnerable-rest-complex .)
+        log_ok "vulnerable-rest-complex built"
+    else
+        log_ok "vulnerable-rest-complex binary exists (--no-build, skipping)"
     fi
+fi
 
-    if echo "$TARGETS" | grep -q "crapi"; then
-        log_info "Starting crapi services on port $CRAPI_PORT (this may take 1-2 minutes)..."
-        if (cd "${CRAPI_DIR}/deploy/docker" && docker compose up -d 2>&1); then
-            log_ok "crapi containers started"
-        else
-            log_warn "Some crapi containers may have failed to start (check output above)"
-            log_info "Continuing anyway - health check will verify readiness..."
-        fi
-    fi
-
-    # Wait for Docker services
-    if echo "$TARGETS" | grep -q "dvga"; then
-        log_info "Waiting for dvga to be ready..."
-        elapsed=0
-        while ! curl -sf -o /dev/null "http://localhost:${DVGA_PORT}/" 2>/dev/null; do
-            sleep 2
-            elapsed=$((elapsed + 2))
-            if [ $elapsed -ge 60 ]; then
-                log_fail "dvga did not respond within 60s"
-                docker logs hadrian-dvga 2>&1 | tail -10
-                exit 1
-            fi
-        done
-        log_ok "dvga is ready on port $DVGA_PORT"
-    fi
-
-    if echo "$TARGETS" | grep -q "crapi"; then
-        log_info "Waiting for crapi to be ready (may take up to 2 minutes)..."
-        CRAPI_READY=true
-        elapsed=0
-        while ! curl -s -o /dev/null -w "%{http_code}" "http://localhost:${CRAPI_PORT}/identity/api/auth/login" 2>/dev/null | grep -qE "^[2-4]"; do
-            sleep 5
-            elapsed=$((elapsed + 5))
-            if [ $elapsed -ge 180 ]; then
-                log_warn "crapi did not respond within 180s"
-                log_warn "Container status:"
-                (cd "${CRAPI_DIR}/deploy/docker" && docker compose ps 2>&1) || true
-                log_warn "crapi-web logs:"
-                (cd "${CRAPI_DIR}/deploy/docker" && docker compose logs crapi-web 2>&1 | tail -10) || true
-                log_warn "crapi will be skipped during test run. Debug with:"
-                log_info "  cd ${CRAPI_DIR}/deploy/docker && docker compose ps"
-                log_info "  docker compose logs <container-name>"
-                CRAPI_READY=false
-                break
-            fi
-            printf "."
-        done
-        echo ""
-        if [ "$CRAPI_READY" = true ]; then
-            log_ok "crapi is ready on port $CRAPI_PORT"
-        fi
-    fi
+# All targets are launched on demand by run-live-tests.sh (it starts each Go
+# binary, health-checks it, runs hadrian, then stops it). --skip-start is
+# accepted for backwards compatibility but there are no long-lived services
+# to start here anymore.
+if [ "$SKIP_START" = true ]; then
+    log_info "--skip-start: targets are started on demand by run-live-tests.sh anyway."
 fi
 
 # ==== Write config file ====
 log_header "Writing Configuration"
 
+# Path values are written quoted (KEY="VALUE") below, and the readers in
+# run-live-tests.sh and test-llm-planner.sh reject any line that doesn't
+# match `^[A-Za-z_][A-Za-z0-9_]*="[A-Za-z0-9_./:@,+ -]*"$` — quoted-only.
+# Inside double quotes, `source` does NOT word-split, so paths with spaces
+# round-trip safely.
+
 cat > "$CONFIG_FILE" <<EOF
 # Auto-generated by setup-live-targets.sh on $(date -Iseconds 2>/dev/null || date)
 # Source this or let run-live-tests.sh read it automatically.
-VULN_API_PORT=${VULN_API_PORT}
-DVGA_PORT=${DVGA_PORT}
-GRPC_PORT=${GRPC_PORT}
-CRAPI_PORT=${CRAPI_PORT}
-CRAPI_DIR=${CRAPI_DIR}
-TARGETS_SETUP=${TARGETS}
+# Values must match run-live-tests.sh's safety regex
+# (^[[:space:]]*(#.*)?\$|^[A-Za-z_][A-Za-z0-9_]*=\"[A-Za-z0-9_./:@,+ -]*\"\$).
+# All values are quoted so \`source\` won't word-split paths/values.
+VULN_API_PORT="${VULN_API_PORT}"
+VULN_GRAPHQL_PORT="${VULN_GRAPHQL_PORT}"
+GRPC_PORT="${GRPC_PORT}"
+VULN_REST_COMPLEX_PORT="${VULN_REST_COMPLEX_PORT}"
 EOF
 
 log_ok "Config written to ${CONFIG_FILE}"
@@ -378,27 +351,23 @@ log_ok "Config written to ${CONFIG_FILE}"
 log_header "Setup Complete"
 
 echo ""
-echo -e "${BOLD}Targets ready:${NC}"
+echo -e "${BOLD}Targets ready (all in-house Go binaries — no container runtime required):${NC}"
 if echo "$TARGETS" | grep -q "vulnerable-api"; then
-    echo -e "  vulnerable-api  ${GREEN}built${NC}     (will start on port $VULN_API_PORT)"
+    echo -e "  vulnerable-api          ${GREEN}built${NC}  (starts on port $VULN_API_PORT)"
 fi
-if echo "$TARGETS" | grep -q "dvga"; then
-    echo -e "  dvga            ${GREEN}running${NC}   http://localhost:$DVGA_PORT"
+if echo "$TARGETS" | grep -q "vulnerable-graphql"; then
+    echo -e "  vulnerable-graphql      ${GREEN}built${NC}  (starts on port $VULN_GRAPHQL_PORT)"
 fi
 if echo "$TARGETS" | grep -q "grpc"; then
-    echo -e "  grpc-server     ${GREEN}built${NC}     (will start on port $GRPC_PORT)"
+    echo -e "  grpc-server             ${GREEN}built${NC}  (starts on port $GRPC_PORT)"
 fi
-if echo "$TARGETS" | grep -q "crapi"; then
-    if [ "$CRAPI_READY" = false ]; then
-        echo -e "  crapi           ${YELLOW}warning${NC}   may not be ready (check containers)"
-    else
-        echo -e "  crapi           ${GREEN}running${NC}   http://localhost:$CRAPI_PORT"
-    fi
+if echo "$TARGETS" | grep -q "vulnerable-rest-complex"; then
+    echo -e "  vulnerable-rest-complex ${GREEN}built${NC}  (starts on port $VULN_REST_COMPLEX_PORT)"
 fi
 echo ""
 echo -e "${BOLD}Next step:${NC}"
 echo -e "  ./test/run-live-tests.sh"
 echo ""
-echo -e "${BOLD}To tear down:${NC}"
+echo -e "${BOLD}To tear down (stops any running target processes):${NC}"
 echo -e "  ./test/setup-live-targets.sh --teardown"
 echo ""

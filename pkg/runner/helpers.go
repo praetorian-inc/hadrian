@@ -19,11 +19,43 @@ import (
 	_ "github.com/praetorian-inc/hadrian/pkg/plugins/rest"    // Register REST plugin
 	"github.com/praetorian-inc/hadrian/pkg/reporter"
 	"github.com/praetorian-inc/hadrian/pkg/roles"
+	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
 // =============================================================================
 // PUBLIC API (Helper functions for CLI workflow)
 // =============================================================================
+
+// sarifLacksTemplates reports whether a SARIF run will fall back to wiki
+// metadata because no templates were loaded — the condition the gRPC/GraphQL
+// runners warn the operator about. Pure predicate so the branch is testable
+// without standing up a full protocol run.
+func sarifLacksTemplates(output string, templateCount int) bool {
+	return output == "sarif" && templateCount == 0
+}
+
+// warnDuplicateTemplateIDs logs a warning for each template id declared by more
+// than one file in a loaded set. Two templates sharing an id collapse to a
+// single SARIF rule (buildRules keeps the first seen) and, when they match the
+// same operation+role pair, to a single partialFingerprint — silently hiding
+// the second finding. This only happens with a misconfigured template set, so
+// it is a warning (surfacing the conflict) rather than a hard load failure.
+// It is shared by the rest, graphql, and grpc loaders.
+func warnDuplicateTemplateIDs(tmpls []*templates.CompiledTemplate) {
+	seen := make(map[string]string, len(tmpls))
+	for _, t := range tmpls {
+		// t.ID reads through the embedded *Template, so guard the nil embedded
+		// pointer too — a directly-constructed CompiledTemplate{} would panic.
+		if t == nil || t.Template == nil || t.ID == "" {
+			continue
+		}
+		if first, ok := seen[t.ID]; ok {
+			log.Warn("Duplicate template id %q: %q and %q declare the same id; only the first surfaces in SARIF rules and fingerprints", t.ID, first, t.FilePath)
+			continue
+		}
+		seen[t.ID] = t.FilePath
+	}
+}
 
 // parseAPISpec parses API specification using registered plugins
 func parseAPISpec(path string) (*model.APISpec, error) {
@@ -77,8 +109,13 @@ type Stats struct {
 	TemplatesLoaded int           `json:"templates_loaded"`
 }
 
-// createReporter creates appropriate reporter based on output format
-func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, error) {
+// createReporter creates appropriate reporter based on output format.
+//
+// tmpls is consulted only by the SARIF reporter (to enrich the rules section
+// with descriptions, tags, and helpUri). Other formats ignore it. Pass nil if
+// no templates are available — SARIF will still emit minimal rules derived
+// from each finding's own metadata.
+func createReporter(format, outputFile string, requestIDsLimit int, tmpls []*templates.CompiledTemplate) (Reporter, error) {
 	switch format {
 	case "terminal":
 		return NewTerminalReporter(os.Stdout, requestIDsLimit), nil
@@ -86,26 +123,25 @@ func createReporter(format, outputFile string, requestIDsLimit int) (Reporter, e
 		return NewJSONReporter(outputFile, requestIDsLimit)
 	case "markdown":
 		return NewMarkdownReporter(outputFile, requestIDsLimit)
+	case "sarif":
+		return NewSARIFReporter(outputFile, tmpls)
 	default:
 		return nil, fmt.Errorf("unsupported output format: %s", format)
 	}
 }
 
 // triageWithLLM runs LLM triage on findings and reports each finding immediately after analysis
-func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig, llmHost, llmModel string, llmTimeout int, llmContext string, rep Reporter) ([]*model.Finding, error) {
+func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *roles.RoleConfig, llmProvider, llmHost, llmModel string, llmTimeout int, llmContext string, injectedClient llm.Client, rep Reporter) ([]*model.Finding, error) {
 	log.Debug("Starting LLM triage for %d findings", len(findings))
 
 	var client llm.Client
 	var err error
 
-	// Convert timeout from seconds to time.Duration
-	timeout := time.Duration(llmTimeout) * time.Second
-
-	// Use explicit config if provided, otherwise fall back to env vars
-	if llmHost != "" || llmModel != "" {
-		client, err = llm.NewClientWithConfig(ctx, llmHost, llmModel, timeout, llmContext)
+	if injectedClient != nil {
+		client = injectedClient
 	} else {
-		client, err = llm.NewClient(ctx)
+		timeout := time.Duration(llmTimeout) * time.Second
+		client, err = llm.NewClientWithProvider(ctx, llmProvider, llmHost, llmModel, timeout, llmContext)
 	}
 
 	if err != nil {
@@ -113,8 +149,6 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 		log.Warn("LLM triage disabled: %v", err)
 		return findings, nil
 	}
-
-	redactor := reporter.NewRedactor()
 
 	for i, finding := range findings {
 		log.Debug("Triaging finding %d/%d: %s", i+1, len(findings), finding.ID)
@@ -134,11 +168,15 @@ func triageWithLLM(ctx context.Context, findings []*model.Finding, rolesCfg *rol
 			}
 		}
 
-		// Redact sensitive data before sending to LLM (PII protection)
+		// Defense-in-depth: redact all evidence fields before they enter the LLM pipeline.
+		// BuildTriagePrompt also redacts response body in the prompt, but we redact here too so
+		// the TriageRequest never carries unredacted PII regardless of how clients use it.
+		redactor := reporter.NewRedactor()
 		redactedFinding := *finding
 		redactedFinding.Evidence.Request.Body = redactor.RedactForLLM(finding.Evidence.Request.Body)
+		redactedFinding.Evidence.Request.URL = redactor.RedactForLLM(finding.Evidence.Request.URL)
 		redactedFinding.Evidence.Response.Body = redactor.RedactForLLM(finding.Evidence.Response.Body)
-
+		redactedFinding.Description = redactor.RedactForLLM(finding.Description)
 		req := &llm.TriageRequest{
 			Finding:      &redactedFinding,
 			AttackerRole: attackerRole,

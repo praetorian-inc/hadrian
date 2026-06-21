@@ -117,7 +117,7 @@ Hadrian is a security testing framework designed to identify OWASP API Top 10 vu
 │  │                        ▼                                                │ │
 │  │  ┌────────────────────────────────────────────────────────────────┐    │ │
 │  │  │                    LLM TRIAGE                                   │    │ │
-│  │  │   Ollama (local LLM)                                             │    │ │
+│  │  │   Ollama / OpenAI / Anthropic                                     │    │ │
 │  │  │   → is_vulnerability: true/false                               │    │ │
 │  │  │   → confidence: 0.95                                           │    │ │
 │  │  │   → recommendations: [...]                                     │    │ │
@@ -175,7 +175,7 @@ hadrian/
 │   │   └── grpc/            # Protocol Buffers parser
 │   ├── graphql/             # GraphQL security scanning engine
 │   ├── reporter/            # Output formatting (terminal, JSON, markdown)
-│   ├── llm/                 # LLM integration (Ollama)
+│   ├── llm/                 # LLM integration (Ollama, OpenAI, Anthropic)
 │   └── matchers/            # Detection matchers
 ├── internal/http/           # HTTP client with proxy support
 └── templates/
@@ -280,15 +280,16 @@ Hadrian includes templates for OWASP API Top 10 vulnerabilities:
 
 ```bash
 hadrian test rest \
-  --api crapi-openapi.yaml \
-  --roles crapi-roles.yaml \
-  --auth crapi-auth.yaml \
+  --api test/vulnerable-rest-complex/openapi.yaml \
+  --roles test/vulnerable-rest-complex/roles.yaml \
+  --auth test/vulnerable-rest-complex/auth-bearer.yaml \
+  --template-dir test/vulnerable-rest-complex/templates/owasp \
   --output json \
   --output-file report.json
 ```
 
 This command:
-1. Loads the crAPI OpenAPI spec
+1. Loads the OpenAPI spec
 2. Loads role definitions and auth tokens
 3. Tests cross-role access for each matching endpoint
 4. Outputs findings to JSON report

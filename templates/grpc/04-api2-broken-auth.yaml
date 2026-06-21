@@ -4,7 +4,7 @@ info:
   category: "API2:2023 Broken Authentication"
   severity: "CRITICAL"
   author: "hadrian"
-  tags: ["grpc", "authentication", "api2"]
+  tags: ["grpc", "owasp", "owasp-api-top10", "authentication", "api2"]
   requires_llm_triage: false
   test_pattern: "simple"
 

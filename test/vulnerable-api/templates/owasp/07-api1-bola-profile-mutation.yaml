@@ -10,7 +10,7 @@ info:
   category: "API1:2023"
   severity: "CRITICAL"
   author: "hadrian"
-  tags: ["bola", "owasp-api-top10", "api1", "mutation"]
+  tags: ["bola", "owasp", "owasp-api-top10", "api1", "mutation"]
   requires_llm_triage: false
   test_pattern: "mutation"
 

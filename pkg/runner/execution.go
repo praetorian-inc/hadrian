@@ -44,6 +44,7 @@ func executeTemplate(
 		if result.Matched {
 			finding := &model.Finding{
 				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", "no-victim"),
+				TemplateID:      tmpl.ID,
 				Category:        tmpl.Info.Category,
 				Name:            tmpl.Info.Name,
 				Severity:        model.Severity(tmpl.Info.Severity),
@@ -86,6 +87,7 @@ func executeTemplate(
 			}
 			finding := &model.Finding{
 				ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", "no-victim"),
+				TemplateID:      tmpl.ID,
 				Category:        tmpl.Info.Category,
 				Name:            tmpl.Info.Name,
 				Severity:        model.Severity(tmpl.Info.Severity),
@@ -172,6 +174,7 @@ func executeTemplate(
 				}
 				finding := &model.Finding{
 					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), attackerRole.Name, victimName),
+					TemplateID:      tmpl.ID,
 					Category:        tmpl.Info.Category,
 					Name:            tmpl.Info.Name,
 					Severity:        model.Severity(tmpl.Info.Severity),
@@ -286,6 +289,7 @@ func executeMutationTemplate(
 			if result.Matched {
 				finding := &model.Finding{
 					ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), attackerRole.Name, victimRole.Name),
+					TemplateID:      tmpl.ID,
 					Category:        tmpl.Info.Category,
 					Name:            tmpl.Info.Name,
 					Severity:        model.Severity(tmpl.Info.Severity),

@@ -14,7 +14,7 @@ info:
     Tests if authenticated endpoints are accessible without
     any authentication header. This detects misconfigured
     middleware where auth is optional instead of required.
-  tags: ["broken-auth", "owasp-api-top10", "api2", "no-auth"]
+  tags: ["broken-auth", "owasp", "owasp-api-top10", "api2", "no-auth"]
   test_pattern: "simple"
 
 endpoint_selector:

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewTestCmd_FlagDefaults(t *testing.T) {
@@ -154,7 +155,7 @@ detection:
 
 	// Load templates multiple times and verify order is always the same
 	for i := 0; i < 5; i++ {
-		loaded, err := loadTemplateFiles(tmpDir, []string{"rest"})
+		loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
 		assert.NoError(t, err)
 		assert.Len(t, loaded, 3)
 
@@ -163,4 +164,183 @@ detection:
 		assert.Equal(t, "02-b", loaded[1].ID)
 		assert.Equal(t, "03-c", loaded[2].ID)
 	}
+}
+
+func TestLoadTemplateFiles_CategoryFilterByMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Template with OWASP category and tags
+	owaspTemplate := `id: 01-owasp
+info:
+  name: "OWASP Test"
+  category: "API1:2023"
+  severity: "HIGH"
+  test_pattern: "simple"
+  tags: ["owasp", "owasp-api-top10", "bola"]
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
+	// Template with custom category
+	customTemplate := `id: 02-custom
+info:
+  name: "Custom Test"
+  category: "custom-internal"
+  severity: "MEDIUM"
+  test_pattern: "simple"
+  tags: ["internal", "regression"]
+endpoint_selector:
+  methods: ["POST"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
+	// Template with only category, no tags
+	categoryOnlyTemplate := `id: 03-category-only
+info:
+  name: "Category Only Test"
+  category: "custom-cat"
+  severity: "LOW"
+  test_pattern: "simple"
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
+	// Template with tags but no matching category (match only via tags)
+	tagsOnlyTemplate := `id: 04-tags-only
+info:
+  name: "Tags Only Test"
+  category: "unrelated-category"
+  severity: "LOW"
+  test_pattern: "simple"
+  tags: ["special-tag"]
+endpoint_selector:
+  methods: ["GET"]
+role_selector:
+  attacker_permission_level: "lower"
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+  vulnerability_pattern: "test"
+`
+
+	err := os.WriteFile(filepath.Join(tmpDir, "01-owasp.yaml"), []byte(owaspTemplate), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tmpDir, "02-custom.yaml"), []byte(customTemplate), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tmpDir, "03-category-only.yaml"), []byte(categoryOnlyTemplate), 0644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tmpDir, "04-tags-only.yaml"), []byte(tagsOnlyTemplate), 0644)
+	require.NoError(t, err)
+
+	// "owasp" should match the OWASP template via tags
+	loaded, err := loadTemplateFiles(tmpDir, []string{"owasp"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// "API1:2023" should match via exact category match
+	loaded, err = loadTemplateFiles(tmpDir, []string{"API1:2023"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// "custom-internal" should match the custom template via exact category match
+	loaded, err = loadTemplateFiles(tmpDir, []string{"custom-internal"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "02-custom", loaded[0].ID)
+
+	// Template with only category, no tags — matches via category only
+	loaded, err = loadTemplateFiles(tmpDir, []string{"custom-cat"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "03-category-only", loaded[0].ID)
+
+	// Template with only tags, no category — matches via tags only
+	loaded, err = loadTemplateFiles(tmpDir, []string{"special-tag"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "04-tags-only", loaded[0].ID)
+
+	// nil categories should match nothing
+	loaded, err = loadTemplateFiles(tmpDir, nil)
+	require.NoError(t, err)
+	require.Len(t, loaded, 0)
+
+	// empty categories slice should match nothing
+	loaded, err = loadTemplateFiles(tmpDir, []string{})
+	require.NoError(t, err)
+	require.Len(t, loaded, 0)
+
+	// "all" should match everything
+	loaded, err = loadTemplateFiles(tmpDir, []string{"all"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 4)
+
+	// "ALL" uppercase should match everything (case-insensitive wildcard)
+	loaded, err = loadTemplateFiles(tmpDir, []string{"ALL"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 4) // all 4 templates
+
+	// "regression" should match custom template via tags
+	loaded, err = loadTemplateFiles(tmpDir, []string{"regression"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "02-custom", loaded[0].ID)
+
+	// "nonexistent" should match nothing
+	loaded, err = loadTemplateFiles(tmpDir, []string{"nonexistent"})
+	require.NoError(t, err)
+	assert.Len(t, loaded, 0)
+
+	// Empty string in categories should be skipped, not match everything
+	loaded, err = loadTemplateFiles(tmpDir, []string{"owasp", "", "bola"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// Multiple categories should match union
+	loaded, err = loadTemplateFiles(tmpDir, []string{"bola", "regression"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 2)
+
+	// Whitespace trimming: leading/trailing spaces should be stripped before matching
+	loaded, err = loadTemplateFiles(tmpDir, []string{" owasp "})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// Case-insensitive: uppercase "OWASP" should match the lowercase "owasp" tag
+	loaded, err = loadTemplateFiles(tmpDir, []string{"OWASP"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 1)
+	assert.Equal(t, "01-owasp", loaded[0].ID)
+
+	// Non-YAML files in the template directory should be ignored
+	err = os.WriteFile(filepath.Join(tmpDir, "readme.txt"), []byte("not a template"), 0644)
+	require.NoError(t, err)
+	loaded, err = loadTemplateFiles(tmpDir, []string{"all"})
+	require.NoError(t, err)
+	require.Len(t, loaded, 4) // Still only the 4 YAML templates
 }

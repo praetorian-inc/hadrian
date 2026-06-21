@@ -22,7 +22,7 @@ go test ./...
 # Run tests with race detection
 go test -race ./...
 
-# Run integration tests
+# Run integration tests (fully in-process via httptest fixtures — NO Docker required)
 go test -tags=integration ./...
 
 # Run tests for a specific package
@@ -31,6 +31,19 @@ go test ./pkg/runner/...
 # Run a single test
 go test -run TestFunctionName ./pkg/package/...
 ```
+
+### Integration tests (no Docker)
+
+The `integration`-tagged tests are fully in-process and require no Docker daemon
+or external target. `pkg/runner/fixtures_test.go` builds an `httptest`-backed
+vulnerable REST API (opaque static bearer tokens, no JWT) that seeds BOLA/IDOR
+(API1), broken authentication (API2), excessive data exposure / BOPLA (API3),
+and BFLA (API5). `pkg/runner/integration_test.go` runs the real `templates/rest/`
+templates against it via `runner.RunTest(...)` and asserts findings per OWASP
+category. `pkg/plugins/graphql/integration_test.go` stands up an in-process
+GraphQL service (introspection + DVGA-style queries/mutations); the gRPC
+integration tests parse local `.proto` fixtures under `test/grpc/`. The crAPI /
+DVGA Docker harnesses (below) are for optional *live* end-to-end testing only.
 
 ## Architecture
 
@@ -45,7 +58,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
    - Execute HTTP test using `templates.Executor`
    - Evaluate `Detection` rules to determine vulnerability
 5. Optionally triage findings with LLM
-6. Generate report (terminal/JSON/markdown)
+6. Generate report (terminal/JSON/markdown/SARIF)
 
 ### Key Packages
 
@@ -55,8 +68,8 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 - **pkg/roles**: Permission model with `<action>:<object>:<scope>` format and role-based filtering
 - **pkg/model**: Data structures for `Finding`, `Operation`, `Evidence`, `Severity`
 - **pkg/matchers**: Response matching (status codes, word/regex patterns)
-- **pkg/reporter**: Output formatters (terminal, JSON, markdown) with finding redaction
-- **pkg/llm**: LLM triage integration (Ollama)
+- **pkg/reporter**: Output formatters (terminal, JSON, markdown) with finding redaction. SARIF v2.1.0 output lives at `pkg/runner/sarif.go` (it depends on the templates list, which is only available inside `pkg/runner`).
+- **pkg/llm**: LLM triage integration (Ollama, OpenAI, Anthropic)
 
 ### Template System
 
@@ -115,24 +128,98 @@ Built-in safeguards in `pkg/runner/ratelimit_client.go`:
 - Reactive backoff on 429/503 responses via `RateLimitingClient`
 - Audit logging to `.hadrian/audit.log`
 
-## Testing with crAPI
+## Live Test Targets
 
-The `test/crapi/` directory contains a complete example for testing [OWASP crAPI](https://github.com/OWASP/crAPI), an intentionally vulnerable API. See `test/crapi/README.md` for full setup instructions.
+> These are **optional** end-to-end harnesses against locally-built vulnerable
+> targets and are **not** part of the Go test suite (`go test -tags=integration`
+> needs no live targets). Do **not** wire them into CI on untrusted/fork PRs — see
+> the CI safety note in `test/README.md`.
 
-Quick start:
+The `test/` directory ships four in-house vulnerable targets, each a self-contained
+Go binary with its own `go.mod` (no Docker daemon, image pull, or repo clone required —
+the full suite runs in a fresh devcontainer):
+
+| Target | Protocol | Replaces | Covers |
+|--------|----------|----------|--------|
+| `vulnerable-api` | REST | — | BOLA, broken auth (bearer/apikey/basic/cookie) |
+| `vulnerable-graphql` | GraphQL | DVGA (Docker) | introspection, BOLA, BFLA, alias-DoS, field-duplication, error disclosure, command injection, path traversal |
+| `grpc-server` | gRPC | — | BOLA, BFLA, metadata injection |
+| `vulnerable-rest-complex` | REST | OWASP crAPI (Docker) | cross-tenant BOLA, BFLA, mass-assignment, excessive data exposure, no-rate-limit OTP (customers/vehicles/mechanics/orders) |
+
+The supported flow is the wrapper scripts under `test/`:
+
 ```bash
-# Start crAPI (note: compose file is in deploy/docker/)
-git clone https://github.com/OWASP/crAPI.git && cd crAPI/deploy/docker && docker-compose up -d
+# One-time setup: builds hadrian + the four Go target binaries, writes .live-test-config.
+./test/setup-live-targets.sh
 
-# Run Hadrian (after setting up test users and tokens per the README)
-HADRIAN_TEMPLATES=test/crapi/templates/rest ./hadrian test \
-  --api test/crapi/crapi-openapi-spec.json \
-  --roles test/crapi/roles.yaml \
-  --auth test/crapi/auth.yaml \
+# Run hadrian against every target (or pass --targets to subset).
+./test/run-live-tests.sh
+
+# Stop any running target processes and remove the generated config.
+./test/setup-live-targets.sh --teardown
+
+# Optional: exercise the LLM planner / triage against vulnerable-rest-complex.
+# Standalone, LLM-gated scripts (not part of the default run); pass the provider.
+export OPENAI_API_KEY=sk-...    # set once in your shell
+./test/test-llm-planner.sh openai
+./test/test-llm-triage.sh  openai
+```
+
+Programmatic invocation (without the wrapper), e.g. the crAPI-shape REST target:
+```bash
+./hadrian test rest \
+  --api test/vulnerable-rest-complex/openapi.yaml \
+  --roles test/vulnerable-rest-complex/roles.yaml \
+  --auth test/vulnerable-rest-complex/auth-bearer.yaml \
+  --template-dir test/vulnerable-rest-complex/templates/owasp \
   --verbose
+```
+
+Generic port helpers shared by all targets live in `test/lib/port-helpers.sh`.
+A Docker-free regression harness lives at `test/regression/lab-2750-regression-tests.sh`.
+
+## LLM-Assisted Planner
+
+The planner (`pkg/planner/`) uses an LLM to generate a prioritized attack plan before execution. Instead of brute-forcing every operation × template × role combination, the LLM analyzes the API spec and selects the most likely vulnerability targets.
+
+### Usage
+
+```bash
+# Plan + brute-force (recommended): LLM steps first, then remaining combos
+./hadrian test rest --api spec.json --roles roles.yaml --auth auth.yaml --planner
+
+# Plan only: run ONLY what the LLM chose (--planner-only requires --planner)
+./hadrian test rest --api spec.json --roles roles.yaml --auth auth.yaml --planner --planner-only
+
+# Steer the planner with custom context
+./hadrian test rest ... --planner --planner-context "Focus on BOLA attacks on payment endpoints"
+```
+
+### Providers
+
+Set the appropriate env var and use `--planner-provider`:
+
+| Provider | Flag | Env Var | Default Model |
+|----------|------|---------|---------------|
+| OpenAI | `--planner-provider openai` (default) | `OPENAI_API_KEY` | gpt-4o |
+| Anthropic | `--planner-provider anthropic` | `ANTHROPIC_API_KEY` | claude-sonnet-4-20250514 |
+| Ollama | `--planner-provider ollama` | `OLLAMA_HOST` (optional) | llama3.2:latest |
+
+### Programmatic Usage
+
+For platform integration, inject an `LLMClient` via `Config.PlannerLLMClient`:
+
+```go
+config := runner.Config{
+    PlannerEnabled:   true,
+    PlannerLLMClient: myPlatformLLMClient, // implements planner.LLMClient
+}
 ```
 
 ## Environment Variables
 
 - `HADRIAN_TEMPLATES`: Custom templates directory path
-- `OLLAMA_HOST`: Ollama host for LLM triage
+- `OLLAMA_HOST`: Ollama host for LLM triage and planner (default: http://localhost:11434)
+- `OLLAMA_MODEL`: Ollama model name (default: llama3.2:latest)
+- `OPENAI_API_KEY`: OpenAI API key for LLM triage (`--llm-provider openai`) and planner
+- `ANTHROPIC_API_KEY`: Anthropic API key for LLM triage (`--llm-provider anthropic`) and planner

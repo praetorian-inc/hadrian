@@ -38,7 +38,7 @@ Flags:
       --insecure               Skip TLS verification
       --rate-limit float       Rate limit in requests per second (default 5.0)
       --timeout int            Request timeout in seconds (default 30)
-      --output string          Output format: terminal, json, markdown (default "terminal")
+      --output string          Output format: terminal, json, markdown, sarif (default "terminal")
       --output-file string     Output file path
       --verbose                Verbose output
       --dry-run                Show what would be tested without executing
@@ -226,19 +226,22 @@ The `store_response_fields` directive uses JSON path expressions to extract valu
 hadrian test graphql --target https://api.example.com --template-dir ./my-templates
 ```
 
-## Example: Testing DVGA
+## Example: Testing vulnerable-graphql
 
-[DVGA (Damn Vulnerable GraphQL Application)](https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application) is an intentionally vulnerable GraphQL application for testing.
+`test/vulnerable-graphql/` is an in-house, intentionally vulnerable GraphQL
+target shipped with Hadrian. It is a self-contained Go binary (no Docker
+required) that mirrors the role DVGA used to play in the live-test harness:
+introspection enabled, BOLA on paste resolvers, BFLA via the `promoteUser`
+admin mutation, `UserObject.password` exposure, real command injection via
+`systemDiagnostics`, and path traversal via `uploadPaste`.
 
-### Setup DVGA
+### Run the target
 
 ```bash
-# Clone and run DVGA
-git clone https://github.com/dolevf/Damn-Vulnerable-GraphQL-Application.git
-cd Damn-Vulnerable-GraphQL-Application
-docker-compose up -d
+# Build + run on port 5013 (FOR TESTING ONLY — performs real command execution)
+(cd test/vulnerable-graphql && go build -o vulnerable-graphql . && PORT=5013 ./vulnerable-graphql)
 
-# DVGA runs at http://localhost:5013/graphql
+# The GraphQL endpoint is at http://localhost:5013/graphql
 ```
 
 ### Run Hadrian
@@ -252,6 +255,9 @@ hadrian test graphql --target http://localhost:5013
 # [HIGH] no-depth-limit: Server allows deeply nested queries (depth 10)
 # [MEDIUM] no-batching-limit: Server allows batched queries with 100 operations
 ```
+
+The full live-test harness (`./test/setup-live-targets.sh && ./test/run-live-tests.sh`)
+drives this target with its bundled templates and acquires role tokens automatically.
 
 ## Output Formats
 
@@ -300,6 +306,16 @@ hadrian test graphql --target http://localhost:5013 --output json --output-file 
 ```bash
 hadrian test graphql --target http://localhost:5013 --output markdown --output-file report.md
 ```
+
+### SARIF (GitHub Code Scanning)
+
+GraphQL findings can be published to GitHub Code Scanning via SARIF v2.1.0:
+
+```bash
+hadrian test graphql --target http://localhost:5013 --output sarif --output-file report.sarif
+```
+
+The output validates against the SARIF v2.1.0 schema and carries stable `partialFingerprints` so re-running the scan does not produce duplicate alerts. See [Configuration → SARIF](configuration.md#sarif-github-code-scanning) for the full schema, helpUri behaviour, and an example GitHub Actions workflow.
 
 ## Proxy Support
 

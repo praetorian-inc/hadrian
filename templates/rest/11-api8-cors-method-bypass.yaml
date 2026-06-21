@@ -1,0 +1,84 @@
+# Template: CORS Preflight - Permissive Methods Bypass
+# Tests whether the API's CORS preflight response allows destructive methods
+# from arbitrary origins. A misconfigured Access-Control-Allow-Methods
+# combined with a reflected/wildcard Access-Control-Allow-Origin lets a
+# malicious page hosted at example.com issue authenticated DELETE/PUT/PATCH
+# requests against the API via the victim's browser.
+#
+# Uses https://example.com as the probing Origin because it is the
+# IANA-reserved example domain — real, registered, and conventional for
+# documentation/testing without targeting any production service.
+
+id: 11-api8-cors-method-bypass
+
+info:
+  name: "CORS Preflight - Permissive Methods Allow Cross-Origin Tampering"
+  category: "API8:2023"
+  severity: "MEDIUM"
+  author: "hadrian"
+  description: |
+    Tests CORS preflight (OPTIONS) handling for overly permissive method
+    exposure. Issues an OPTIONS request with Origin: https://example.com
+    and Access-Control-Request-Method: DELETE, then inspects the response
+    headers. The matcher requires ALL of the following to fire (logical AND)
+    so that benign read-only or non-credentialed CORS configurations do not
+    produce false positives:
+      - Access-Control-Allow-Origin echoing example.com or set to "*"
+      - Access-Control-Allow-Methods including DELETE/PUT/PATCH
+      - Access-Control-Allow-Credentials: true (browsers will not honor a
+        credentialed cross-origin request without this header)
+    A permissive preflight lets attacker-controlled pages tamper with
+    authenticated state via method-level CSRF.
+  tags: ["http-method-tampering", "cors-bypass", "owasp", "owasp-api-top10", "api8", "misconfiguration"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+
+# CORS is browser-enforced and applies regardless of the caller's role;
+# no privileged token is required to probe preflight.
+role_selector:
+  attacker_permission_level: "all"
+  victim_permission_level: "all"
+
+http:
+  - method: "OPTIONS"
+    path: "{{operation.path}}"
+    headers:
+      Origin: "https://example.com"
+      Access-Control-Request-Method: "DELETE"
+      Access-Control-Request-Headers: "authorization,content-type"
+    # All three signals must be present (condition: and) to flag.
+    # Compile-time flattening of per-block matchers (pkg/templates/compile.go)
+    # OR's top-level matcher entries, so this MUST be a single matcher block
+    # whose internal patterns are AND'd. Each pattern uses regex alternation
+    # to cover its allowed values:
+    #   1. Permissive Origin (wildcard or reflected example.com)
+    #   2. Destructive method advertised in Allow-Methods (DELETE/PUT/PATCH)
+    #   3. Allow-Credentials: true — required for the credentialed
+    #      cross-origin abuse the description claims to detect; without it
+    #      browsers will not send cookies/Authorization, so the finding is
+    #      not exploitable.
+    matchers:
+      - type: regex
+        part: header
+        condition: and
+        regex:
+          - "(?i)access-control-allow-origin:\\s*(\\*|https://example\\.com)"
+          - "(?i)access-control-allow-methods:.*\\b(DELETE|PUT|PATCH)\\b"
+          - "(?i)access-control-allow-credentials:\\s*true"
+
+detection:
+  success_indicators:
+    - type: regex_match
+      pattern: "(?i)access-control-allow-origin:\\s*(\\*|https://example\\.com)"
+    - type: regex_match
+      pattern: "(?i)access-control-allow-methods:.*\\b(DELETE|PUT|PATCH)\\b"
+  failure_indicators:
+    - type: status_code
+      status_code: 403
+    - type: status_code
+      status_code: 404
+  vulnerability_pattern: "cors_preflight_allows_destructive_methods_from_arbitrary_origin"

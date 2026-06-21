@@ -27,10 +27,11 @@ Most API security scanners test for injection and configuration issues but miss 
 | **Mutation Testing** | Three-phase setup → attack → verify pattern proves write/delete vulnerabilities actually occurred |
 | **REST + GraphQL + gRPC** | Test any API protocol with protocol-specific security checks |
 | **Template-Driven** | YAML templates for customizable security tests — no code required |
-| **Multiple Output Formats** | Terminal, JSON, and Markdown reports for CI/CD integration |
+| **Multiple Output Formats** | Terminal, JSON, Markdown, and SARIF v2.1.0 (GitHub Code Scanning) reports |
 | **Adaptive Rate Limiting** | Proactive request throttling with reactive backoff on 429/503 responses |
 | **Proxy Support** | Route traffic through Burp Suite or other intercepting proxies |
-| **LLM-Powered Triage** | Optional AI analysis of findings via Ollama to reduce false positives |
+| **LLM-Powered Triage** | Optional AI analysis of findings via Ollama, OpenAI, or Anthropic to reduce false positives |
+| **LLM-Assisted Attack Planning** | AI-driven prioritization of which endpoints and vulnerability patterns to test first |
 | **Claude Code Integration** | Auto-generate auth and role configs from OpenAPI, GraphQL SDL, or proto files |
 
 ## OWASP API Security Top 10 Coverage
@@ -75,7 +76,7 @@ make build
 ### REST API Security Testing
 
 ```bash
-hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --category all
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 ```
 
 ### GraphQL API Security Testing
@@ -94,17 +95,32 @@ hadrian test grpc --target localhost:50051 --proto service.proto --auth auth.yam
 
 ```bash
 # Preview what would be tested (dry run)
-hadrian test rest --api api.yaml --roles roles.yaml --category all --dry-run
+hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
 # Export findings as JSON
-hadrian test rest --api api.yaml --roles roles.yaml --category all --output json --output-file report.json
+hadrian test rest --api api.yaml --roles roles.yaml --output json --output-file report.json
 
-# AI-powered triage to reduce false positives
-hadrian test rest --api api.yaml --roles roles.yaml --category all \
+# Export findings as SARIF for GitHub Code Scanning upload
+hadrian test rest --api api.yaml --roles roles.yaml --output sarif --output-file report.sarif
+
+# AI-powered triage with Ollama (local)
+hadrian test rest --api api.yaml --roles roles.yaml \
   --llm-host http://localhost:11434 --llm-model llama3.2:latest
 
+# AI-powered triage with OpenAI (requires OPENAI_API_KEY)
+hadrian test rest --api api.yaml --roles roles.yaml --llm-provider openai
+
+# AI-powered triage with Anthropic (requires ANTHROPIC_API_KEY)
+hadrian test rest --api api.yaml --roles roles.yaml --llm-provider anthropic
+
+# AI-assisted attack planning (requires OPENAI_API_KEY, or use --planner-provider for Anthropic/Ollama)
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --planner
+
+# Run only LLM-planned steps (faster, targeted testing)
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --planner --planner-only
+
 # Route through a proxy for manual inspection
-hadrian test rest --api api.yaml --roles roles.yaml --category all --proxy http://localhost:8080 --insecure
+hadrian test rest --api api.yaml --roles roles.yaml --proxy http://localhost:8080 --insecure
 ```
 
 ## How Does Hadrian's Mutation Testing Work?
@@ -174,7 +190,7 @@ Yes. Hadrian uses YAML templates that define endpoint selectors, role selectors,
 
 ### Does Hadrian integrate with CI/CD pipelines?
 
-Yes. Use `--output json --output-file report.json` to generate machine-readable reports. Hadrian returns a non-zero exit code when vulnerabilities are found, making it suitable for CI/CD gates.
+Yes. Use `--output json --output-file report.json` to generate machine-readable reports, or `--output sarif --output-file report.sarif` to publish findings to GitHub Code Scanning (a complete example workflow lives at [`.github/workflows/example-sarif-upload.yml`](.github/workflows/example-sarif-upload.yml)). Hadrian returns a non-zero exit code when vulnerabilities are found, making it suitable for CI/CD gates.
 
 ## Development
 
@@ -196,9 +212,15 @@ make check       # Run all checks (fmt, vet, lint, test)
 
 ```bash
 go test ./...                        # Unit tests
-go test -tags=integration ./...      # Integration tests
+go test -tags=integration ./...      # Integration tests (fully in-process, no Docker)
 go test -race ./...                  # Race detection
 ```
+
+> **No Docker required.** The Go integration tests stand up in-process `httptest`
+> fixtures with seeded BOLA / BFLA / BOPLA / IDOR bugs, so the full suite —
+> including `-tags=integration` — runs in a fresh devcontainer with no Docker
+> daemon. The crAPI / DVGA Docker harnesses under `test/` are for optional
+> end-to-end *live* testing only (see the wiki tutorials), not for the test suite.
 
 ## Contributing
 

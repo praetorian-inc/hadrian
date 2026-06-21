@@ -5,7 +5,7 @@ info:
   severity: "HIGH"
   author: "hadrian"
   description: "Tests for broken authentication in GraphQL APIs including missing authentication checks, weak token validation, and session management issues."
-  tags: ["graphql", "authentication", "session", "api2"]
+  tags: ["graphql", "owasp", "owasp-api-top10", "authentication", "session", "api2"]
   requires_llm_triage: true
   test_pattern: "simple"
 

@@ -5,17 +5,20 @@ Hadrian provides comprehensive REST API security testing with 8 built-in templat
 ## Quick Start
 
 ```bash
-# Basic security test
-hadrian test rest --api api.yaml --roles roles.yaml --category all
+# Basic security test (default --category owasp matches all 8 built-in templates)
+hadrian test rest --api api.yaml --roles roles.yaml
 
 # With authentication
-hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml --category all
+hadrian test rest --api api.yaml --roles roles.yaml --auth auth.yaml
 
 # Dry run (show what would be tested)
-hadrian test rest --api api.yaml --roles roles.yaml --category all --dry-run
+hadrian test rest --api api.yaml --roles roles.yaml --dry-run
 
 # Verbose output with JSON report
-hadrian test rest --api api.yaml --roles roles.yaml --category all --verbose --output json --output-file report.json
+hadrian test rest --api api.yaml --roles roles.yaml --verbose --output json --output-file report.json
+
+# SARIF output for GitHub Code Scanning
+hadrian test rest --api api.yaml --roles roles.yaml --output sarif --output-file report.sarif
 ```
 
 ## Command Options
@@ -31,8 +34,7 @@ Optional Flags:
       --auth <file>             Authentication configuration YAML file
       --template-dir <dir>      Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)
       --template <list>         Specific template files to run
-      --category <list>         Test categories: owasp, custom (default: owasp)
-      --owasp <list>            OWASP API categories to test (e.g., API1,API2,API5,API9)
+      --category <list>         Filter by template metadata — exact match against info.category and info.tags (case-insensitive, default: owasp)
       --header, -H <header>     Custom HTTP header (repeatable, format: "Key: Value")
       --timeout <n>             Request timeout in seconds (default: 30)
       --verbose, -v             Enable verbose logging output
@@ -134,7 +136,7 @@ info:
   description: |
     Tests for Broken Object Level Authorization by attempting
     to access resources belonging to other users.
-  tags: ["bola", "owasp-api-top10", "api1"]
+  tags: ["owasp", "bola", "owasp-api-top10", "api1"]
   requires_llm_triage: true
   test_pattern: "simple"
 
@@ -248,38 +250,44 @@ test_phases:
 
 The `store_response_fields` directive uses JSON path expressions to extract values from responses. These paths only support **dot-separated object key traversal** (e.g., `data.user.id`). Array indexing, keys containing dots, and nested arrays are not supported.
 
-## Example: Testing crAPI
+## Example: Testing vulnerable-rest-complex
 
-[crAPI (OWASP Completely Ridiculous API)](https://github.com/OWASP/crAPI) is an intentionally vulnerable API for testing.
+`test/vulnerable-rest-complex/` is an in-house, intentionally vulnerable
+multi-resource REST target shipped with Hadrian. It is a self-contained Go
+binary (no Docker required) that mirrors the role OWASP crAPI used to play in
+the live-test harness: customers, vehicles, mechanics, and orders with
+cross-tenant BOLA, BFLA, mass-assignment, excessive data exposure, and an
+unthrottled OTP endpoint.
 
-### Setup crAPI
+### Run the target
 
 ```bash
-git clone https://github.com/OWASP/crAPI.git && cd crAPI/deploy/docker && docker-compose up -d
-# crAPI runs at http://localhost:8888
+# Build + run on port 8888
+(cd test/vulnerable-rest-complex && go build -o vulnerable-rest-complex . && PORT=8888 ./vulnerable-rest-complex)
+# The API is at http://localhost:8888 (POST /api/auth/login for a JWT)
 ```
 
 ### Run Hadrian
 
 ```bash
 hadrian test rest \
-  --api test/crapi/crapi-openapi-spec.json \
-  --roles test/crapi/roles.yaml \
-  --auth test/crapi/auth.yaml \
+  --api test/vulnerable-rest-complex/openapi.yaml \
+  --roles test/vulnerable-rest-complex/roles.yaml \
+  --auth test/vulnerable-rest-complex/auth-bearer.yaml \
+  --template-dir test/vulnerable-rest-complex/templates/owasp \
   --verbose
 ```
 
-For complete crAPI setup including user registration and token generation, see [crAPI Tutorial](../test/crapi/README.md).
+For the full end-to-end flow with automatic token acquisition, run
+`./test/setup-live-targets.sh && ./test/run-live-tests.sh`. See
+[test/vulnerable-rest-complex/README.md](../test/vulnerable-rest-complex/README.md)
+for seeded users and endpoint details.
 
 ## Troubleshooting
 
 ### "Loaded 0 templates"
 
-The default category filter is `owasp`. If template filenames don't contain "owasp", use `--category all`:
-
-```bash
-hadrian test rest --api api.yaml --roles roles.yaml --category all
-```
+The `--category` flag filters templates by exact match against `info.category` and `info.tags` metadata fields (case-insensitive). The default category `owasp` matches all 8 built-in templates via their `owasp` tag. If you have custom templates without matching tags, use `--category all` or add appropriate tags to your templates.
 
 ### "Role has no credentials configured"
 

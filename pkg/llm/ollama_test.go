@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -234,7 +233,7 @@ func TestOllamaClient_BuildPrompt(t *testing.T) {
 	}
 
 	// Act
-	prompt := client.buildPrompt(req)
+	prompt := BuildTriagePrompt(req, client.redactor, client.customContext)
 
 	// Assert - Verify structure
 	assert.Contains(t, prompt, "You are a security expert")
@@ -251,9 +250,7 @@ func TestOllamaClient_BuildPrompt(t *testing.T) {
 	assert.NotContains(t, prompt, "123-45-6789")
 }
 
-func TestOllamaClient_MapSeverity(t *testing.T) {
-	client := NewOllamaClient()
-
+func TestMapSeverity(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    string
@@ -273,24 +270,20 @@ func TestOllamaClient_MapSeverity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := client.mapSeverity(tt.input)
+			result := mapSeverity(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestOllamaClient_ParseResponse_InvalidOllamaJSON(t *testing.T) {
-	// Arrange
-	client := NewOllamaClient()
+func TestParseTriageJSON_InvalidJSON(t *testing.T) {
 	invalidJSON := `{invalid json`
 
-	// Act
-	result, err := client.parseResponse(strings.NewReader(invalidJSON))
+	result, err := ParseTriageJSON(invalidJSON, "test")
 
-	// Assert
 	assert.Error(t, err)
 	assert.Nil(t, result)
-	assert.Contains(t, err.Error(), "failed to decode Ollama response")
+	assert.Contains(t, err.Error(), "failed to parse LLM JSON response")
 }
 
 func TestParseStringOrArray(t *testing.T) {

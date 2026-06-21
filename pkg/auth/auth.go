@@ -103,6 +103,19 @@ func Load(filePath string) (*AuthConfig, error) {
 	// Only expand values that look like env var references (contain ${...})
 	// to avoid corrupting values that contain literal $ characters
 	for roleName, roleAuth := range config.Roles {
+		// Capture pre-expansion values for the hardcoded-secret check below.
+		// expandEnvSafe rewrites ${VAR} refs to their resolved values, after
+		// which detectHardcodedSecret can no longer distinguish an env-var
+		// ref from a literal secret — the check must run on the original
+		// YAML value, before expansion, for the ${VAR} short-circuit to fire.
+		origToken := roleAuth.Token
+		origAPIKey := roleAuth.APIKey
+		origCookie := roleAuth.Cookie
+		var origCreds string
+		if roleAuth.Credentials != nil {
+			origCreds = *roleAuth.Credentials
+		}
+
 		roleAuth.Token = expandEnvSafe(roleAuth.Token)
 		roleAuth.APIKey = expandEnvSafe(roleAuth.APIKey)
 		roleAuth.Username = expandEnvSafe(roleAuth.Username)
@@ -118,17 +131,21 @@ func Load(filePath string) (*AuthConfig, error) {
 			return nil, fmt.Errorf("role '%s': cookie value contains invalid characters (CR, LF, or NUL)", roleName)
 		}
 
-		// Detect hardcoded secrets (credential security)
-		if detectHardcodedSecret(roleAuth.Token) {
+		// Detect hardcoded secrets (credential security) — check the
+		// PRE-expansion value so a YAML containing "${TOKEN_VAR}" is
+		// recognized as a safe env-var ref instead of being flagged
+		// after expansion resolves it to a literal JWT.
+		if detectHardcodedSecret(origToken) {
 			log.Warn("SECURITY: Role '%s' has hardcoded token. Use environment variables: ${TOKEN_VAR}", roleName)
 		}
-		if detectHardcodedSecret(roleAuth.APIKey) {
+		if detectHardcodedSecret(origAPIKey) {
 			log.Warn("SECURITY: Role '%s' has hardcoded API key. Use environment variables: ${KEY_VAR}", roleName)
 		}
-		if detectHardcodedSecret(roleAuth.Cookie) {
+		if detectHardcodedSecret(origCookie) {
 			log.Warn("SECURITY: Role '%s' has hardcoded cookie. Use environment variables: ${COOKIE_VAR}", roleName)
 		}
-		if roleAuth.Credentials != nil && detectHardcodedSecret(*roleAuth.Credentials) {
+		// origCreds is "" when Credentials was nil; detectHardcodedSecret("") returns false.
+		if detectHardcodedSecret(origCreds) {
 			log.Warn("SECURITY: Role '%s' has hardcoded credentials. Use environment variables: ${CREDS_VAR}", roleName)
 		}
 
@@ -173,11 +190,24 @@ var hardcodedSecretPatterns = []*regexp.Regexp{
 
 // detectHardcodedSecret identifies JWT, API keys, etc. (credential security)
 func detectHardcodedSecret(value string) bool {
-	if strings.HasPrefix(value, "${") {
-		return false // Environment variable reference
+	// Strip every ${VAR} reference. A value composed ENTIRELY of env-var
+	// references (e.g. "${TOKEN_VAR}" or "${A}${B}") leaves an empty
+	// remainder and is the safe pattern we want to allow without warning.
+	// A MIXED value such as "${UNSET}eyJ...jwt" leaves a literal secret
+	// behind once the refs are stripped; after expansion (${UNSET} -> "")
+	// it resolves to a hardcoded JWT, so it must NOT short-circuit — match
+	// the patterns against the stripped remainder to catch it.
+	stripped := envBraceRE.ReplaceAllString(value, "")
+	// HasPrefix("${") AND stripped=="" together mean "non-empty AND made up
+	// entirely of ${VAR} refs" — the HasPrefix term excludes the empty string
+	// (for which stripped=="" is trivially true) and any value whose literal
+	// part precedes the first ref, both of which must fall through to the
+	// pattern check below.
+	if strings.HasPrefix(value, "${") && stripped == "" {
+		return false // pure environment variable reference
 	}
 	for _, re := range hardcodedSecretPatterns {
-		if re.MatchString(value) {
+		if re.MatchString(value) || (stripped != value && re.MatchString(stripped)) {
 			return true
 		}
 	}
