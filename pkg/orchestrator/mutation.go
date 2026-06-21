@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/auth"
@@ -161,6 +163,13 @@ func operationToMethod(op string) string {
 		return http.MethodPost
 	case "update":
 		return http.MethodPut
+	case "patch":
+		return http.MethodPatch
+	case "write":
+		// "write" is a body-modifying operation without a fixed verb; PATCH is the
+		// least-destructive choice and the common case for mass-assignment / BOPLA
+		// and body-field BOLA templates.
+		return http.MethodPatch
 	case "delete":
 		return http.MethodDelete
 	default: // "read" or empty
@@ -189,24 +198,21 @@ func (e *MutationExecutor) executePhase(
 		return nil, fmt.Errorf("phase path is required")
 	}
 
-	// Substitute stored values into path
-	// Support backwards compatibility: if UseStoredField is set, use it
-	if phase.UseStoredField != "" {
-		storedValue := e.tracker.GetResource(phase.UseStoredField)
-		if storedValue != "" {
-			// Replace {fieldName} with stored value
-			path = strings.ReplaceAll(path, "{"+phase.UseStoredField+"}", storedValue)
-		}
+	// Substitute stored values into the path, escaping each value for its context:
+	// path-segment values are URL-path-escaped, query-string values are URL-query-
+	// escaped. Split on the first '?' (a literal in the template marking the query
+	// boundary) so a stored value containing '?', '&', '=', '/', or spaces cannot
+	// break out of its position and inject extra path segments or query parameters.
+	// The general substitution also covers a {UseStoredField} placeholder (its alias
+	// is a stored resource), so the prior raw UseStoredField pass is removed — every
+	// substituted value now goes through escaping.
+	pathPart, queryPart := path, ""
+	if i := strings.IndexByte(path, '?'); i >= 0 {
+		pathPart, queryPart = path[:i], path[i:] // queryPart keeps the leading '?'
 	}
-
-	// Also substitute ALL stored fields (supports multiple placeholders in path)
-	// This allows paths like "/api/{video_id}/comments/{comment_id}"
-	for _, alias := range e.tracker.GetAllKeys() {
-		storedValue := e.tracker.GetResource(alias)
-		if storedValue != "" {
-			path = strings.ReplaceAll(path, "{"+alias+"}", storedValue)
-		}
-	}
+	pathPart = e.substituteStoredFields(pathPart, url.PathEscape)
+	queryPart = e.substituteStoredFields(queryPart, url.QueryEscape)
+	path = pathPart + queryPart
 
 	// Check for unresolved placeholders - error if any remain
 	if placeholder := util.HasUnresolvedPlaceholders(path); placeholder != "" {
@@ -214,10 +220,13 @@ func (e *MutationExecutor) executePhase(
 	}
 
 	// Build full URL
-	url := strings.TrimSuffix(baseURL, "/") + path
+	targetURL := strings.TrimSuffix(baseURL, "/") + path
+
+	// Build the request body (with {alias} substitution) and its Content-Type.
+	bodyReader, contentType := e.buildRequestBody(phase)
 
 	// Build request
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +234,13 @@ func (e *MutationExecutor) executePhase(
 	// Add custom headers (auth headers take precedence)
 	for key, value := range e.customHeaders {
 		req.Header.Set(key, value)
+	}
+
+	// Set the body's Content-Type after custom headers so the body Hadrian built
+	// (default application/json, or the phase's content_type) is authoritative for
+	// the request it belongs to, rather than being clobbered by a global header.
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
 	}
 
 	// Add auth based on method
@@ -264,6 +280,80 @@ func (e *MutationExecutor) executePhase(
 		Body:       string(body),
 		Size:       len(body),
 	}, nil
+}
+
+// buildRequestBody builds the HTTP request body for a phase from phase.Body (REST),
+// substituting {alias} placeholders from stored fields. It returns the body reader
+// (nil when the phase has no body) and the effective Content-Type.
+//
+// We intentionally do NOT run HasUnresolvedPlaceholders on the body: JSON bodies
+// legitimately contain "{" and "}" (object syntax) that would be misread as
+// unresolved placeholders. A typo'd {alias} therefore passes through as a literal —
+// review the request in proxy logs.
+//
+// When the effective Content-Type indicates JSON, substituted values are escaped so
+// they are safe inside a JSON string literal (placeholders sit inside already-quoted
+// strings, e.g. {"username":"{victim_username}"}). For application/x-www-form-urlencoded
+// bodies, substituted values are URL-query-escaped so a value cannot inject extra form
+// fields. Other (non-JSON, non-form) bodies receive the RAW value.
+func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, string) {
+	if phase.Body == "" {
+		return nil, ""
+	}
+
+	contentType := phase.ContentType
+	if contentType == "" {
+		contentType = "application/json"
+	}
+
+	escape := identityEscape
+	switch {
+	case strings.Contains(contentType, "json"):
+		escape = jsonStringEscape
+	case strings.Contains(contentType, "x-www-form-urlencoded"):
+		escape = url.QueryEscape
+	}
+
+	body := e.substituteStoredFields(phase.Body, escape)
+	return strings.NewReader(body), contentType
+}
+
+// aliasPlaceholderRe matches an innermost brace-delimited token with no inner
+// braces, e.g. {victim_username}. Because the inner group forbids braces, JSON
+// object syntax like {"username":"{victim_username}"} matches only the inner
+// {victim_username}, never the whole brace group.
+var aliasPlaceholderRe = regexp.MustCompile(`\{([^{}]+)\}`)
+
+// substituteStoredFields replaces every {alias} placeholder in s with its stored
+// value, applying escape to each stored value before substitution. Pass
+// identityEscape to substitute the raw value (e.g. for paths).
+//
+// It walks s left-to-right in a single pass: each {token} is replaced at most
+// once and substituted text is never re-scanned, so a stored value that itself
+// contains {anotherAlias} is not re-substituted and the result is deterministic.
+// Unknown/typo'd aliases and empty stored values leave the {...} literal.
+func (e *MutationExecutor) substituteStoredFields(s string, escape func(string) string) string {
+	return aliasPlaceholderRe.ReplaceAllStringFunc(s, func(match string) string {
+		alias := match[1 : len(match)-1] // strip the braces
+		storedValue := e.tracker.GetResource(alias)
+		if storedValue == "" {
+			return match // unknown/typo'd alias or empty value -> leave literal
+		}
+		return escape(storedValue)
+	})
+}
+
+// identityEscape returns the value unchanged (raw substitution).
+func identityEscape(s string) string { return s }
+
+// jsonStringEscape escapes s so it is safe inside a JSON string literal, without
+// adding surrounding quotes.
+func jsonStringEscape(s string) string {
+	// json.Marshal never errors for a string input (invalid UTF-8 is replaced with
+	// U+FFFD, not errored) and always returns a quoted string of length >= 2, so the
+	// discarded error and the b[1:len(b)-1] slice are both safe.
+	b, _ := json.Marshal(s)
+	return string(b[1 : len(b)-1])
 }
 
 // extractField extracts a field from JSON response body

@@ -58,6 +58,13 @@ type EndpointSelector struct {
 	ReturnsObject    bool     `yaml:"returns_object"`
 	PathPattern      string   `yaml:"path_pattern,omitempty"`
 	Tags             []string `yaml:"tags,omitempty"`
+
+	// Parameter-scoped selection: target endpoints where the user/owner identity
+	// is carried in a query parameter or request-body field rather than the path.
+	HasQueryParameter   bool     `yaml:"has_query_parameter"`             // operation has >=1 query parameter
+	HasBodyField        bool     `yaml:"has_body_field"`                  // operation has a request body with >=1 field
+	QueryParameterNames []string `yaml:"query_parameter_names,omitempty"` // match ops with a query param named one of these (case-insensitive)
+	BodyFieldNames      []string `yaml:"body_field_names,omitempty"`      // match ops whose request body has a field named one of these (case-insensitive)
 }
 
 type RoleSelector struct {
@@ -97,9 +104,11 @@ type TestPhases struct {
 
 type Phase struct {
 	Path                string            `yaml:"path,omitempty"`                  // Endpoint path for this phase
-	Operation           string            `yaml:"operation"`                       // create, read, update, delete
+	Operation           string            `yaml:"operation"`                       // create, read, update, delete, patch, write
 	Auth                string            `yaml:"auth"`                            // attacker, victim
-	Data                map[string]string `yaml:"data,omitempty"`                  // Request body data
+	Data                map[string]string `yaml:"data,omitempty"`                  // Request body data (gRPC; flat key/value map)
+	Body                string            `yaml:"body,omitempty"`                  // Raw request body (REST). Supports {alias} placeholder substitution from stored fields.
+	ContentType         string            `yaml:"content_type,omitempty"`          // Content-Type header for Body; defaults to application/json
 	StoreResponseField  string            `yaml:"store_response_field,omitempty"`  // Single field to store (backwards compat)
 	StoreResponseFields map[string]string `yaml:"store_response_fields,omitempty"` // Multiple fields: alias -> json_path
 	UseStoredField      string            `yaml:"use_stored_field,omitempty"`      // Use stored value

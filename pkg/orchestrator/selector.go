@@ -2,18 +2,51 @@ package orchestrator
 
 import (
 	"regexp"
+	"strings"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
 
 // MatchesEndpointSelector checks if an operation matches the template's endpoint criteria.
-// Evaluates: HasPathParameter, RequiresAuth, Methods, PathPattern, and Tags.
+// Evaluates: HasPathParameter, RequiresAuth, Methods, PathPattern, Tags, and the
+// parameter-scoped selectors (HasQueryParameter, HasBodyField, QueryParameterNames,
+// BodyFieldNames).
 // If compiledPathPattern is provided, it is used instead of re-compiling PathPattern each call.
 func MatchesEndpointSelector(operation *model.Operation, selector templates.EndpointSelector, compiledPathPattern ...*regexp.Regexp) bool {
 	// Check HasPathParameter requirement
 	if selector.HasPathParameter {
 		if len(operation.PathParams) == 0 {
+			return false
+		}
+	}
+
+	// Check HasQueryParameter requirement
+	if selector.HasQueryParameter {
+		if len(operation.QueryParams) == 0 {
+			return false
+		}
+	}
+
+	// Check HasBodyField requirement
+	if selector.HasBodyField {
+		if operation.BodySchema == nil || len(operation.BodySchema.Properties) == 0 {
+			return false
+		}
+	}
+
+	// Check QueryParameterNames: operation must expose at least one query parameter
+	// whose name matches one of the listed identity/scope param names.
+	if len(selector.QueryParameterNames) > 0 {
+		if !operationHasQueryParam(operation, selector.QueryParameterNames) {
+			return false
+		}
+	}
+
+	// Check BodyFieldNames: operation request body must contain at least one of the
+	// listed identity/scope field names.
+	if len(selector.BodyFieldNames) > 0 {
+		if !operationHasBodyField(operation, selector.BodyFieldNames) {
 			return false
 		}
 	}
@@ -65,6 +98,35 @@ func containsString(slice []string, item string) bool {
 	for _, s := range slice {
 		if s == item {
 			return true
+		}
+	}
+	return false
+}
+
+// operationHasQueryParam returns true if the operation declares a query parameter
+// whose name matches (case-insensitively) any of the given names.
+func operationHasQueryParam(operation *model.Operation, names []string) bool {
+	for _, p := range operation.QueryParams {
+		for _, n := range names {
+			if strings.EqualFold(p.Name, n) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// operationHasBodyField returns true if the operation's request body schema
+// declares a property whose name matches (case-insensitively) any of the given names.
+func operationHasBodyField(operation *model.Operation, names []string) bool {
+	if operation.BodySchema == nil {
+		return false
+	}
+	for field := range operation.BodySchema.Properties {
+		for _, n := range names {
+			if strings.EqualFold(field, n) {
+				return true
+			}
 		}
 	}
 	return false

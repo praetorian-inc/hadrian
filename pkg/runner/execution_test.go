@@ -457,6 +457,76 @@ func TestTemplateApplies_AllFiltersMatch(t *testing.T) {
 	assert.True(t, templateApplies(tmpl, op))
 }
 
+// TestTemplateApplies_ParameterScoped proves the CLI selector honors the
+// parameter-scoped endpoint_selector fields (query_parameter_names, body_field_names).
+func TestTemplateApplies_ParameterScoped(t *testing.T) {
+	t.Run("QueryParameterNames matches op with the named query param", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("param-query", true, []string{"GET"}, "lower", "", "simple")
+		tmpl.EndpointSelector.QueryParameterNames = []string{"filter[user-ids]"}
+		op := &model.Operation{
+			Method:       "GET",
+			Path:         "/api/videos",
+			RequiresAuth: true,
+			QueryParams: []model.Parameter{
+				{Name: "filter[user-ids]", In: "query"},
+			},
+		}
+
+		assert.True(t, templateApplies(tmpl, op))
+	})
+
+	t.Run("QueryParameterNames does not match op without the named query param", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("param-query", true, []string{"GET"}, "lower", "", "simple")
+		tmpl.EndpointSelector.QueryParameterNames = []string{"filter[user-ids]"}
+		op := &model.Operation{
+			Method:       "GET",
+			Path:         "/api/videos",
+			RequiresAuth: true,
+			QueryParams: []model.Parameter{
+				{Name: "page", In: "query"},
+			},
+		}
+
+		assert.False(t, templateApplies(tmpl, op))
+	})
+
+	t.Run("BodyFieldNames matches op whose body schema has the named field", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("param-body", true, []string{"POST"}, "lower", "", "simple")
+		tmpl.EndpointSelector.BodyFieldNames = []string{"username"}
+		op := &model.Operation{
+			Method:       "POST",
+			Path:         "/api/users",
+			RequiresAuth: true,
+			BodySchema: &model.Schema{
+				Type: "object",
+				Properties: map[string]*model.SchemaProperty{
+					"username": {Type: "string"},
+				},
+			},
+		}
+
+		assert.True(t, templateApplies(tmpl, op))
+	})
+
+	t.Run("BodyFieldNames does not match op whose body schema lacks the named field", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("param-body", true, []string{"POST"}, "lower", "", "simple")
+		tmpl.EndpointSelector.BodyFieldNames = []string{"username"}
+		op := &model.Operation{
+			Method:       "POST",
+			Path:         "/api/users",
+			RequiresAuth: true,
+			BodySchema: &model.Schema{
+				Type: "object",
+				Properties: map[string]*model.SchemaProperty{
+					"email": {Type: "string"},
+				},
+			},
+		}
+
+		assert.False(t, templateApplies(tmpl, op))
+	})
+}
+
 func TestExecuteTemplate_NoneAttacker_AuthEndpoint(t *testing.T) {
 	// Server returns 200 — endpoint accepts unauthenticated request (vulnerable)
 	server := newTestServer(200, `{"data": "exposed"}`)
