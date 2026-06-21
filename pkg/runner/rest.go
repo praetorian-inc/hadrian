@@ -270,7 +270,14 @@ func loadTemplateFiles(dir string, categories []string) ([]*templates.CompiledTe
 	return result, nil
 }
 
-// templateApplies checks if template selector matches operation
+// templateApplies checks if template selector matches operation.
+//
+// NOTE: This mirrors orchestrator.MatchesEndpointSelector but is kept separate because
+// the CLI relies on case-insensitive method matching (strings.EqualFold), whereas the
+// orchestrator uses exact method matching. Delegating to MatchesEndpointSelector regresses
+// TestTemplateApplies_MethodFilter_CaseInsensitive, so the parameter-scoped checks
+// (has_query_parameter, has_body_field, query_parameter_names, body_field_names) are added
+// here directly instead.
 func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool {
 	sel := tmpl.EndpointSelector
 
@@ -290,6 +297,28 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 
 	// Check path parameter requirement
 	if sel.HasPathParameter && len(op.PathParams) == 0 {
+		return false
+	}
+
+	// Check query parameter requirement
+	if sel.HasQueryParameter && len(op.QueryParams) == 0 {
+		return false
+	}
+
+	// Check body field requirement
+	if sel.HasBodyField && (op.BodySchema == nil || len(op.BodySchema.Properties) == 0) {
+		return false
+	}
+
+	// Check query_parameter_names: operation must expose at least one query parameter
+	// whose name matches (case-insensitively) one of the listed names.
+	if len(sel.QueryParameterNames) > 0 && !operationHasQueryParam(op, sel.QueryParameterNames) {
+		return false
+	}
+
+	// Check body_field_names: operation request body must contain at least one of the
+	// listed field names (case-insensitive).
+	if len(sel.BodyFieldNames) > 0 && !operationHasBodyField(op, sel.BodyFieldNames) {
 		return false
 	}
 
@@ -317,6 +346,35 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 	}
 
 	return true
+}
+
+// operationHasQueryParam returns true if the operation declares a query parameter
+// whose name matches (case-insensitively) any of the given names.
+func operationHasQueryParam(op *model.Operation, names []string) bool {
+	for _, p := range op.QueryParams {
+		for _, n := range names {
+			if strings.EqualFold(p.Name, n) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// operationHasBodyField returns true if the operation's request body schema declares
+// a property whose name matches (case-insensitively) any of the given names.
+func operationHasBodyField(op *model.Operation, names []string) bool {
+	if op.BodySchema == nil {
+		return false
+	}
+	for field := range op.BodySchema.Properties {
+		for _, n := range names {
+			if strings.EqualFold(field, n) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // filterByTemplates filters templates by ID, filename, or path suffix.

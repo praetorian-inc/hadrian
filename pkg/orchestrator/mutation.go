@@ -220,13 +220,13 @@ func (e *MutationExecutor) executePhase(
 	}
 
 	// Build full URL
-	url := strings.TrimSuffix(baseURL, "/") + path
+	targetURL := strings.TrimSuffix(baseURL, "/") + path
 
 	// Build the request body (with {alias} substitution) and its Content-Type.
 	bodyReader, contentType := e.buildRequestBody(phase)
 
 	// Build request
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, targetURL, bodyReader)
 	if err != nil {
 		return nil, err
 	}
