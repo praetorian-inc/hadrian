@@ -21,34 +21,9 @@ func MatchesEndpointSelector(operation *model.Operation, selector templates.Endp
 		}
 	}
 
-	// Check HasQueryParameter requirement
-	if selector.HasQueryParameter {
-		if len(operation.QueryParams) == 0 {
-			return false
-		}
-	}
-
-	// Check HasBodyField requirement
-	if selector.HasBodyField {
-		if operation.BodySchema == nil || len(operation.BodySchema.Properties) == 0 {
-			return false
-		}
-	}
-
-	// Check QueryParameterNames: operation must expose at least one query parameter
-	// whose name matches one of the listed identity/scope param names.
-	if len(selector.QueryParameterNames) > 0 {
-		if !OperationHasQueryParam(operation, selector.QueryParameterNames) {
-			return false
-		}
-	}
-
-	// Check BodyFieldNames: operation request body must contain at least one of the
-	// listed identity/scope field names.
-	if len(selector.BodyFieldNames) > 0 {
-		if !OperationHasBodyField(operation, selector.BodyFieldNames) {
-			return false
-		}
+	// Check parameter-scoped selectors (query/body identity fields).
+	if !MatchesParamScopedSelectors(operation, selector) {
+		return false
 	}
 
 	// Check RequiresAuth requirement
@@ -130,6 +105,28 @@ func OperationHasBodyField(operation *model.Operation, names []string) bool {
 		}
 	}
 	return false
+}
+
+// MatchesParamScopedSelectors reports whether an operation satisfies the
+// parameter-scoped endpoint_selector fields: HasQueryParameter, HasBodyField,
+// QueryParameterNames, and BodyFieldNames. It is shared by MatchesEndpointSelector
+// and the CLI's templateApplies (pkg/runner) so the two selection paths cannot
+// diverge on this logic. An unset field imposes no constraint; returns true when
+// every set constraint is met.
+func MatchesParamScopedSelectors(operation *model.Operation, selector templates.EndpointSelector) bool {
+	if selector.HasQueryParameter && len(operation.QueryParams) == 0 {
+		return false
+	}
+	if selector.HasBodyField && (operation.BodySchema == nil || len(operation.BodySchema.Properties) == 0) {
+		return false
+	}
+	if len(selector.QueryParameterNames) > 0 && !OperationHasQueryParam(operation, selector.QueryParameterNames) {
+		return false
+	}
+	if len(selector.BodyFieldNames) > 0 && !OperationHasBodyField(operation, selector.BodyFieldNames) {
+		return false
+	}
+	return true
 }
 
 // hasTagIntersection returns true if there's any common element between the two slices.

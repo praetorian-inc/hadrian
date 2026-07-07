@@ -99,3 +99,107 @@ func TestMatchesEndpointSelector_ParameterScoped(t *testing.T) {
 		assert.False(t, MatchesEndpointSelector(searchOp, sel))
 	})
 }
+
+// TestMatchesParamScopedSelectors exercises MatchesParamScopedSelectors directly
+// (the shared helper behind MatchesEndpointSelector and the CLI's templateApplies).
+func TestMatchesParamScopedSelectors(t *testing.T) {
+	searchOp := &model.Operation{
+		Method:       "GET",
+		Path:         "/lists/search",
+		RequiresAuth: true,
+		QueryParams: []model.Parameter{
+			{Name: "filter[user-ids]", In: "query"},
+			{Name: "limit", In: "query"},
+		},
+	}
+	bodyOp := &model.Operation{
+		Method:       "POST",
+		Path:         "/api/v5/fetchRequestHistory",
+		RequiresAuth: true,
+		BodySchema: &model.Schema{
+			Type: "object",
+			Properties: map[string]*model.SchemaProperty{
+				"username": {},
+				"page":     {},
+			},
+		},
+	}
+	noParamOp := &model.Operation{
+		Method:       "GET",
+		Path:         "/health",
+		RequiresAuth: false,
+	}
+	nilBodyOp := &model.Operation{
+		Method:       "POST",
+		Path:         "/api/v5/nilbody",
+		RequiresAuth: true,
+	}
+	emptyBodyOp := &model.Operation{
+		Method:       "POST",
+		Path:         "/api/v5/empty",
+		RequiresAuth: true,
+		BodySchema: &model.Schema{
+			Type:       "object",
+			Properties: map[string]*model.SchemaProperty{},
+		},
+	}
+
+	t.Run("empty selector imposes no constraint", func(t *testing.T) {
+		assert.True(t, MatchesParamScopedSelectors(searchOp, templates.EndpointSelector{}))
+		assert.True(t, MatchesParamScopedSelectors(bodyOp, templates.EndpointSelector{}))
+		assert.True(t, MatchesParamScopedSelectors(noParamOp, templates.EndpointSelector{}))
+	})
+
+	t.Run("HasQueryParameter", func(t *testing.T) {
+		assert.True(t, MatchesParamScopedSelectors(searchOp, templates.EndpointSelector{HasQueryParameter: true}))
+		assert.False(t, MatchesParamScopedSelectors(noParamOp, templates.EndpointSelector{HasQueryParameter: true}))
+	})
+
+	t.Run("HasBodyField", func(t *testing.T) {
+		assert.True(t, MatchesParamScopedSelectors(bodyOp, templates.EndpointSelector{HasBodyField: true}))
+		assert.False(t, MatchesParamScopedSelectors(nilBodyOp, templates.EndpointSelector{HasBodyField: true}))
+		assert.False(t, MatchesParamScopedSelectors(emptyBodyOp, templates.EndpointSelector{HasBodyField: true}))
+	})
+
+	t.Run("QueryParameterNames", func(t *testing.T) {
+		assert.True(t, MatchesParamScopedSelectors(searchOp, templates.EndpointSelector{
+			QueryParameterNames: []string{"FILTER[USER-IDS]"},
+		}))
+		assert.False(t, MatchesParamScopedSelectors(searchOp, templates.EndpointSelector{
+			QueryParameterNames: []string{"account_id"},
+		}))
+		assert.False(t, MatchesParamScopedSelectors(noParamOp, templates.EndpointSelector{
+			QueryParameterNames: []string{"user_id"},
+		}))
+	})
+
+	t.Run("BodyFieldNames", func(t *testing.T) {
+		assert.True(t, MatchesParamScopedSelectors(bodyOp, templates.EndpointSelector{
+			BodyFieldNames: []string{"Username"},
+		}))
+		assert.False(t, MatchesParamScopedSelectors(bodyOp, templates.EndpointSelector{
+			BodyFieldNames: []string{"email"},
+		}))
+		assert.False(t, MatchesParamScopedSelectors(searchOp, templates.EndpointSelector{
+			BodyFieldNames: []string{"username"},
+		}))
+	})
+
+	t.Run("AND semantics between two set fields", func(t *testing.T) {
+		sel := templates.EndpointSelector{
+			HasQueryParameter:   true,
+			QueryParameterNames: []string{"filter[user-ids]"},
+		}
+		assert.True(t, MatchesParamScopedSelectors(searchOp, sel))
+		// HasQueryParameter fails even though name would match
+		assert.False(t, MatchesParamScopedSelectors(noParamOp, templates.EndpointSelector{
+			HasQueryParameter:   true,
+			QueryParameterNames: []string{"user_id"},
+		}))
+		// QueryParameterNames fails even though HasQueryParameter is satisfied
+		assert.False(t, MatchesParamScopedSelectors(searchOp, templates.EndpointSelector{
+			HasQueryParameter:   true,
+			QueryParameterNames: []string{"account_id"},
+		}))
+	})
+}

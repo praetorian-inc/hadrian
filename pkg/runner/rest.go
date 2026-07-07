@@ -300,9 +300,10 @@ func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool
 // NOTE: This mirrors orchestrator.MatchesEndpointSelector but is kept separate because
 // the CLI relies on case-insensitive method matching (strings.EqualFold), whereas the
 // orchestrator uses exact method matching. Delegating to MatchesEndpointSelector regresses
-// TestTemplateApplies_MethodFilter_CaseInsensitive, so the parameter-scoped checks
-// (has_query_parameter, has_body_field, query_parameter_names, body_field_names) are added
-// here directly instead.
+// TestTemplateApplies_MethodFilter_CaseInsensitive, so this function keeps its own
+// method-matching loop, and the parameter-scoped checks (has_query_parameter,
+// has_body_field, query_parameter_names, body_field_names) are delegated to the shared
+// orchestrator.MatchesParamScopedSelectors helper rather than re-implemented here.
 func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool {
 	sel := tmpl.EndpointSelector
 
@@ -325,25 +326,10 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 		return false
 	}
 
-	// Check query parameter requirement
-	if sel.HasQueryParameter && len(op.QueryParams) == 0 {
-		return false
-	}
-
-	// Check body field requirement
-	if sel.HasBodyField && (op.BodySchema == nil || len(op.BodySchema.Properties) == 0) {
-		return false
-	}
-
-	// Check query_parameter_names: operation must expose at least one query parameter
-	// whose name matches (case-insensitively) one of the listed names.
-	if len(sel.QueryParameterNames) > 0 && !orchestrator.OperationHasQueryParam(op, sel.QueryParameterNames) {
-		return false
-	}
-
-	// Check body_field_names: operation request body must contain at least one of the
-	// listed field names (case-insensitive).
-	if len(sel.BodyFieldNames) > 0 && !orchestrator.OperationHasBodyField(op, sel.BodyFieldNames) {
+	// Check parameter-scoped selectors (query/body identity fields). Shared with
+	// orchestrator.MatchesEndpointSelector so the CLI and orchestrator selection
+	// paths cannot diverge on this logic.
+	if !orchestrator.MatchesParamScopedSelectors(op, sel) {
 		return false
 	}
 
