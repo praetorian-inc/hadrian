@@ -27,12 +27,31 @@ The templates rely on the parameter-scoped selector and mutation-body support:
 
 ```bash
 HADRIAN_TEMPLATES=examples/param-scoped-bola \
-  ./hadrian test --api <spec> --roles <roles.yaml> --auth <auth.yaml> --verbose
+  ./hadrian test rest --api <spec> --roles <roles.yaml> --auth <auth.yaml> \
+  --category all --verbose
 ```
+
+Two things the flags above are load-bearing for:
+
+- **`test rest`** (not just `test`): `--api`/`--roles`/`--auth` are registered on
+  the `test rest` subcommand.
+- **`--category all`**: `--category` defaults to `owasp` and matches exactly
+  (case-insensitive) against a template's `info.category` and `info.tags`. These
+  examples are `category: API1:2023` (tagged `owasp-api-top10`, not `owasp`), so
+  they load only under `--category all` — or an explicit `--category api1`
+  (matches the `api1` tag) / `--category API1:2023`. Without one of these you get
+  `Loaded 0 templates`.
 
 ## Adapting to your target
 
-Like all REST mutation templates, the phases use **literal paths** — edit the
-`setup`/`attack` paths, the stored-field JSON paths, and the body shape to match
-your target. The selector fields (`query_parameter_names`, `body_field_names`)
-control which operations the flow is considered relevant for.
+Like all REST mutation templates, the phases use **literal paths** — these are
+placeholders. Edit the `setup`/`attack` paths, the stored-field JSON paths, and
+the body shape to match your target before running; nothing is auto-detected
+against an arbitrary spec. The selector fields (`query_parameter_names`,
+`body_field_names`) control which operations the flow is considered relevant for.
+
+The three source patterns map onto these examples as follows: query
+`filter[user-ids]` → `query-param-bola.yaml`; body `username` → `body-field-bola.yaml`
+(demonstrated). A body identity field such as `video_id` uses the same mechanism —
+`body-field-bola.yaml` lists `video_id` in `body_field_names` and its comments show
+the one-line body change to substitute it.

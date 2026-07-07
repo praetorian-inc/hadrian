@@ -38,7 +38,7 @@ func MatchesEndpointSelector(operation *model.Operation, selector templates.Endp
 	// Check QueryParameterNames: operation must expose at least one query parameter
 	// whose name matches one of the listed identity/scope param names.
 	if len(selector.QueryParameterNames) > 0 {
-		if !operationHasQueryParam(operation, selector.QueryParameterNames) {
+		if !OperationHasQueryParam(operation, selector.QueryParameterNames) {
 			return false
 		}
 	}
@@ -46,7 +46,7 @@ func MatchesEndpointSelector(operation *model.Operation, selector templates.Endp
 	// Check BodyFieldNames: operation request body must contain at least one of the
 	// listed identity/scope field names.
 	if len(selector.BodyFieldNames) > 0 {
-		if !operationHasBodyField(operation, selector.BodyFieldNames) {
+		if !OperationHasBodyField(operation, selector.BodyFieldNames) {
 			return false
 		}
 	}
@@ -103,9 +103,9 @@ func containsString(slice []string, item string) bool {
 	return false
 }
 
-// operationHasQueryParam returns true if the operation declares a query parameter
+// OperationHasQueryParam returns true if the operation declares a query parameter
 // whose name matches (case-insensitively) any of the given names.
-func operationHasQueryParam(operation *model.Operation, names []string) bool {
+func OperationHasQueryParam(operation *model.Operation, names []string) bool {
 	for _, p := range operation.QueryParams {
 		for _, n := range names {
 			if strings.EqualFold(p.Name, n) {
@@ -116,9 +116,9 @@ func operationHasQueryParam(operation *model.Operation, names []string) bool {
 	return false
 }
 
-// operationHasBodyField returns true if the operation's request body schema
+// OperationHasBodyField returns true if the operation's request body schema
 // declares a property whose name matches (case-insensitively) any of the given names.
-func operationHasBodyField(operation *model.Operation, names []string) bool {
+func OperationHasBodyField(operation *model.Operation, names []string) bool {
 	if operation.BodySchema == nil {
 		return false
 	}

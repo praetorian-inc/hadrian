@@ -1,8 +1,10 @@
 # Example: BOLA where the user/owner identity is carried in a REQUEST-BODY FIELD
 # (e.g. {"username": "<victim>"}) rather than the URL path.
 #
-# This is an EXAMPLE template, not a default. Run it via:
-#   HADRIAN_TEMPLATES=examples/param-scoped-bola ./hadrian test --api spec.yaml --roles roles.yaml --auth auth.yaml
+# This is an EXAMPLE template, not a default. Run it via (note `test rest` and
+# `--category all` — this template is category API1:2023, not the default `owasp`):
+#   HADRIAN_TEMPLATES=examples/param-scoped-bola ./hadrian test rest \
+#     --api spec.yaml --roles roles.yaml --auth auth.yaml --category all --verbose
 # Adapt the literal phase paths/body shape to your target.
 #
 # The endpoint_selector targets endpoints whose request body declares a user-scoping
@@ -44,11 +46,16 @@ test_phases:
       auth: "victim"
       store_response_fields:
         victim_username: "username"
+        # For a video/download-id identity (LAB-3040), capture it here instead, e.g.:
+        #   victim_video_id: "video_id"
   attack:
     path: "/api/v5/fetchRequestHistory"
     operation: "create" # POST; use "write" for a PATCH endpoint
     auth: "attacker"
     body: '{"username":"{victim_username}"}'
+    # A body identity field other than username uses the same mechanism — swap the
+    # line above for the field your target trusts, e.g. for LAB-3040 (video/download id):
+    #   body: '{"video_id":"{victim_video_id}"}'
     expected_status: 200
   # No verify phase: a 200 returning the victim's data is itself the signal.
 

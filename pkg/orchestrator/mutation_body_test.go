@@ -450,6 +450,73 @@ func TestExecuteMutation_FormBodyValueEscaped(t *testing.T) {
 	assert.Equal(t, "field=x%26admin%3Dtrue", string(bodyBytes))
 }
 
+// TestExecuteMutation_NonJSONBodyValueRaw pins the identityEscape default branch of
+// buildRequestBody: a content type that is neither JSON, form, nor XML (text/plain)
+// receives the substituted stored value VERBATIM (no escaping).
+func TestExecuteMutation_NonJSONBodyValueRaw(t *testing.T) {
+	setupResp := newMockResponse(200, `{"username":"a\"b&c"}`)
+	attackResp := newMockResponse(200, `{}`)
+	client := &MockHTTPClient{responses: []*http.Response{setupResp, attackResp}}
+	executor := NewMutationExecutor(client, nil)
+
+	tmpl := &templates.Template{
+		ID: "raw-body-passthrough",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{Path: "/api/v5/userInfo", Operation: "read", Auth: "victim",
+					StoreResponseFields: map[string]string{"victim_username": "username"}},
+			},
+			Attack: &templates.Phase{Path: "/api/v5/fetchRequestHistory", Operation: "write", Auth: "attacker",
+				Body: "<u>{victim_username}</u>", ContentType: "text/plain"},
+		},
+	}
+
+	_, err := executor.ExecuteMutation(context.Background(), tmpl, "write",
+		"attacker@example.com", "victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"), "http://localhost:8080")
+	require.NoError(t, err)
+	require.Len(t, client.requests, 2)
+
+	attackReq := client.requests[1]
+	require.NotNil(t, attackReq.Body)
+	bodyBytes, err := io.ReadAll(attackReq.Body)
+	require.NoError(t, err)
+	assert.Equal(t, `<u>a"b&c</u>`, string(bodyBytes))
+}
+
+// TestExecuteMutation_XMLBodyValueEscaped pins the XML escaper branch: a stored value
+// with markup-significant characters is XML-escaped in an application/xml body.
+func TestExecuteMutation_XMLBodyValueEscaped(t *testing.T) {
+	setupResp := newMockResponse(200, `{"username":"a<b&c"}`)
+	attackResp := newMockResponse(200, `{}`)
+	client := &MockHTTPClient{responses: []*http.Response{setupResp, attackResp}}
+	executor := NewMutationExecutor(client, nil)
+
+	tmpl := &templates.Template{
+		ID: "xml-escape-body",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{Path: "/api/v5/userInfo", Operation: "read", Auth: "victim",
+					StoreResponseFields: map[string]string{"victim_username": "username"}},
+			},
+			Attack: &templates.Phase{Path: "/api/v5/fetchRequestHistory", Operation: "write", Auth: "attacker",
+				Body: "<u>{victim_username}</u>", ContentType: "application/xml"},
+		},
+	}
+
+	_, err := executor.ExecuteMutation(context.Background(), tmpl, "write",
+		"attacker@example.com", "victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"), "http://localhost:8080")
+	require.NoError(t, err)
+	require.Len(t, client.requests, 2)
+
+	attackReq := client.requests[1]
+	require.NotNil(t, attackReq.Body)
+	bodyBytes, err := io.ReadAll(attackReq.Body)
+	require.NoError(t, err)
+	assert.Equal(t, `<u>a&lt;b&amp;c</u>`, string(bodyBytes))
+}
+
 // TestExecuteMutation_NoSecondOrderAliasResubstitution pins the single-pass
 // substitution fix: a stored value that literally contains another alias's {token}
 // is NOT re-expanded on a later pass. The regex walk is left-to-right in a single

@@ -45,7 +45,7 @@ test_phases:
   # allowing an attacker to modify a different vehicle than the one in the URL path.
   attack:
     path: "/api/vehicles/{attacker_vehicle_id}"
-    operation: "write"
+    operation: "update"
     auth: "attacker"
     use_stored_field: "attacker_vehicle_id"
     data:

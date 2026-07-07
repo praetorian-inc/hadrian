@@ -13,6 +13,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/llm"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/planner"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -336,13 +337,13 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 
 	// Check query_parameter_names: operation must expose at least one query parameter
 	// whose name matches (case-insensitively) one of the listed names.
-	if len(sel.QueryParameterNames) > 0 && !operationHasQueryParam(op, sel.QueryParameterNames) {
+	if len(sel.QueryParameterNames) > 0 && !orchestrator.OperationHasQueryParam(op, sel.QueryParameterNames) {
 		return false
 	}
 
 	// Check body_field_names: operation request body must contain at least one of the
 	// listed field names (case-insensitive).
-	if len(sel.BodyFieldNames) > 0 && !operationHasBodyField(op, sel.BodyFieldNames) {
+	if len(sel.BodyFieldNames) > 0 && !orchestrator.OperationHasBodyField(op, sel.BodyFieldNames) {
 		return false
 	}
 
@@ -370,35 +371,6 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 	}
 
 	return true
-}
-
-// operationHasQueryParam returns true if the operation declares a query parameter
-// whose name matches (case-insensitively) any of the given names.
-func operationHasQueryParam(op *model.Operation, names []string) bool {
-	for _, p := range op.QueryParams {
-		for _, n := range names {
-			if strings.EqualFold(p.Name, n) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// operationHasBodyField returns true if the operation's request body schema declares
-// a property whose name matches (case-insensitively) any of the given names.
-func operationHasBodyField(op *model.Operation, names []string) bool {
-	if op.BodySchema == nil {
-		return false
-	}
-	for field := range op.BodySchema.Properties {
-		for _, n := range names {
-			if strings.EqualFold(field, n) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // filterByTemplates filters templates by ID, filename, or path suffix.

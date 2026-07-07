@@ -1,8 +1,10 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
@@ -231,6 +233,32 @@ func (e *MutationExecutor) executePhase(
 		return nil, err
 	}
 
+	e.applyHeaders(req, contentType, authUser, authInfos)
+
+	// Execute request with tracked client
+	resp, err := e.trackedHTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	// Read response body
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.HTTPResponse{
+		StatusCode: resp.StatusCode,
+		Headers:    headerMapFromResponse(resp),
+		Body:       string(body),
+		Size:       len(body),
+	}, nil
+}
+
+// applyHeaders sets the request headers with the precedence the executor relies on:
+// custom headers first, then the body's Content-Type, then auth (auth wins).
+func (e *MutationExecutor) applyHeaders(req *http.Request, contentType, authUser string, authInfos map[string]*auth.AuthInfo) {
 	// Add custom headers (auth headers take precedence)
 	for key, value := range e.customHeaders {
 		req.Header.Set(key, value)
@@ -260,26 +288,6 @@ func (e *MutationExecutor) executePhase(
 			req.Header.Set("Cookie", authInfo.Value)
 		}
 	}
-
-	// Execute request with tracked client
-	resp, err := e.trackedHTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	// Read response body
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBodySize))
-	if err != nil {
-		return nil, err
-	}
-
-	return &model.HTTPResponse{
-		StatusCode: resp.StatusCode,
-		Headers:    headerMapFromResponse(resp),
-		Body:       string(body),
-		Size:       len(body),
-	}, nil
 }
 
 // buildRequestBody builds the HTTP request body for a phase from phase.Body (REST),
@@ -295,7 +303,9 @@ func (e *MutationExecutor) executePhase(
 // they are safe inside a JSON string literal (placeholders sit inside already-quoted
 // strings, e.g. {"username":"{victim_username}"}). For application/x-www-form-urlencoded
 // bodies, substituted values are URL-query-escaped so a value cannot inject extra form
-// fields. Other (non-JSON, non-form) bodies receive the RAW value.
+// fields. For XML bodies, substituted values are XML-escaped so a value cannot break out
+// of its element or inject markup. Only truly opaque/other content types receive the RAW
+// value.
 func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, string) {
 	if phase.Body == "" {
 		return nil, ""
@@ -312,6 +322,8 @@ func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, 
 		escape = jsonStringEscape
 	case strings.Contains(contentType, "x-www-form-urlencoded"):
 		escape = url.QueryEscape
+	case strings.Contains(contentType, "xml"):
+		escape = xmlEscape
 	}
 
 	body := e.substituteStoredFields(phase.Body, escape)
@@ -354,6 +366,16 @@ func jsonStringEscape(s string) string {
 	// discarded error and the b[1:len(b)-1] slice are both safe.
 	b, _ := json.Marshal(s)
 	return string(b[1 : len(b)-1])
+}
+
+// xmlEscape escapes s so it is safe as XML character data / an attribute value,
+// encoding markup-significant characters (&, <, >, etc.).
+func xmlEscape(s string) string {
+	var buf bytes.Buffer
+	// xml.EscapeText only returns an error on a buffer write failure, which
+	// bytes.Buffer never produces, so the error is safe to discard.
+	_ = xml.EscapeText(&buf, []byte(s))
+	return buf.String()
 }
 
 // extractField extracts a field from JSON response body

@@ -1,8 +1,10 @@
 # Example: BOLA where the user/owner identity is carried in a QUERY PARAMETER
 # (e.g. ?filter[user-ids]=<victim>) rather than the URL path.
 #
-# This is an EXAMPLE template, not a default. Run it via:
-#   HADRIAN_TEMPLATES=examples/param-scoped-bola ./hadrian test --api spec.yaml --roles roles.yaml --auth auth.yaml
+# This is an EXAMPLE template, not a default. Run it via (note `test rest` and
+# `--category all` — this template is category API1:2023, not the default `owasp`):
+#   HADRIAN_TEMPLATES=examples/param-scoped-bola ./hadrian test rest \
+#     --api spec.yaml --roles roles.yaml --auth auth.yaml --category all --verbose
 # Adapt the literal phase paths/param names to your target — like all REST
 # mutation templates, the phases use concrete paths.
 #

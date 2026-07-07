@@ -525,6 +525,64 @@ func TestTemplateApplies_ParameterScoped(t *testing.T) {
 
 		assert.False(t, templateApplies(tmpl, op))
 	})
+
+	t.Run("HasQueryParameter matches op with a query param", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("has-query", true, []string{"GET"}, "lower", "", "simple")
+		tmpl.EndpointSelector.HasQueryParameter = true
+		op := &model.Operation{
+			Method: "GET", Path: "/api/videos", RequiresAuth: true,
+			QueryParams: []model.Parameter{{Name: "page", In: "query"}},
+		}
+		assert.True(t, templateApplies(tmpl, op))
+	})
+	t.Run("HasQueryParameter does not match op without query params", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("has-query", true, []string{"GET"}, "lower", "", "simple")
+		tmpl.EndpointSelector.HasQueryParameter = true
+		op := &model.Operation{Method: "GET", Path: "/api/videos", RequiresAuth: true}
+		assert.False(t, templateApplies(tmpl, op))
+	})
+	t.Run("HasBodyField matches op with non-empty body schema properties", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("has-body", true, []string{"POST"}, "lower", "", "simple")
+		tmpl.EndpointSelector.HasBodyField = true
+		op := &model.Operation{
+			Method: "POST", Path: "/api/users", RequiresAuth: true,
+			BodySchema: &model.Schema{Type: "object", Properties: map[string]*model.SchemaProperty{"username": {Type: "string"}}},
+		}
+		assert.True(t, templateApplies(tmpl, op))
+	})
+	t.Run("HasBodyField does not match op with nil body schema", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("has-body", true, []string{"POST"}, "lower", "", "simple")
+		tmpl.EndpointSelector.HasBodyField = true
+		op := &model.Operation{Method: "POST", Path: "/api/users", RequiresAuth: true}
+		assert.False(t, templateApplies(tmpl, op))
+	})
+	t.Run("HasBodyField does not match op with empty body schema properties", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("has-body", true, []string{"POST"}, "lower", "", "simple")
+		tmpl.EndpointSelector.HasBodyField = true
+		op := &model.Operation{
+			Method: "POST", Path: "/api/users", RequiresAuth: true,
+			BodySchema: &model.Schema{Type: "object", Properties: map[string]*model.SchemaProperty{}},
+		}
+		assert.False(t, templateApplies(tmpl, op))
+	})
+	t.Run("QueryParameterNames matches case-insensitively", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("param-query-ci", true, []string{"GET"}, "lower", "", "simple")
+		tmpl.EndpointSelector.QueryParameterNames = []string{"Filter[User-IDs]"}
+		op := &model.Operation{
+			Method: "GET", Path: "/api/videos", RequiresAuth: true,
+			QueryParams: []model.Parameter{{Name: "filter[user-ids]", In: "query"}},
+		}
+		assert.True(t, templateApplies(tmpl, op))
+	})
+	t.Run("BodyFieldNames matches case-insensitively", func(t *testing.T) {
+		tmpl := makeCompiledTemplate("param-body-ci", true, []string{"POST"}, "lower", "", "simple")
+		tmpl.EndpointSelector.BodyFieldNames = []string{"Username"}
+		op := &model.Operation{
+			Method: "POST", Path: "/api/users", RequiresAuth: true,
+			BodySchema: &model.Schema{Type: "object", Properties: map[string]*model.SchemaProperty{"username": {Type: "string"}}},
+		}
+		assert.True(t, templateApplies(tmpl, op))
+	})
 }
 
 func TestExecuteTemplate_NoneAttacker_AuthEndpoint(t *testing.T) {
