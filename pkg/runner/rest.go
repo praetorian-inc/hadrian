@@ -13,6 +13,7 @@ import (
 	"github.com/praetorian-inc/hadrian/pkg/llm"
 	"github.com/praetorian-inc/hadrian/pkg/log"
 	"github.com/praetorian-inc/hadrian/pkg/model"
+	"github.com/praetorian-inc/hadrian/pkg/orchestrator"
 	"github.com/praetorian-inc/hadrian/pkg/planner"
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 	"github.com/spf13/cobra"
@@ -294,7 +295,15 @@ func matchesCategory(tmpl *templates.CompiledTemplate, categories []string) bool
 	return false
 }
 
-// templateApplies checks if template selector matches operation
+// templateApplies checks if template selector matches operation.
+//
+// NOTE: This mirrors orchestrator.MatchesEndpointSelector but is kept separate because
+// the CLI relies on case-insensitive method matching (strings.EqualFold), whereas the
+// orchestrator uses exact method matching. Delegating to MatchesEndpointSelector regresses
+// TestTemplateApplies_MethodFilter_CaseInsensitive, so this function keeps its own
+// method-matching loop, and the parameter-scoped checks (has_query_parameter,
+// has_body_field, query_parameter_names, body_field_names) are delegated to the shared
+// orchestrator.MatchesParamScopedSelectors helper rather than re-implemented here.
 func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool {
 	sel := tmpl.EndpointSelector
 
@@ -314,6 +323,13 @@ func templateApplies(tmpl *templates.CompiledTemplate, op *model.Operation) bool
 
 	// Check path parameter requirement
 	if sel.HasPathParameter && len(op.PathParams) == 0 {
+		return false
+	}
+
+	// Check parameter-scoped selectors (query/body identity fields). Shared with
+	// orchestrator.MatchesEndpointSelector so the CLI and orchestrator selection
+	// paths cannot diverge on this logic.
+	if !orchestrator.MatchesParamScopedSelectors(op, sel) {
 		return false
 	}
 

@@ -45,13 +45,15 @@ test_phases:
   # allowing an attacker to modify a different vehicle than the one in the URL path.
   attack:
     path: "/api/vehicles/{attacker_vehicle_id}"
-    operation: "write"
+    operation: "update"
     auth: "attacker"
     use_stored_field: "attacker_vehicle_id"
-    data:
-      id: "{victim_vehicle_id}"
-      customer_id: 999
-      vin: "MASS_ASSIGNMENT_EXPLOIT"
+    # Raw JSON body (REST). `data` is a gRPC-only field and is NOT serialized into
+    # a REST request body, so the mass-assignment payload must be sent via `body`.
+    # {victim_vehicle_id} is substituted from setup; it is unquoted so it lands as a
+    # JSON number (the handler only honors a numeric `id`).
+    body: '{"id":{victim_vehicle_id},"customer_id":999,"vin":"MASS_ASSIGNMENT_EXPLOIT"}'
+    content_type: "application/json"
     expected_status: 200
 
   # Verify: check if victim's vehicle was modified (should NOT happen if API is secure)

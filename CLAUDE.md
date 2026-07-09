@@ -74,7 +74,7 @@ The CLI (`cmd/hadrian`) delegates to `pkg/runner.Run()` which orchestrates:
 ### Template System
 
 Templates in `templates/rest/` define security tests with:
-- `endpoint_selector`: Filters which operations to test (methods, path params, auth requirements)
+- `endpoint_selector`: Filters which operations to test — methods, path params (`has_path_parameter`), auth requirements, and **parameter-scoped selectors** for identity carried outside the path: `has_query_parameter` / `has_body_field` (operation exposes any query param / body field) and `query_parameter_names` / `body_field_names` (narrow to identity/scope params by name, case-insensitive)
 - `role_selector`: Defines attacker/victim role combinations by permission level (lower/higher/all/none)
 - `http`: HTTP request definition with template variables (`{{operation.method}}`, `{{attacker_token}}`)
 - `detection`: Success/failure indicators to determine if vulnerability exists
@@ -114,6 +114,10 @@ Key features:
 - **`store_response_fields`**: Map of `alias: json_path` to extract and store multiple fields from setup responses
 - **`setup` as array**: Supports multiple sequential setup phases (e.g., get attacker's data, then victim's data)
 - **Placeholder substitution**: Use `{alias}` in paths and data fields to reference stored values
+- **Phase `operation`**: Maps to an HTTP verb — `create`→POST, `update`→PUT, `patch`/`write`→PATCH, `delete`→DELETE, `read`/empty→GET
+- **Phase `body` (+ optional `content_type`)**: A raw request body supporting `{alias}` substitution (defaults to `application/json`). Substituted values are context-escaped for the content type — JSON-string-escaped for JSON, query-escaped for `x-www-form-urlencoded`, XML-escaped for XML; other content types (e.g. `multipart/form-data`, `text/html`) receive the raw value
+
+Parameter-scoped BOLA examples (query/body identity) live under `examples/param-scoped-bola/` and load via `HADRIAN_TEMPLATES` with `--category all`.
 
 ### Permission Format
 

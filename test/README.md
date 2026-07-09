@@ -110,7 +110,7 @@ For each target, `run-live-tests.sh` automatically:
 7. **Cleans up** — stops the launched processes
 
 > **Note:** the default `run-live-tests.sh` run reports *pre-triage* findings —
-> raw, mechanical template/role matches (e.g. "287 findings / 7-7 targets"). It
+> raw, mechanical template/role matches (e.g. "289 findings / 7-7 targets"). It
 > does **not** run LLM triage or the planner. Those are exercised only by the
 > standalone, LLM-gated `test-llm-triage.sh` / `test-llm-planner.sh` scripts.
 
@@ -309,5 +309,5 @@ vulnerable-api-basic        PASS       61           20s
 vulnerable-api-cookie       PASS       61           20s
 vulnerable-graphql          PASS       10           4s
 grpc                        PASS       8            1s
-vulnerable-rest-complex     PASS       25           22s
+vulnerable-rest-complex     PASS       27           22s
 ```
