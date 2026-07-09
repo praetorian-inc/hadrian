@@ -517,6 +517,45 @@ func TestExecuteMutation_XMLBodyValueEscaped(t *testing.T) {
 	assert.Equal(t, `<u>a&lt;b&amp;c</u>`, string(bodyBytes))
 }
 
+// TestExecuteMutation_MixedCaseContentTypeStillEscapes pins QUAL-002: HTTP media
+// types are case-insensitive (RFC 7231), so a hand-authored mixed-case content_type
+// such as "Application/JSON" must still select the JSON escaper rather than falling
+// through to raw passthrough. The stored username contains a double-quote that must
+// be JSON-string-escaped for the outgoing body to stay valid JSON.
+func TestExecuteMutation_MixedCaseContentTypeStillEscapes(t *testing.T) {
+	setupResp := newMockResponse(200, `{"username":"ev\"il"}`)
+	attackResp := newMockResponse(200, `{}`)
+	client := &MockHTTPClient{responses: []*http.Response{setupResp, attackResp}}
+	executor := NewMutationExecutor(client, nil)
+
+	tmpl := &templates.Template{
+		ID: "mixed-case-content-type",
+		TestPhases: &templates.TestPhases{
+			Setup: templates.SetupPhases{
+				&templates.Phase{Path: "/api/v5/userInfo", Operation: "read", Auth: "victim",
+					StoreResponseFields: map[string]string{"victim_username": "username"}},
+			},
+			Attack: &templates.Phase{Path: "/api/v5/fetchRequestHistory", Operation: "write", Auth: "attacker",
+				Body: `{"username":"{victim_username}"}`, ContentType: "Application/JSON"},
+		},
+	}
+
+	_, err := executor.ExecuteMutation(context.Background(), tmpl, "write",
+		"attacker@example.com", "victim@example.com",
+		makeAuthInfos("attacker-token", "victim-token"), "http://localhost:8080")
+	require.NoError(t, err)
+	require.Len(t, client.requests, 2)
+
+	attackReq := client.requests[1]
+	require.NotNil(t, attackReq.Body)
+	bodyBytes, err := io.ReadAll(attackReq.Body)
+	require.NoError(t, err)
+	// Escaping applied despite the non-lowercase content type: body round-trips as valid JSON.
+	assert.JSONEq(t, `{"username":"ev\"il"}`, string(bodyBytes))
+	// And the wire Content-Type header preserves the author's original casing.
+	assert.Equal(t, "Application/JSON", attackReq.Header.Get("Content-Type"))
+}
+
 // TestExecuteMutation_NoSecondOrderAliasResubstitution pins the single-pass
 // substitution fix: a stored value that literally contains another alias's {token}
 // is NOT re-expanded on a later pass. The regex walk is left-to-right in a single

@@ -165,7 +165,7 @@ finding_floor() {
         vulnerable-api-*)        echo 61 ;;
         vulnerable-graphql)      echo 10 ;;
         grpc)                    echo 8  ;;
-        vulnerable-rest-complex) echo 25 ;;
+        vulnerable-rest-complex) echo 27 ;;
         *)                       echo 1  ;;
     esac
 }

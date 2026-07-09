@@ -115,7 +115,7 @@ Key features:
 - **`setup` as array**: Supports multiple sequential setup phases (e.g., get attacker's data, then victim's data)
 - **Placeholder substitution**: Use `{alias}` in paths and data fields to reference stored values
 - **Phase `operation`**: Maps to an HTTP verb — `create`→POST, `update`→PUT, `patch`/`write`→PATCH, `delete`→DELETE, `read`/empty→GET
-- **Phase `body` (+ optional `content_type`)**: A raw request body supporting `{alias}` substitution (defaults to `application/json`). Substituted values are context-escaped for the content type — JSON-string-escaped for JSON, query-escaped for `x-www-form-urlencoded`, XML-escaped for XML; other content types receive the raw value
+- **Phase `body` (+ optional `content_type`)**: A raw request body supporting `{alias}` substitution (defaults to `application/json`). Substituted values are context-escaped for the content type — JSON-string-escaped for JSON, query-escaped for `x-www-form-urlencoded`, XML-escaped for XML; other content types (e.g. `multipart/form-data`, `text/html`) receive the raw value
 
 Parameter-scoped BOLA examples (query/body identity) live under `examples/param-scoped-bola/` and load via `HADRIAN_TEMPLATES` with `--category all`.
 

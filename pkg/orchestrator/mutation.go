@@ -304,8 +304,10 @@ func (e *MutationExecutor) applyHeaders(req *http.Request, contentType, authUser
 // strings, e.g. {"username":"{victim_username}"}). For application/x-www-form-urlencoded
 // bodies, substituted values are URL-query-escaped so a value cannot inject extra form
 // fields. For XML bodies, substituted values are XML-escaped so a value cannot break out
-// of its element or inject markup. Only truly opaque/other content types receive the RAW
-// value.
+// of its element or inject markup. Other content types (e.g. multipart/form-data,
+// text/html) receive the RAW value — they are not escaped, so a template author must
+// not place a stored {alias} in a structural position (a multipart boundary or markup)
+// for those.
 func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, string) {
 	if phase.Body == "" {
 		return nil, ""
@@ -316,13 +318,17 @@ func (e *MutationExecutor) buildRequestBody(phase *templates.Phase) (io.Reader, 
 		contentType = "application/json"
 	}
 
+	// Select the escaper on a case-normalized copy: HTTP media types are
+	// case-insensitive (RFC 7231), so a hand-authored "Application/JSON" must
+	// still pick jsonStringEscape. contentType is returned unchanged, so the
+	// wire Content-Type header keeps the author's original casing.
 	escape := identityEscape
-	switch {
-	case strings.Contains(contentType, "json"):
+	switch ct := strings.ToLower(contentType); {
+	case strings.Contains(ct, "json"):
 		escape = jsonStringEscape
-	case strings.Contains(contentType, "x-www-form-urlencoded"):
+	case strings.Contains(ct, "x-www-form-urlencoded"):
 		escape = url.QueryEscape
-	case strings.Contains(contentType, "xml"):
+	case strings.Contains(ct, "xml"):
 		escape = xmlEscape
 	}
 
@@ -338,7 +344,8 @@ var aliasPlaceholderRe = regexp.MustCompile(`\{([^{}]+)\}`)
 
 // substituteStoredFields replaces every {alias} placeholder in s with its stored
 // value, applying escape to each stored value before substitution. Pass
-// identityEscape to substitute the raw value (e.g. for paths).
+// identityEscape to substitute the raw value (used for body content types
+// other than JSON/form/XML).
 //
 // It walks s left-to-right in a single pass: each {token} is replaced at most
 // once and substituted text is never re-scanned, so a stored value that itself
