@@ -11,7 +11,7 @@ require (
 require (
 	github.com/bufbuild/protocompile v0.14.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	github.com/vektah/gqlparser/v2 v2.5.33
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.81.1
@@ -20,7 +20,6 @@ require (
 
 require (
 	github.com/agnivade/levenshtein v1.2.1 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -31,7 +30,6 @@ require (
 	github.com/oasdiff/yaml v0.1.0 // indirect
 	github.com/oasdiff/yaml3 v0.0.13 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
 	golang.org/x/net v0.51.0 // indirect
