@@ -711,8 +711,8 @@ detection:
 
 ```bash
 # Test a gRPC server
-hadrian grpc \
-  --server localhost:50051 \
+hadrian test grpc \
+  --target localhost:50051 \
   --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml
@@ -721,8 +721,8 @@ hadrian grpc \
 ### With Verbose Output
 
 ```bash
-hadrian grpc \
-  --server localhost:50051 \
+hadrian test grpc \
+  --target localhost:50051 \
   --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml \
@@ -732,8 +732,8 @@ hadrian grpc \
 ### Output to JSON
 
 ```bash
-hadrian grpc \
-  --server localhost:50051 \
+hadrian test grpc \
+  --target localhost:50051 \
   --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml \
@@ -744,8 +744,8 @@ hadrian grpc \
 ### Output to SARIF (GitHub Code Scanning)
 
 ```bash
-hadrian grpc \
-  --server localhost:50051 \
+hadrian test grpc \
+  --target localhost:50051 \
   --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml \
@@ -758,8 +758,8 @@ The output validates against the SARIF v2.1.0 schema and carries stable `partial
 ### Dry Run (Show What Would Be Tested)
 
 ```bash
-hadrian grpc \
-  --server localhost:50051 \
+hadrian test grpc \
+  --target localhost:50051 \
   --template-dir templates/grpc/ \
   --auth auth.yaml \
   --roles roles.yaml \
@@ -809,8 +809,8 @@ cd test/grpc-server
 make run
 
 # In another terminal, run Hadrian
-hadrian grpc \
-  --server localhost:50051 \
+hadrian test grpc \
+  --target localhost:50051 \
   --template-dir test/grpc-server/templates/owasp/ \
   --auth test/grpc-server/auth.yaml \
   --roles test/grpc-server/roles.yaml \
