@@ -1,0 +1,85 @@
+# Template: Web Cache Deception (ACTIVE, self-priming two-phase)
+#
+# ACTIVE / INTRUSIVE — read the Safety / RoE note below before running. This is
+# distinct from the passive observational template
+# templates/rest/12-api8-web-cache-deception.yaml, which only sends a single
+# unauthenticated GET and never writes to a cache.
+#
+# Methodology (reproduces the manual WCD test deterministically):
+#   1. PRIME:  authenticate as a scanner-controlled, SELF-SCOPED canary account
+#              and send `prime_repeat` (default 2) GETs to the target URL to warm
+#              the CDN/edge cache (first request MISS, second serves/stores a HIT).
+#   2. REPLAY: send ONE fully anonymous GET (no Authorization / Cookie / api-key)
+#              to the SAME URL.
+#   3. DETECT: flag when the anonymous response is 2xx AND carries an explicit
+#              cache-HIT header AND its body proves it is the victim's cached
+#              content. Proof modes:
+#                (a) canary_field set  -> the stored authenticated value at that
+#                    JSON path must appear in the anonymous body (robust to
+#                    per-request dynamic fields such as timestamps or request IDs);
+#                (b) canary_field empty (this example) -> exact body equality
+#                    between the authenticated prime body and the anonymous body.
+#
+# Safety / RoE (correctness- and scope-critical):
+#   * PRIME ONLY with a self-scoped canary test account whose response embeds NO
+#     real third-party PII — the value you assert on is that account's OWN data.
+#   * This check WRITES an authenticated response into a SHARED cache, so it is an
+#     ACTIVE, intrusive test. Confirm it is within engagement scope before running.
+#   * It is intentionally shipped as a SEPARATE, opt-in example (loaded only via
+#     HADRIAN_TEMPLATES=examples/cache-deception + --category all), NEVER a drop-in
+#     replacement for the passive observational check.
+
+id: 12-api8-web-cache-deception-active
+
+info:
+  name: "Web Cache Deception - Self-Priming Two-Phase (Active)"
+  category: "API8:2023"
+  severity: "HIGH"
+  author: "hadrian"
+  description: |
+    Active, self-priming Web Cache Deception (CWE-525) test. Primes a CDN/edge
+    cache as a self-scoped canary account, then replays the same URL anonymously
+    and proves the victim's cached content is served to an unauthenticated client
+    (leak proof + explicit cache-HIT header + 2xx). Distinct from the passive
+    observational template: this WRITES an authenticated response into a shared
+    cache and is therefore intrusive and opt-in.
+
+    Detection requires ALL of: the anonymous replay is 2xx, it carries an explicit
+    CDN cache-HIT header (CF-Cache-Status: HIT or X-Cache: ...HIT by default), and
+    its body proves the victim's cached content leaked. Leak proof is exact body
+    equality by default, or — when cache_deception.canary_field is set — the
+    presence of the canary account's stored field value in the anonymous body,
+    which is robust to per-request dynamic fields that would break exact equality.
+  tags: ["web-cache-deception", "cache-deception", "cwe-525", "security-misconfiguration", "owasp", "owasp-api-top10", "api8", "active", "intrusive"]
+  requires_llm_triage: false
+  test_pattern: "cache-deception"
+
+# Select auth-required GET endpoints. GET is the method CDNs key and cache.
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET"]
+
+# Anonymous replay attacker; the priming identity is the first authenticatable
+# role from victim_permission_level.
+role_selector:
+  attacker_permission_level: "none"
+  victim_permission_level: "all"
+
+cache_deception:
+  # Authenticated GETs sent to warm the cache before the anonymous replay.
+  prime_repeat: 2
+
+  # canary_field: exact body equality (mode b) is used while this is empty. For
+  # endpoints whose authenticated body carries per-request dynamic content
+  # (timestamps, request IDs, cursors), set this to a stable, self-scoped field on
+  # the canary account (JSON dot/array path), e.g. "email", "account_uuid", or a
+  # full name — choose a HIGH-ENTROPY, unique value. Do NOT use short or numeric
+  # fields such as "id": the canary is matched by substring, so a value like "1"
+  # matches almost any body and yields false positives. Canary values shorter than
+  # 8 characters are rejected (treated as not-leaked) with a warning. The stored
+  # value must appear in the anonymous body for a match.
+  canary_field: ""
+
+  # cache_hit_headers omitted => built-in defaults (CF-Cache-Status HIT,
+  # X-Cache ...HIT). Override with a list of regexes (matched over "Header: value")
+  # for CDNs that signal a hit differently.

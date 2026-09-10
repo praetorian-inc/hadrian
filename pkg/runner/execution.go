@@ -30,6 +30,15 @@ func executeTemplate(
 		return executeMutationTemplate(ctx, mutationExecutor, tmpl, op, rolesCfg, authCfg, baseURL)
 	}
 
+	// Check if this is a cache-deception template - route to CacheDeceptionExecutor.
+	// The executor is constructed inline by embedding the already-wired
+	// mutationExecutor (its MutationExecutor field is exported), so no new
+	// parameter is threaded through the call chain and no test call site changes.
+	if tmpl.Template != nil && tmpl.Template.Info.TestPattern == "cache-deception" {
+		cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: mutationExecutor}
+		return executeCacheDeceptionTemplate(ctx, cacheExecutor, tmpl, op, rolesCfg, authCfg, baseURL)
+	}
+
 	var findings []*model.Finding
 
 	// For unauthenticated endpoints, run test only once without roles
@@ -318,6 +327,110 @@ func executeMutationTemplate(
 				findings = append(findings, finding)
 			}
 		}
+	}
+
+	return findings, nil
+}
+
+// executeCacheDeceptionTemplate runs the two-phase self-priming Web Cache
+// Deception test for one operation. The replay attacker is always anonymous; the
+// priming identity is the first authenticatable role from
+// role_selector.victim_permission_level.
+func executeCacheDeceptionTemplate(
+	ctx context.Context,
+	cacheExecutor *orchestrator.CacheDeceptionExecutor,
+	tmpl *templates.CompiledTemplate,
+	op *model.Operation,
+	rolesCfg *roles.RoleConfig,
+	authCfg *auth.AuthConfig,
+	baseURL string,
+) ([]*model.Finding, error) {
+	var findings []*model.Finding
+
+	if authCfg == nil {
+		log.Warn("template %s (cache-deception) requires auth config for priming; skipping", tmpl.ID)
+		return findings, nil
+	}
+
+	// Resolve a concrete, brace-free path from the operation (reuse buildVariables).
+	// executePhase errors on any remaining {placeholder}, so path params must be
+	// substituted here.
+	variables := buildVariables(op, baseURL)
+	concretePath := op.Path
+	for key, val := range variables {
+		concretePath = strings.ReplaceAll(concretePath, "{"+key+"}", val)
+	}
+
+	// Pick the first authenticatable victim role to prime the cache with.
+	victimRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.VictimPermissionLevel)
+	var victimRole *roles.Role
+	var victimInfo *auth.AuthInfo
+	for _, r := range victimRoles {
+		if r == nil || r.Level == 0 {
+			continue // skip anonymous/unauthenticated roles — priming needs auth
+		}
+		info, err := authCfg.GetAuthInfo(r.Name)
+		if err != nil || info == nil { // role not found, or no_auth role
+			continue
+		}
+		victimRole, victimInfo = r, info
+		break
+	}
+	if victimRole == nil {
+		log.Warn("template %s (cache-deception): no authenticatable victim role for priming; skipping", tmpl.ID)
+		return findings, nil
+	}
+
+	authInfos := map[string]*auth.AuthInfo{"victim": victimInfo}
+	cacheExecutor.ClearTracker()
+
+	result, err := cacheExecutor.ExecuteCacheDeception(ctx, tmpl.Template, concretePath, "victim", authInfos, baseURL)
+	if err != nil {
+		if ctx.Err() != nil {
+			return findings, ctx.Err()
+		}
+		log.Warn("cache-deception test failed [template=%s, victim=%s, endpoint=%s %s]: %v",
+			tmpl.ID, victimRole.Name, op.Method, op.Path, err)
+		return findings, nil
+	}
+
+	if result.Matched {
+		finding := &model.Finding{
+			ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", victimRole.Name),
+			TemplateID:      tmpl.ID,
+			Category:        tmpl.Info.Category,
+			Name:            tmpl.Info.Name,
+			Severity:        model.Severity(tmpl.Info.Severity),
+			Endpoint:        op.Path,
+			Method:          op.Method,
+			AttackerRole:    "anonymous",
+			VictimRole:      victimRole.Name,
+			IsVulnerability: true,
+			Timestamp:       time.Now(),
+		}
+		if result.AnonResponse != nil {
+			finding.Evidence = model.Evidence{
+				Response:       *result.AnonResponse,
+				AttackResponse: result.AnonResponse,
+			}
+		}
+		if result.PrimeResponse != nil {
+			finding.Evidence.SetupResponse = result.PrimeResponse
+		}
+		// Represent the anonymous replay request: a GET to the same URL with no
+		// auth and no operator custom headers (both suppressed on the replay).
+		finding.Evidence.Request = model.HTTPRequest{
+			Method:  op.Method,
+			URL:     strings.TrimSuffix(baseURL, "/") + concretePath,
+			Headers: map[string]string{},
+		}
+		if result.RequestIDs != nil {
+			var ids []string
+			ids = append(ids, result.RequestIDs.Setup...)
+			ids = append(ids, result.RequestIDs.Attack...)
+			finding.RequestIDs = ids
+		}
+		findings = append(findings, finding)
 	}
 
 	return findings, nil

@@ -36,6 +36,31 @@ type Template struct {
 
 	// Detection logic
 	Detection Detection `yaml:"detection"`
+
+	// CacheDeception config (only consumed for test_pattern: "cache-deception")
+	CacheDeception *CacheDeception `yaml:"cache_deception,omitempty"`
+}
+
+// CacheDeception configures the two-phase self-priming Web Cache Deception test
+// (test_pattern: "cache-deception"). None of the existing Phase fields model an
+// operation-driven prime-repeat count, a cache-HIT header pattern set, or a
+// canary strategy, so a dedicated block is required.
+type CacheDeception struct {
+	// PrimeRepeat is the number of authenticated GETs sent to warm the cache
+	// before the anonymous replay. Default 2 (warms cache-on-second-hit CDNs).
+	// Values < 1 fall back to the default.
+	PrimeRepeat int `yaml:"prime_repeat,omitempty"`
+
+	// CanaryField is the JSON path (dot/array notation, per extractField) of a
+	// stable, self-scoped value in the authenticated body that must appear in the
+	// anonymous body to prove the victim's cached content leaked. Empty selects
+	// the exact body-equality fallback.
+	CanaryField string `yaml:"canary_field,omitempty"`
+
+	// CacheHitHeaders are regexes matched (per-header, over "Header: value") to
+	// confirm an explicit CDN cache HIT. Empty selects the two built-in defaults
+	// (CF-Cache-Status HIT, X-Cache ...HIT).
+	CacheHitHeaders []string `yaml:"cache_hit_headers,omitempty"`
 }
 
 type TemplateInfo struct {

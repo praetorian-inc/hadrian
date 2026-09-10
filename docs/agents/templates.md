@@ -50,6 +50,22 @@ Key features:
 
 Parameter-scoped BOLA examples (query/body identity) live under `examples/param-scoped-bola/` and load via `HADRIAN_TEMPLATES` with `--category all` (the `--category` flag defaults to `owasp` and matches exactly against `info.category` and `info.tags`).
 
+### Two-Phase Cache-Deception Tests
+
+`test_pattern: "cache-deception"` routes an operation to the self-priming Web Cache Deception executor (`pkg/orchestrator/cache_deception.go`, dispatched from `pkg/runner/execution.go`). For each auth-required GET it selects, the executor authenticates as the first authenticatable role from `victim_permission_level` and sends `prime_repeat` (default 2) GETs to warm the cache, then replays the **same URL** anonymously (no `Authorization`/`Cookie`/api-key) and flags a match when the anonymous response is 2xx **and** carries an explicit cache-HIT header **and** its body proves the victim's cached content leaked. Config lives in the optional `cache_deception` block:
+
+```yaml
+cache_deception:
+  prime_repeat: 2          # authed GETs to warm the cache (default 2, min 1)
+  canary_field: "email"    # JSON path of a HIGH-ENTROPY self-scoped value (matched by substring); empty => exact body-equality proof
+  cache_hit_headers:       # optional regexes over "Header: value"; empty => CF-Cache-Status HIT, X-Cache ...HIT
+    - '(?im)^cf-cache-status:\s*hit'
+```
+
+This is an **ACTIVE, intrusive** check (it writes an authenticated response into a shared cache) and must be primed only with a self-scoped canary account, so it ships opt-in under `examples/cache-deception/` (load via `HADRIAN_TEMPLATES=examples/cache-deception` + `--category all`). It is distinct from the passive observational template `templates/rest/12-api8-web-cache-deception.yaml` (`test_pattern: "simple"`), which sends a single unauthenticated GET, never writes to a cache, and stays the safe default in `templates/rest/`.
+
+Replay invariants and caveats: operator custom headers (`--header`) are intentionally **not** applied to the anonymous replay (only to the priming requests), so an auth-bearing `--header` cannot fake a leak — the trade-off is that dropping a required **non-auth** header on the replay can change the cache key and cause a false negative. `canary_field` is matched by **substring**, so it must name a **high-entropy, unique** value (`email`, an account token, a full name — never a short/numeric `id`); values shorter than 8 characters are rejected as not-leaked with a warning. A victim role that authenticates via a **query-parameter** api-key is likewise a known false-negative source: priming keys the cache on `/path?api_key=…` while the replay hits the bare `/path`, so the cache keys never match.
+
 ## Permission Format
 
 Permissions follow `<action>:<object>:<scope>` (validated in `pkg/roles/roles.go`):
