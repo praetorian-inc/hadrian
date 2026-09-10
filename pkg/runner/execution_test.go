@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 
@@ -1110,4 +1111,162 @@ paths:
 	err := runTest(ctx, config)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load roles")
+}
+
+// =============================================================================
+// executeCacheDeceptionTemplate dispatch-level guard tests (round-3 review)
+// =============================================================================
+
+// makeCacheDeceptionCompiledTemplate builds a minimal cache-deception
+// CompiledTemplate for dispatch-level guard tests. cfg may be nil (prime_role
+// unset).
+func makeCacheDeceptionCompiledTemplate(id string, cfg *templates.CacheDeception) *templates.CompiledTemplate {
+	tmpl := &templates.Template{
+		ID: id,
+		Info: templates.TemplateInfo{
+			Name:        id,
+			Category:    "API8:2023",
+			Severity:    "HIGH",
+			TestPattern: "cache-deception",
+		},
+		EndpointSelector: templates.EndpointSelector{
+			RequiresAuth: true,
+			Methods:      []string{"GET"},
+		},
+		RoleSelector: templates.RoleSelector{
+			AttackerPermissionLevel: "none",
+			VictimPermissionLevel:   "all",
+		},
+		CacheDeception: cfg,
+	}
+	compiled, err := templates.Compile(tmpl)
+	if err != nil {
+		panic(fmt.Sprintf("failed to compile cache-deception test template: %v", err))
+	}
+	return compiled
+}
+
+// F6: prime_role unset or naming a non-authenticatable role must skip (produce
+// zero findings), never panic.
+
+func TestExecuteCacheDeceptionTemplate_PrimeRoleUnset_Skipped(t *testing.T) {
+	server := newTestServer(200, `{"data":"x"}`)
+	defer server.Close()
+
+	tmpl := makeCacheDeceptionCompiledTemplate("cd-no-role", nil) // CacheDeception nil
+	op := &model.Operation{Method: "GET", Path: "/api/account", RequiresAuth: true}
+	authCfg := makeTestAuthConfig(map[string]string{"user1": "user1-token"})
+	cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: orchestrator.NewMutationExecutor(server.Client(), nil)}
+
+	findings, err := executeCacheDeceptionTemplate(context.Background(), cacheExecutor, tmpl, op, nil, authCfg, server.URL)
+
+	require.NoError(t, err)
+	assert.Empty(t, findings, "must skip (produce zero findings) when cache_deception.prime_role is unset")
+}
+
+func TestExecuteCacheDeceptionTemplate_PrimeRoleEmptyString_Skipped(t *testing.T) {
+	server := newTestServer(200, `{"data":"x"}`)
+	defer server.Close()
+
+	tmpl := makeCacheDeceptionCompiledTemplate("cd-empty-role", &templates.CacheDeception{PrimeRole: "   "})
+	op := &model.Operation{Method: "GET", Path: "/api/account", RequiresAuth: true}
+	authCfg := makeTestAuthConfig(map[string]string{"user1": "user1-token"})
+	cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: orchestrator.NewMutationExecutor(server.Client(), nil)}
+
+	findings, err := executeCacheDeceptionTemplate(context.Background(), cacheExecutor, tmpl, op, nil, authCfg, server.URL)
+
+	require.NoError(t, err)
+	assert.Empty(t, findings, "must skip (produce zero findings) when prime_role is blank/whitespace-only")
+}
+
+func TestExecuteCacheDeceptionTemplate_PrimeRoleNotAuthenticatable_Skipped(t *testing.T) {
+	server := newTestServer(200, `{"data":"x"}`)
+	defer server.Close()
+
+	tmpl := makeCacheDeceptionCompiledTemplate("cd-bad-role", &templates.CacheDeception{PrimeRole: "ghost"})
+	op := &model.Operation{Method: "GET", Path: "/api/account", RequiresAuth: true}
+	authCfg := makeTestAuthConfig(map[string]string{"user1": "user1-token"}) // "ghost" absent
+	cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: orchestrator.NewMutationExecutor(server.Client(), nil)}
+
+	findings, err := executeCacheDeceptionTemplate(context.Background(), cacheExecutor, tmpl, op, nil, authCfg, server.URL)
+
+	require.NoError(t, err)
+	assert.Empty(t, findings, "must skip (produce zero findings) when prime_role is not authenticatable")
+}
+
+func TestExecuteCacheDeceptionTemplate_NilAuthConfig_Skipped(t *testing.T) {
+	server := newTestServer(200, `{"data":"x"}`)
+	defer server.Close()
+
+	tmpl := makeCacheDeceptionCompiledTemplate("cd-nil-auth", &templates.CacheDeception{PrimeRole: "user1"})
+	op := &model.Operation{Method: "GET", Path: "/api/account", RequiresAuth: true}
+	cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: orchestrator.NewMutationExecutor(server.Client(), nil)}
+
+	findings, err := executeCacheDeceptionTemplate(context.Background(), cacheExecutor, tmpl, op, nil, nil, server.URL)
+
+	require.NoError(t, err)
+	assert.Empty(t, findings, "must skip (produce zero findings) when auth config is nil — priming requires auth")
+}
+
+// F8: non-GET operations must be skipped — only GET responses are CDN-cacheable.
+
+func TestExecuteCacheDeceptionTemplate_NonGET_Skipped(t *testing.T) {
+	server := newTestServer(200, `{"data":"x"}`)
+	defer server.Close()
+
+	tmpl := makeCacheDeceptionCompiledTemplate("cd-non-get", &templates.CacheDeception{PrimeRole: "user1"})
+	op := &model.Operation{Method: "POST", Path: "/api/account", RequiresAuth: true}
+	authCfg := makeTestAuthConfig(map[string]string{"user1": "user1-token"})
+	cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: orchestrator.NewMutationExecutor(server.Client(), nil)}
+
+	findings, err := executeCacheDeceptionTemplate(context.Background(), cacheExecutor, tmpl, op, nil, authCfg, server.URL)
+
+	require.NoError(t, err)
+	assert.Empty(t, findings, "cache-deception must only run against GET operations; a non-GET must be skipped")
+}
+
+// F7: a required query parameter must be included on BOTH the authenticated
+// prime request(s) and the anonymous replay, so both phases hit the same
+// cache key.
+
+func TestExecuteCacheDeceptionTemplate_RequiredQueryParam_IncludedOnBothPhases(t *testing.T) {
+	var mu sync.Mutex
+	var capturedURLs []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		capturedURLs = append(capturedURLs, r.URL.String())
+		mu.Unlock()
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte(`{"data":"x"}`))
+	}))
+	defer server.Close()
+
+	tmpl := makeCacheDeceptionCompiledTemplate("cd-query-param", &templates.CacheDeception{PrimeRole: "user1", PrimeRepeat: 1})
+	op := &model.Operation{
+		Method:       "GET",
+		Path:         "/api/account",
+		RequiresAuth: true,
+		QueryParams: []model.Parameter{
+			{Name: "api_key", In: "query", Required: true, Example: "secret123"},
+			{Name: "debug", In: "query", Required: false, Example: "true"}, // optional — must NOT be appended
+		},
+	}
+	authCfg := makeTestAuthConfig(map[string]string{"user1": "user1-token"})
+	cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: orchestrator.NewMutationExecutor(server.Client(), nil)}
+
+	_, err := executeCacheDeceptionTemplate(context.Background(), cacheExecutor, tmpl, op, nil, authCfg, server.URL)
+	require.NoError(t, err)
+
+	mu.Lock()
+	urls := append([]string(nil), capturedURLs...)
+	mu.Unlock()
+
+	require.Len(t, urls, 2, "expected exactly 1 prime request + 1 anonymous replay")
+	for _, u := range urls {
+		assert.Contains(t, u, "api_key=secret123",
+			"both the prime and the replay must hit the URL WITH the required query parameter: %s", u)
+		assert.False(t, strings.Contains(u, "debug="),
+			"an OPTIONAL query parameter must not be appended to the probed URL: %s", u)
+	}
 }

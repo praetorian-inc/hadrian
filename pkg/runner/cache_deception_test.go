@@ -57,12 +57,21 @@ import (
 //	                            exposes a cache-status header, so the
 //	                            executor's header gate correctly withholds the
 //	                            finding.
-func cacheDeceptionActiveHandler() http.Handler {
+//
+// The /api/account/statement endpoint additionally records the Authorization
+// and X-Hadrian-Request-Id header of every request it receives, in arrival
+// order, via the returned *statementRequestCapture (F12, round-3 review) — used
+// to prove the executor's on-the-wire request pattern is exactly 2
+// authenticated prime requests followed by 1 anonymous replay.
+func cacheDeceptionActiveHandler() (http.Handler, *statementRequestCapture) {
 	mux := http.NewServeMux()
+	capture := &statementRequestCapture{}
 
 	var muStatement sync.Mutex
 	hitsStatement := 0
-	mux.HandleFunc("/api/account/statement", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/account/statement", func(w http.ResponseWriter, r *http.Request) {
+		capture.record(r)
+
 		muStatement.Lock()
 		hitsStatement++
 		n := hitsStatement
@@ -95,7 +104,41 @@ func cacheDeceptionActiveHandler() http.Handler {
 		})
 	})
 
-	return mux
+	return mux, capture
+}
+
+// statementRequestCapture records the Authorization and X-Hadrian-Request-Id
+// headers of every request that hits /api/account/statement, in arrival order
+// (F12, round-3 review).
+type statementRequestCapture struct {
+	mu   sync.Mutex
+	reqs []capturedStatementRequest
+}
+
+// capturedStatementRequest is one recorded request's Authorization and
+// X-Hadrian-Request-Id header values.
+type capturedStatementRequest struct {
+	authorization string
+	requestID     string
+}
+
+func (c *statementRequestCapture) record(r *http.Request) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.reqs = append(c.reqs, capturedStatementRequest{
+		authorization: r.Header.Get("Authorization"),
+		requestID:     r.Header.Get("X-Hadrian-Request-Id"),
+	})
+}
+
+// snapshot returns a copy of the recorded requests, safe to inspect after the
+// request-serving goroutines have finished.
+func (c *statementRequestCapture) snapshot() []capturedStatementRequest {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]capturedStatementRequest, len(c.reqs))
+	copy(out, c.reqs)
+	return out
 }
 
 const cacheDeceptionActiveSpec = `openapi: "3.0.0"
@@ -220,6 +263,7 @@ role_selector:
   victim_permission_level: "all"
 
 cache_deception:
+  prime_role: "user1"
   prime_repeat: 2
   canary_field: "email"
 `
@@ -269,7 +313,8 @@ func runCacheDeception(t *testing.T, apiPath, rolesPath, authPath, templateDir s
 // against Cases A, B, and C. Only the genuine, cache-HIT-header-carrying leak
 // (Case A) must be flagged.
 func TestIntegration_CacheDeceptionActive_TwoPhase(t *testing.T) {
-	server := httptest.NewServer(cacheDeceptionActiveHandler())
+	handler, statementCapture := cacheDeceptionActiveHandler()
+	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 
 	apiPath, rolesPath, authPath := writeCacheDeceptionConfigs(t, cacheDeceptionActiveSpec, server.URL)
@@ -308,6 +353,26 @@ func TestIntegration_CacheDeceptionActive_TwoPhase(t *testing.T) {
 	_, flaggedHidden := byEndpoint["/api/account/hidden-cache"]
 	assert.False(t, flaggedHidden,
 		"Case C (real leak, but no explicit cache-HIT header) must NOT be flagged — the header gate must withhold it")
+
+	// F12 (round-3 review): prove the on-the-wire request pattern is exactly 2
+	// authenticated prime requests followed by 1 anonymous replay, each
+	// carrying its own distinct tracked request ID, and that the finding's own
+	// RequestIDs mirrors those same IDs in the same order.
+	reqs := statementCapture.snapshot()
+	require.Len(t, reqs, 3, "expected exactly 2 authenticated prime requests followed by 1 anonymous replay")
+	assert.NotEmpty(t, reqs[0].authorization, "prime request 1 must be authenticated")
+	assert.NotEmpty(t, reqs[1].authorization, "prime request 2 must be authenticated")
+	assert.Empty(t, reqs[2].authorization, "the replay request must be anonymous (no Authorization header)")
+
+	assert.NotEmpty(t, reqs[0].requestID)
+	assert.NotEmpty(t, reqs[1].requestID)
+	assert.NotEmpty(t, reqs[2].requestID)
+	assert.NotEqual(t, reqs[0].requestID, reqs[1].requestID, "each prime request must carry a distinct tracked request ID")
+	assert.NotEqual(t, reqs[1].requestID, reqs[2].requestID, "the replay request ID must differ from the prime request IDs")
+
+	require.Len(t, leak.RequestIDs, 3, "finding.RequestIDs must carry 2 setup IDs + 1 attack ID")
+	assert.Equal(t, []string{reqs[0].requestID, reqs[1].requestID, reqs[2].requestID}, leak.RequestIDs,
+		"finding.RequestIDs must list the same IDs, in the same order, as the requests actually observed on the wire")
 }
 
 // TestIntegration_CacheDeceptionActive_CanaryVsBodyEquality proves canary

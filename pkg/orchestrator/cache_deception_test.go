@@ -1,9 +1,14 @@
 package orchestrator
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/praetorian-inc/hadrian/pkg/templates"
 )
@@ -96,6 +101,67 @@ func TestBodyLeaked_BodyEqualityMode_AnonEmptyPrimeNonEmpty(t *testing.T) {
 	assert.Empty(t, canary)
 }
 
+// F4 (round-3 review): trivial/structural bodies must never count as a leak in
+// body-equality mode, even when the (trivial) prime and anon bodies match
+// exactly.
+
+func TestBodyLeaked_BodyEqualityMode_EmptyObject_NotLeaked(t *testing.T) {
+	leaked, canary := bodyLeaked(`{}`, `{}`, nil)
+
+	assert.False(t, leaked)
+	assert.Empty(t, canary)
+}
+
+func TestBodyLeaked_BodyEqualityMode_EmptyArray_NotLeaked(t *testing.T) {
+	leaked, canary := bodyLeaked(`[]`, `[]`, nil)
+
+	assert.False(t, leaked)
+	assert.Empty(t, canary)
+}
+
+func TestBodyLeaked_BodyEqualityMode_ShortIdenticalBody_NotLeaked(t *testing.T) {
+	// 11 chars — below minBodyLen (16) — must not count as a leak even though
+	// prime and anon bodies match exactly.
+	body := `{"ok":true}`
+
+	leaked, canary := bodyLeaked(body, body, nil)
+
+	assert.False(t, leaked)
+	assert.Empty(t, canary)
+}
+
+// --- canary placeholder blacklist (F5) ---
+
+func TestBodyLeaked_CanaryPlaceholderBlacklist(t *testing.T) {
+	blacklisted := []string{
+		"", "undefined", "null", "none", "nil", "placeholder",
+		"anonymous", "not_found", "n/a", "unknown",
+	}
+	for _, v := range blacklisted {
+		t.Run(fmt.Sprintf("%q", v), func(t *testing.T) {
+			cfg := &templates.CacheDeception{CanaryField: "name"}
+			primeBody := fmt.Sprintf(`{"name":%q}`, v)
+			anonBody := fmt.Sprintf(`{"name":%q,"other":"x"}`, v)
+
+			leaked, canary := bodyLeaked(primeBody, anonBody, cfg)
+
+			assert.False(t, leaked, "placeholder canary %q must not be trusted as a leak signal", v)
+			assert.Empty(t, canary)
+		})
+	}
+}
+
+func TestBodyLeaked_CanaryPlaceholderBlacklist_CaseInsensitive(t *testing.T) {
+	cfg := &templates.CacheDeception{CanaryField: "name"}
+	primeBody := `{"name":"UNDEFINED"}`
+	anonBody := `{"name":"UNDEFINED","other":"x"}`
+
+	leaked, canary := bodyLeaked(primeBody, anonBody, cfg)
+
+	assert.False(t, leaked, "blacklist match must be case-insensitive")
+	assert.Empty(t, canary)
+}
+
 // --- hasCacheHitHeader ---
 
 func TestHasCacheHitHeader_Default_CFCacheStatusHit(t *testing.T) {
@@ -171,4 +237,72 @@ func TestHasCacheHitHeader_AllInvalidRegexes_DetectionDisabled(t *testing.T) {
 	headers := map[string]string{"Cf-Cache-Status": "HIT"}
 
 	assert.False(t, hasCacheHitHeader(headers, cfg))
+}
+
+// --- ExecuteCacheDeception: truncation fail-closed guard (F2, round-3 review) ---
+//
+// bodyLeaked itself has no notion of truncation — the guard lives in
+// ExecuteCacheDeception, which overrides bodyLeaked's result to not-leaked
+// whenever either side's body was (or may have been) truncated at
+// maxResponseBodySize. These tests exercise ExecuteCacheDeception end-to-end
+// with a MockHTTPClient (reused from mutation_test.go, same package) so the
+// real fail-closed code path — not a re-implementation of it — is what's
+// under test.
+
+func TestExecuteCacheDeception_PrimeBodyAtCap_FailsClosed(t *testing.T) {
+	// A prime body read at exactly the maxResponseBodySize cap is
+	// indistinguishable from one that was truncated, so ExecuteCacheDeception
+	// must fail closed even though the (identical) bodies and the cache-HIT
+	// header would otherwise indicate a leak.
+	bigBody := strings.Repeat("a", maxResponseBodySize)
+
+	primeResp1 := newMockResponse(200, bigBody)
+	primeResp2 := newMockResponse(200, bigBody)
+	anonResp := newMockResponse(200, bigBody)
+	anonResp.Header.Set("Cf-Cache-Status", "HIT")
+
+	client := &MockHTTPClient{responses: []*http.Response{primeResp1, primeResp2, anonResp}}
+	executor := NewCacheDeceptionExecutor(client, nil)
+
+	tmpl := &templates.Template{ID: "t-cap", CacheDeception: &templates.CacheDeception{PrimeRepeat: 2}}
+	authInfos := makeAuthInfos("", "victim-token")
+
+	result, err := executor.ExecuteCacheDeception(context.Background(), tmpl, "/api/account/statement", "victim", authInfos, "http://example.test")
+
+	require.NoError(t, err)
+	assert.False(t, result.Matched,
+		"must fail closed when the prime body sits at the truncation cap, even though the (equal) bodies and cache-HIT header would otherwise indicate a leak")
+}
+
+func TestExecuteCacheDeception_AnonBodyTruncated_FailsClosed(t *testing.T) {
+	// The anonymous reply is far larger than the truncation cap but carries
+	// the canary substring at its very start, so bodyLeaked alone would
+	// report a leak; ExecuteCacheDeception's truncation guard must override
+	// that to not-leaked because the compared body is only a (possibly
+	// misleading) prefix.
+	canary := "canary-token-abcdef" // >= minCanaryLen, not blacklisted
+	primeBody := fmt.Sprintf(`{"token":%q}`, canary)
+	anonBody := canary + strings.Repeat("z", maxResponseBodySize+100)
+
+	primeResp1 := newMockResponse(200, primeBody)
+	primeResp2 := newMockResponse(200, primeBody)
+	anonResp := newMockResponse(200, anonBody)
+	anonResp.Header.Set("Cf-Cache-Status", "HIT")
+
+	client := &MockHTTPClient{responses: []*http.Response{primeResp1, primeResp2, anonResp}}
+	executor := NewCacheDeceptionExecutor(client, nil)
+
+	tmpl := &templates.Template{
+		ID:             "t-trunc",
+		CacheDeception: &templates.CacheDeception{PrimeRepeat: 2, CanaryField: "token"},
+	}
+	authInfos := makeAuthInfos("", "victim-token")
+
+	result, err := executor.ExecuteCacheDeception(context.Background(), tmpl, "/api/account/statement", "victim", authInfos, "http://example.test")
+
+	require.NoError(t, err)
+	require.NotNil(t, result.AnonResponse)
+	assert.True(t, result.AnonResponse.Truncated, "sanity check: the anonymous reply must actually be flagged truncated")
+	assert.False(t, result.Matched,
+		"must fail closed when the anonymous body is truncated, even though the (untrimmed) canary substring would otherwise indicate a leak")
 }

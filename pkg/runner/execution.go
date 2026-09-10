@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -334,8 +335,10 @@ func executeMutationTemplate(
 
 // executeCacheDeceptionTemplate runs the two-phase self-priming Web Cache
 // Deception test for one operation. The replay attacker is always anonymous; the
-// priming identity is the first authenticatable role from
-// role_selector.victim_permission_level.
+// priming identity is the EXPLICIT cache_deception.prime_role — a self-scoped
+// canary account named by the template. The role is never guessed: if prime_role
+// is unset or not authenticatable the operation is skipped, so a privileged
+// account is never used to write privileged data into a shared cache.
 func executeCacheDeceptionTemplate(
 	ctx context.Context,
 	cacheExecutor *orchestrator.CacheDeceptionExecutor,
@@ -352,34 +355,35 @@ func executeCacheDeceptionTemplate(
 		return findings, nil
 	}
 
-	// Resolve a concrete, brace-free path from the operation (reuse buildVariables).
-	// executePhase errors on any remaining {placeholder}, so path params must be
-	// substituted here.
-	variables := buildVariables(op, baseURL)
-	concretePath := op.Path
-	for key, val := range variables {
-		concretePath = strings.ReplaceAll(concretePath, "{"+key+"}", val)
-	}
-
-	// Pick the first authenticatable victim role to prime the cache with.
-	victimRoles := rolesCfg.GetRolesByPermissionLevel(tmpl.RoleSelector.VictimPermissionLevel)
-	var victimRole *roles.Role
-	var victimInfo *auth.AuthInfo
-	for _, r := range victimRoles {
-		if r == nil || r.Level == 0 {
-			continue // skip anonymous/unauthenticated roles — priming needs auth
-		}
-		info, err := authCfg.GetAuthInfo(r.Name)
-		if err != nil || info == nil { // role not found, or no_auth role
-			continue
-		}
-		victimRole, victimInfo = r, info
-		break
-	}
-	if victimRole == nil {
-		log.Warn("template %s (cache-deception): no authenticatable victim role for priming; skipping", tmpl.ID)
+	// Only GET responses are keyed and cached by CDNs. endpoint_selector should
+	// already restrict to GET, but enforce it here so a non-GET is never primed or
+	// recorded as a cache-deception finding.
+	if !strings.EqualFold(op.Method, "GET") {
+		log.Warn("template %s (cache-deception): operation %s %s is not a GET; skipping (only GET responses are CDN-cacheable)",
+			tmpl.ID, op.Method, op.Path)
 		return findings, nil
 	}
+
+	// Resolve the explicit prime_role. Never guess a role: without a named,
+	// authenticatable self-scoped canary account there is nothing safe to prime
+	// with, so skip.
+	cfg := tmpl.Template.CacheDeception
+	if cfg == nil || strings.TrimSpace(cfg.PrimeRole) == "" {
+		log.Warn("template %s (cache-deception): cache_deception.prime_role is not set; skipping — "+
+			"priming requires an explicitly named self-scoped canary role and is never guessed", tmpl.ID)
+		return findings, nil
+	}
+	primeRoleName := cfg.PrimeRole
+	victimInfo, err := authCfg.GetAuthInfo(primeRoleName)
+	if err != nil || victimInfo == nil {
+		log.Warn("template %s (cache-deception): prime_role %q is not authenticatable (absent from auth config or a no-auth role); skipping",
+			tmpl.ID, primeRoleName)
+		return findings, nil
+	}
+
+	// Resolve a concrete, brace-free path: URL-escape path params and append the
+	// operation's required query params so both phases hit the same cache key.
+	concretePath := buildCacheDeceptionPath(op)
 
 	authInfos := map[string]*auth.AuthInfo{"victim": victimInfo}
 	cacheExecutor.ClearTracker()
@@ -389,22 +393,23 @@ func executeCacheDeceptionTemplate(
 		if ctx.Err() != nil {
 			return findings, ctx.Err()
 		}
-		log.Warn("cache-deception test failed [template=%s, victim=%s, endpoint=%s %s]: %v",
-			tmpl.ID, victimRole.Name, op.Method, op.Path, err)
+		log.Warn("cache-deception test failed [template=%s, prime_role=%s, endpoint=%s %s]: %v",
+			tmpl.ID, primeRoleName, op.Method, op.Path, err)
 		return findings, nil
 	}
 
 	if result.Matched {
 		finding := &model.Finding{
-			ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", victimRole.Name),
+			ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", primeRoleName),
 			TemplateID:      tmpl.ID,
 			Category:        tmpl.Info.Category,
 			Name:            tmpl.Info.Name,
+			Description:     tmpl.Info.Description,
 			Severity:        model.Severity(tmpl.Info.Severity),
 			Endpoint:        op.Path,
 			Method:          op.Method,
 			AttackerRole:    "anonymous",
-			VictimRole:      victimRole.Name,
+			VictimRole:      primeRoleName,
 			IsVulnerability: true,
 			Timestamp:       time.Now(),
 		}
@@ -449,4 +454,42 @@ func buildVariables(op *model.Operation, baseURL string) map[string]string {
 		}
 	}
 	return variables
+}
+
+// buildCacheDeceptionPath resolves op.Path into a concrete, brace-free URL path
+// for the cache-deception probe (both phases use it, so both hit the same cache
+// key). Path-parameter values are URL-path-escaped — a raw '/', '?', or space
+// would otherwise split the path or start a query string — and every REQUIRED
+// query parameter declared on the operation is appended (URL-query-escaped) so a
+// query-driven endpoint is actually reached rather than 400ing or resolving a
+// different resource. Values use the spec example when present, else "1".
+func buildCacheDeceptionPath(op *model.Operation) string {
+	path := op.Path
+	for _, p := range op.PathParams {
+		val := "1"
+		if p.Example != nil {
+			val = fmt.Sprintf("%v", p.Example)
+		}
+		path = strings.ReplaceAll(path, "{"+p.Name+"}", url.PathEscape(val))
+	}
+
+	q := url.Values{}
+	for _, p := range op.QueryParams {
+		if !p.Required {
+			continue
+		}
+		val := "1"
+		if p.Example != nil {
+			val = fmt.Sprintf("%v", p.Example)
+		}
+		q.Set(p.Name, val)
+	}
+	if enc := q.Encode(); enc != "" {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		path += sep + enc
+	}
+	return path
 }

@@ -59,14 +59,25 @@ endpoint_selector:
   requires_auth: true
   methods: ["GET"]
 
-# Anonymous replay attacker; the priming identity is the first authenticatable
-# role from victim_permission_level.
+# Anonymous replay attacker; the priming identity is the EXPLICIT
+# cache_deception.prime_role below (never inferred from victim_permission_level).
 role_selector:
   attacker_permission_level: "none"
   victim_permission_level: "all"
 
 cache_deception:
+  # prime_role (REQUIRED): the EXACT roles.yaml/auth.yaml role name whose
+  # authenticated session warms the cache. It MUST be a SELF-SCOPED CANARY
+  # account whose response embeds only that account's OWN data and NO real
+  # third-party PII — the prime writes this account's authenticated response into
+  # a SHARED cache (RoE-critical; confirm engagement scope first). NEVER point
+  # this at an admin or otherwise privileged role: that would write privileged
+  # data into a shared cache. If prime_role is unset or not authenticatable the
+  # test is SKIPPED (never guessed). Replace "user1" with your own canary role.
+  prime_role: "user1"
+
   # Authenticated GETs sent to warm the cache before the anonymous replay.
+  # Capped at 20; values < 1 fall back to the default of 2.
   prime_repeat: 2
 
   # canary_field: exact body equality (mode b) is used while this is empty. For

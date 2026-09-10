@@ -4,11 +4,13 @@
 #
 # What it does: selects auth-required GET endpoints, sends ONE UNAUTHENTICATED
 # GET, and flags a response that carries an EXPLICIT CDN cache-HIT status header
-# (`CF-Cache-Status: HIT` or `X-Cache: ...HIT`). Those headers prove the response
-# was served from a shared cache rather than freshly authorized at the origin,
-# which is the distinction from plain broken authentication (API2): the exposure
-# is caused by a cache misconfiguration, so any user hitting the same cache key
-# can retrieve another user's authenticated data.
+# (`CF-Cache-Status: HIT` or `X-Cache: ...HIT`). Those headers are EVIDENCE the
+# response may have been served from a shared cache rather than freshly
+# authorized at the origin — a CANDIDATE for Web Cache Deception, not proof. To
+# confirm, verify the shared cache key crosses identities (an unauthenticated
+# client receives the same cached entry an authenticated one would) and that the
+# cached body actually exposes authenticated data. The active two-phase template
+# (examples/cache-deception/) establishes both and is the HIGH-confidence path.
 #
 # --- Detection semantics (correctness-critical) -----------------------------
 # The REST matcher engine OR-combines matchers: evaluateMatchers() returns true
@@ -53,18 +55,24 @@ id: 12-api8-web-cache-deception
 info:
   name: "Web Cache Deception - Cacheable Authenticated Response Served by CDN"
   category: "API8:2023"
-  severity: "HIGH"
+  # MEDIUM: this observational check cannot read the HTTP status code or confirm
+  # the cached body is sensitive authenticated content, so a cache-HIT header is a
+  # CANDIDATE requiring confirmation, not a proven leak. The active two-phase
+  # template (examples/cache-deception/) is the HIGH-confidence path.
+  severity: "MEDIUM"
   author: "hadrian"
   description: |
-    Detects Web Cache Deception (CWE-525): a CDN or edge cache that stores an
-    authenticated API response and subsequently serves it to unauthenticated
+    Detects candidate Web Cache Deception (CWE-525): a CDN or edge cache that may
+    be storing an authenticated API response and serving it to unauthenticated
     clients. The template selects auth-required GET endpoints, sends one
     UNAUTHENTICATED GET, and flags a response carrying an EXPLICIT CDN cache-HIT
-    status header (CF-Cache-Status: HIT or X-Cache: ...HIT). Those headers prove
-    the response was served from a shared cache rather than freshly authorized at
-    the origin. Unlike plain broken authentication (API2), a cache-HIT shows the
-    exposure is caused by a cache misconfiguration, so any user hitting the same
-    cache key can retrieve another user's authenticated data.
+    status header (CF-Cache-Status: HIT or X-Cache: ...HIT). Those headers are
+    EVIDENCE the response may have been served from a shared cache rather than
+    freshly authorized at the origin. To confirm the exposure, verify the shared
+    cache key crosses identities and that the cached body exposes authenticated
+    data — a cache-HIT header alone is a candidate, not proof, which is why this
+    check is reported at MEDIUM severity and the active two-phase template is the
+    HIGH-confidence path.
 
     Detection scope: the REST matcher OR-combines matchers (execute.go:664),
     has no dsl for REST, does not evaluate the detection block (gRPC-only), and
