@@ -71,6 +71,8 @@ A `prime_role` that authenticates via a **query-parameter** api-key is a documen
 
 The passive observational template `templates/rest/12-api8-web-cache-deception.yaml` is reported at **MEDIUM** (not HIGH): it cannot read the HTTP status code or confirm the cached body is sensitive, so a cache-HIT header is a candidate requiring confirmation. The active two-phase template is the HIGH-confidence path.
 
+Observational-template limitations (it uses the **shared simple-request path**, unlike the active two-phase executor): (1) operator `--header` custom headers **are** applied to its single probe, so an auth-bearing `--header` makes the probe authenticated and a cache-served *authenticated* response can be reported as a candidate even though anonymous clients cannot reach it; and (2) required **query parameters are not appended** (only path parameters are expanded), so query-driven endpoints are under-detected. The active two-phase check handles both — a credential-free replay via a dedicated request path, and required query parameters appended — so prefer it for header-authenticated or query-driven targets. These are further reasons the observational template is MEDIUM/candidate. Thread-safety: the cache-deception executor's request-ID tracking assumes Hadrian's current **sequential** template execution; a future move to parallel execution would need request-scoped tracking.
+
 ## Permission Format
 
 Permissions follow `<action>:<object>:<scope>` (validated in `pkg/roles/roles.go`):

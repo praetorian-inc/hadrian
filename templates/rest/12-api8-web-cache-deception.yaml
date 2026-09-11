@@ -49,6 +49,13 @@
 # Cold-cache limitation: the single unauthenticated request is OBSERVATIONAL — it
 # catches an exposure only when the cache is already warm; on a cold cache it may
 # miss. A self-priming two-phase test is a possible future enhancement.
+#
+# Simple-path limitations: this template uses the shared simple request path, so
+# operator `--header` values ARE applied to its probe (an auth-bearing header makes
+# it authenticated -> possible false positive) and required query parameters are NOT
+# appended (query-driven endpoints are under-detected). The active two-phase template
+# under examples/cache-deception/ handles both; prefer it for header-authenticated or
+# query-driven targets.
 
 id: 12-api8-web-cache-deception
 
