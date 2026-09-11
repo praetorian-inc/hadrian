@@ -310,12 +310,8 @@ func bodyLeaked(primeBody, anonBody string, cfg *templates.CacheDeception) (bool
 // authenticated content — used to reject body-equality false positives.
 func isTrivialBody(body string) bool {
 	t := strings.TrimSpace(body)
-	if len(t) < minBodyLen {
-		return true // covers "", "{}", "[]", "null", and other short blobs
-	}
-	switch t {
-	case "{}", "[]", "null":
-		return true
-	}
-	return false
+	// Trivial structural bodies ("", "{}", "[]", "null") are all shorter than
+	// minBodyLen, so the length check alone rejects them — no separate literal
+	// switch is needed.
+	return len(t) < minBodyLen
 }

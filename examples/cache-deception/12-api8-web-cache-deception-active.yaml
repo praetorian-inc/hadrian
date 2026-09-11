@@ -50,7 +50,7 @@ info:
     equality by default, or — when cache_deception.canary_field is set — the
     presence of the canary account's stored field value in the anonymous body,
     which is robust to per-request dynamic fields that would break exact equality.
-  tags: ["web-cache-deception", "cache-deception", "cwe-525", "security-misconfiguration", "owasp", "owasp-api-top10", "api8", "active", "intrusive"]
+  tags: ["web-cache-deception", "cache-deception", "cwe-525", "security-misconfiguration", "owasp-api-top10", "api8", "active", "intrusive"]
   requires_llm_triage: false
   test_pattern: "cache-deception"
 

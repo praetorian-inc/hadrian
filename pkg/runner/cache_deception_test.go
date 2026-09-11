@@ -346,7 +346,14 @@ func TestIntegration_CacheDeceptionActive_TwoPhase(t *testing.T) {
 		"a body-equality-only match must carry CANDIDATE (unconfirmed) guidance directing the operator to canary_field")
 	assert.Contains(t, leak.Description, "canary_field",
 		"the CANDIDATE description must tell the operator how to confirm the leak (set cache_deception.canary_field)")
-	assert.True(t, leak.IsVulnerability)
+	// A body-equality-only match (empty CanaryValue) is an unconfirmed CANDIDATE:
+	// a long, public, role-independent response would satisfy byte-equality too,
+	// so the finding builder sets IsVulnerability = (CanaryValue != "") and this
+	// match must report false. The canary-confirmed (IsVulnerability=true) case
+	// is the paired positive, proven in
+	// TestIntegration_CacheDeceptionActive_CanaryVsBodyEquality.
+	assert.False(t, leak.IsVulnerability,
+		"a body-equality-only match (no canary_field configured) is an unconfirmed CANDIDATE, not a confirmed vulnerability")
 	assert.Equal(t, "anonymous", leak.AttackerRole, "the finding must attribute the leak to the anonymous replay")
 	assert.NotEmpty(t, leak.VictimRole, "the finding must record which role primed the cache")
 	require.NotNil(t, leak.Evidence.AttackResponse, "finding must carry the anonymous replay as attack evidence")
@@ -420,6 +427,10 @@ func TestIntegration_CacheDeceptionActive_CanaryVsBodyEquality(t *testing.T) {
 		"canary_field mode must FLAG the same dynamic-body leak that body-equality missed")
 	assert.Equal(t, "/api/account/canary-dynamic", canaryFindings[0].Endpoint)
 	assert.Equal(t, "API8:2023", canaryFindings[0].Category)
+	// Paired positive to the body-equality-only CANDIDATE case in
+	// TestIntegration_CacheDeceptionActive_TwoPhase: a canary-confirmed match
+	// (non-empty CanaryValue) is identity-specific proof, so IsVulnerability must
+	// be true here.
 	assert.True(t, canaryFindings[0].IsVulnerability)
 
 	// (Fix 2) A canary-confirmed match (the stored canary value was found in the
@@ -434,4 +445,84 @@ func TestIntegration_CacheDeceptionActive_CanaryVsBodyEquality(t *testing.T) {
 		"a canary-confirmed match must use the template's own description, never the CANDIDATE (unconfirmed) description")
 	assert.Contains(t, canaryFindings[0].Description, "canary containment",
 		"a canary-confirmed match must carry the template's own description text")
+}
+
+// TestIntegration_CacheDeceptionActive_OptInGate proves the Fix A safety gate:
+// the ACTIVE, intrusive two-phase template no longer carries the "owasp" tag
+// (examples/cache-deception/12-api8-web-cache-deception-active.yaml), so it
+// must NOT load under the default `--category owasp`, and must ONLY load when
+// an operator explicitly opts in via `--category all` (or an explicit tag
+// match such as `api8`). It also proves the passive observational template
+// under templates/rest/ is unaffected and still loads under the default
+// owasp category.
+//
+// This exercises loadTestInputs (unexported, same package) directly rather
+// than RunTest, so it can assert on the exact set of loaded templates without
+// tripping the config.Templates "no templates matched the specified filters"
+// error path that RunTest's filterByTemplates would otherwise raise on a
+// deliberately-empty category match.
+func TestIntegration_CacheDeceptionActive_OptInGate(t *testing.T) {
+	dir := t.TempDir()
+	apiPath := filepath.Join(dir, "api.yaml")
+	// loadTestInputs only parses the spec; no HTTP requests are made against
+	// this URL, so a placeholder is sufficient.
+	require.NoError(t, os.WriteFile(apiPath,
+		[]byte(strings.Replace(cacheDeceptionActiveSpec, "%s", "http://127.0.0.1:0", 1)), 0o644))
+	rolesPath := filepath.Join(dir, "roles.yaml")
+	require.NoError(t, os.WriteFile(rolesPath, []byte(fixtureRolesConfig), 0o644))
+
+	activeTemplateID := "12-api8-web-cache-deception-active"
+
+	t.Run("default owasp category does NOT load the active template", func(t *testing.T) {
+		inputs, err := loadTestInputs(Config{
+			API: apiPath, Roles: rolesPath,
+			TemplateDir: "../../examples/cache-deception",
+			Categories:  []string{"owasp"},
+		})
+		require.NoError(t, err)
+		assert.Empty(t, inputs.tmplFiles,
+			"the ACTIVE, intrusive cache-deception template must NOT load under the default owasp category (Fix A: it no longer carries the owasp tag)")
+	})
+
+	t.Run("category all DOES load the active template", func(t *testing.T) {
+		inputs, err := loadTestInputs(Config{
+			API: apiPath, Roles: rolesPath,
+			TemplateDir: "../../examples/cache-deception",
+			Categories:  []string{"all"},
+		})
+		require.NoError(t, err)
+		require.Len(t, inputs.tmplFiles, 1,
+			"the ACTIVE template must load once an operator explicitly opts in via --category all")
+		assert.Equal(t, activeTemplateID, inputs.tmplFiles[0].ID)
+	})
+
+	t.Run("explicit api8 tag DOES load the active template", func(t *testing.T) {
+		inputs, err := loadTestInputs(Config{
+			API: apiPath, Roles: rolesPath,
+			TemplateDir: "../../examples/cache-deception",
+			Categories:  []string{"api8"},
+		})
+		require.NoError(t, err)
+		require.Len(t, inputs.tmplFiles, 1,
+			"the ACTIVE template still carries the api8 tag and must load under an explicit --category api8")
+		assert.Equal(t, activeTemplateID, inputs.tmplFiles[0].ID)
+	})
+
+	t.Run("passive observational template still loads under default owasp category", func(t *testing.T) {
+		inputs, err := loadTestInputs(Config{
+			API: apiPath, Roles: rolesPath,
+			TemplateDir: restTemplateDir,
+			Categories:  []string{"owasp"},
+		})
+		require.NoError(t, err)
+		var found bool
+		for _, tf := range inputs.tmplFiles {
+			if tf.ID == "12-api8-web-cache-deception" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found,
+			"the passive, non-intrusive observational WCD template must be unaffected by Fix A and still load under the default owasp category")
+	})
 }

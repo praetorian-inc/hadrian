@@ -306,3 +306,47 @@ func TestExecuteCacheDeception_AnonBodyTruncated_FailsClosed(t *testing.T) {
 	assert.False(t, result.Matched,
 		"must fail closed when the anonymous body is truncated, even though the (untrimmed) canary substring would otherwise indicate a leak")
 }
+
+// --- Fix E: operator custom headers must never leak onto the anonymous replay ---
+//
+// executeAnonymousReplay deliberately bypasses executePhase/applyHeaders so the
+// replay carries none of the operator's --header values (nor Authorization/
+// Cookie). This test locks that structural invariant by inspecting every
+// request MockHTTPClient actually captured, proving the prime phases DO carry
+// the operator header (and auth) while the replay carries NEITHER.
+
+func TestExecuteCacheDeception_OperatorHeadersStrippedFromAnonymousReplay(t *testing.T) {
+	primeResp1 := newMockResponse(200, `{"email":"victim@example.com"}`)
+	primeResp2 := newMockResponse(200, `{"email":"victim@example.com"}`)
+	anonResp := newMockResponse(200, `{"email":"victim@example.com"}`)
+	anonResp.Header.Set("Cf-Cache-Status", "HIT")
+
+	client := &MockHTTPClient{responses: []*http.Response{primeResp1, primeResp2, anonResp}}
+	customHeaders := map[string]string{"X-Operator": "secret"}
+	executor := NewCacheDeceptionExecutor(client, customHeaders)
+
+	tmpl := &templates.Template{ID: "t-headers", CacheDeception: &templates.CacheDeception{PrimeRepeat: 2}}
+	authInfos := makeAuthInfos("", "victim-token")
+
+	result, err := executor.ExecuteCacheDeception(context.Background(), tmpl, "/api/account/statement", "victim", authInfos, "http://example.test")
+	require.NoError(t, err)
+	assert.True(t, result.Matched, "sanity check: this fixture is a genuine cache-HIT body-equality leak")
+
+	require.Len(t, client.requests, 3, "expected exactly 2 authenticated prime requests followed by 1 anonymous replay")
+	primeReqs := client.requests[:2]
+	replayReq := client.requests[2]
+
+	for i, req := range primeReqs {
+		assert.Equal(t, "secret", req.Header.Get("X-Operator"),
+			"prime request %d must carry the operator's custom header (--header)", i)
+		assert.Equal(t, "Bearer victim-token", req.Header.Get("Authorization"),
+			"prime request %d must carry the victim's authentication", i)
+	}
+
+	assert.Empty(t, replayReq.Header.Get("X-Operator"),
+		"the anonymous replay must NOT carry the operator's custom header — it must be structurally unauthenticated/unattributed")
+	assert.Empty(t, replayReq.Header.Get("Authorization"),
+		"the anonymous replay must NOT carry an Authorization header")
+	assert.Empty(t, replayReq.Header.Get("Cookie"),
+		"the anonymous replay must NOT carry a Cookie header")
+}

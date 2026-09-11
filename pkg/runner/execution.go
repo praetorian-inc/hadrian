@@ -413,6 +413,18 @@ func executeCacheDeceptionTemplate(
 		// confirm with canary_field. The detection gate (2xx + cache-HIT + leak
 		// proof) is unchanged; only the emitted severity/description differ.
 		severity := model.Severity(tmpl.Info.Severity)
+		if tmpl.Info.Severity == "" {
+			// Defensive fallback, mirroring buildGRPCFinding: our cache-deception
+			// templates always set info.severity, so an empty value should never
+			// reach here — default to MEDIUM rather than emitting an empty severity.
+			severity = model.SeverityMedium
+		}
+		// A canary-confirmed match (non-empty CanaryValue) is identity-specific
+		// proof — a confirmed vulnerability. A body-equality-only match (empty
+		// CanaryValue) is an unconfirmed CANDIDATE (a long PUBLIC, role-independent
+		// response satisfies byte-equality too), so it must NOT surface as a
+		// confirmed finding in report counts / exit-code gating.
+		isVulnerability := result.CanaryValue != ""
 		description := tmpl.Info.Description
 		if result.CanaryValue == "" {
 			severity = model.SeverityMedium
@@ -434,7 +446,7 @@ func executeCacheDeceptionTemplate(
 			Method:          op.Method,
 			AttackerRole:    "anonymous",
 			VictimRole:      primeRoleName,
-			IsVulnerability: true,
+			IsVulnerability: isVulnerability,
 			Timestamp:       time.Now(),
 		}
 		if result.AnonResponse != nil {
