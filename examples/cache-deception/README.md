@@ -38,12 +38,12 @@ cost of being intrusive.
   Cache-key-parity caveat: if a required **non-auth** header is needed for the CDN
   to key/serve the cache entry, dropping it on the replay can change the cache key
   and cause a **false negative**.
-- **A query-parameter API key is not stripped on the replay.** The auth-config
-  credential is already absent from the anonymous replay (its role key is not in
-  `authInfos`), but if the victim role authenticates via an api-key in the URL
-  **query**, priming keys the cache entry on `/path?api_key=…` while the replay
-  hits the bare `/path` — a different cache key, so the test can silently
-  **under-detect** (false negative) for query-based api-key targets.
+- **A query-parameter API key is omitted from the replay.** `buildCacheDeceptionPath`
+  drops the victim role's api-key query parameter when its auth location is `query`,
+  and `applyHeaders` adds the real key only to the authenticated prime — so the
+  anonymous replay stays correctly key-free. Priming still keys the cache entry on
+  `/path?api_key=…` while the replay hits the bare `/path`, a different cache key, so
+  the test can silently **under-detect** (false negative) for query-based api-key targets.
 
 ## Capability used
 
