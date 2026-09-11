@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,6 +29,15 @@ func executeTemplate(
 	// Check if this is a mutation template - route to MutationExecutor
 	if tmpl.Template != nil && tmpl.Template.Info.TestPattern == "mutation" {
 		return executeMutationTemplate(ctx, mutationExecutor, tmpl, op, rolesCfg, authCfg, baseURL)
+	}
+
+	// Check if this is a cache-deception template - route to CacheDeceptionExecutor.
+	// The executor is constructed inline by embedding the already-wired
+	// mutationExecutor (its MutationExecutor field is exported), so no new
+	// parameter is threaded through the call chain and no test call site changes.
+	if tmpl.Template != nil && tmpl.Template.Info.TestPattern == "cache-deception" {
+		cacheExecutor := &orchestrator.CacheDeceptionExecutor{MutationExecutor: mutationExecutor}
+		return executeCacheDeceptionTemplate(ctx, cacheExecutor, tmpl, op, rolesCfg, authCfg, baseURL)
 	}
 
 	var findings []*model.Finding
@@ -323,6 +333,150 @@ func executeMutationTemplate(
 	return findings, nil
 }
 
+// executeCacheDeceptionTemplate runs the two-phase self-priming Web Cache
+// Deception test for one operation. The replay attacker is always anonymous; the
+// priming identity is the EXPLICIT cache_deception.prime_role — a self-scoped
+// canary account named by the template. The role is never guessed: if prime_role
+// is unset or not authenticatable the operation is skipped, so a privileged
+// account is never used to write privileged data into a shared cache.
+func executeCacheDeceptionTemplate(
+	ctx context.Context,
+	cacheExecutor *orchestrator.CacheDeceptionExecutor,
+	tmpl *templates.CompiledTemplate,
+	op *model.Operation,
+	rolesCfg *roles.RoleConfig,
+	authCfg *auth.AuthConfig,
+	baseURL string,
+) ([]*model.Finding, error) {
+	var findings []*model.Finding
+
+	if authCfg == nil {
+		log.Warn("template %s (cache-deception) requires auth config for priming; skipping", tmpl.ID)
+		return findings, nil
+	}
+
+	// Only GET responses are keyed and cached by CDNs. endpoint_selector should
+	// already restrict to GET, but enforce it here so a non-GET is never primed or
+	// recorded as a cache-deception finding.
+	if !strings.EqualFold(op.Method, "GET") {
+		log.Warn("template %s (cache-deception): operation %s %s is not a GET; skipping (only GET responses are CDN-cacheable)",
+			tmpl.ID, op.Method, op.Path)
+		return findings, nil
+	}
+
+	// Resolve the explicit prime_role. Never guess a role: without a named,
+	// authenticatable self-scoped canary account there is nothing safe to prime
+	// with, so skip.
+	cfg := tmpl.Template.CacheDeception
+	if cfg == nil || strings.TrimSpace(cfg.PrimeRole) == "" {
+		log.Warn("template %s (cache-deception): cache_deception.prime_role is not set; skipping — "+
+			"priming requires an explicitly named self-scoped canary role and is never guessed", tmpl.ID)
+		return findings, nil
+	}
+	primeRoleName := cfg.PrimeRole
+	victimInfo, err := authCfg.GetAuthInfo(primeRoleName)
+	if err != nil || victimInfo == nil {
+		log.Warn("template %s (cache-deception): prime_role %q is not authenticatable (absent from auth config or a no-auth role); skipping",
+			tmpl.ID, primeRoleName)
+		return findings, nil
+	}
+
+	// Resolve a concrete, brace-free path: URL-escape path params and append the
+	// operation's required query params so both phases hit the same cache key.
+	// victimInfo is passed so a QUERY-located auth api-key is NOT copied onto the
+	// shared probe path — the anonymous replay must carry no auth key (see
+	// buildCacheDeceptionPath).
+	concretePath := buildCacheDeceptionPath(op, victimInfo)
+
+	authInfos := map[string]*auth.AuthInfo{"victim": victimInfo}
+	cacheExecutor.ClearTracker()
+
+	result, err := cacheExecutor.ExecuteCacheDeception(ctx, tmpl.Template, concretePath, "victim", authInfos, baseURL)
+	if err != nil {
+		if ctx.Err() != nil {
+			return findings, ctx.Err()
+		}
+		log.Warn("cache-deception test failed [template=%s, prime_role=%s, endpoint=%s %s]: %v",
+			tmpl.ID, primeRoleName, op.Method, op.Path, err)
+		return findings, nil
+	}
+
+	if result.Matched {
+		// Distinguish the two proof modes the detector can match on. A
+		// canary-confirmed match (non-empty CanaryValue) found the self-scoped
+		// canary value in the anonymous body — identity-specific proof, so keep
+		// the template's severity (HIGH). A body-equality-only match (empty
+		// CanaryValue) proved only that the authenticated and anonymous bodies are
+		// byte-for-byte equal; a long PUBLIC, role-independent response also
+		// satisfies equality, so it does not by itself prove identity-specific
+		// disclosure. Downgrade that to MEDIUM and describe it as a CANDIDATE to
+		// confirm with canary_field. The detection gate (2xx + cache-HIT + leak
+		// proof) is unchanged; only the emitted severity/description differ.
+		severity := model.Severity(tmpl.Info.Severity)
+		if tmpl.Info.Severity == "" {
+			// Defensive fallback, mirroring buildGRPCFinding: our cache-deception
+			// templates always set info.severity, so an empty value should never
+			// reach here — default to MEDIUM rather than emitting an empty severity.
+			severity = model.SeverityMedium
+		}
+		// A canary-confirmed match (non-empty CanaryValue) is identity-specific
+		// proof — a confirmed vulnerability. A body-equality-only match (empty
+		// CanaryValue) is an unconfirmed CANDIDATE (a long PUBLIC, role-independent
+		// response satisfies byte-equality too), so it must NOT surface as a
+		// confirmed finding in report counts / exit-code gating.
+		isVulnerability := result.CanaryValue != ""
+		description := tmpl.Info.Description
+		if result.CanaryValue == "" {
+			severity = model.SeverityMedium
+			description = "CANDIDATE (unconfirmed) Web Cache Deception: the authenticated (prime) and " +
+				"anonymous replay bodies are byte-for-byte equal and the anonymous response was a 2xx cache HIT. " +
+				"Byte-equality alone does not prove the body is identity-specific — a long PUBLIC, role-independent " +
+				"cached response would match too — so this is a candidate, not confirmed disclosure. Set " +
+				"cache_deception.canary_field to a unique, self-scoped value (e.g. the canary account's email or an " +
+				"account token) and re-run to confirm identity-specific disclosure."
+		}
+		finding := &model.Finding{
+			ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", primeRoleName),
+			TemplateID:      tmpl.ID,
+			Category:        tmpl.Info.Category,
+			Name:            tmpl.Info.Name,
+			Description:     description,
+			Severity:        severity,
+			Endpoint:        op.Path,
+			Method:          op.Method,
+			AttackerRole:    "anonymous",
+			VictimRole:      primeRoleName,
+			IsVulnerability: isVulnerability,
+			Timestamp:       time.Now(),
+		}
+		if result.AnonResponse != nil {
+			finding.Evidence = model.Evidence{
+				Response:       *result.AnonResponse,
+				AttackResponse: result.AnonResponse,
+			}
+		}
+		if result.PrimeResponse != nil {
+			finding.Evidence.SetupResponse = result.PrimeResponse
+		}
+		// Represent the anonymous replay request: a GET to the same URL with no
+		// auth and no operator custom headers (both suppressed on the replay).
+		finding.Evidence.Request = model.HTTPRequest{
+			Method:  op.Method,
+			URL:     strings.TrimSuffix(baseURL, "/") + concretePath,
+			Headers: map[string]string{},
+		}
+		if result.RequestIDs != nil {
+			var ids []string
+			ids = append(ids, result.RequestIDs.Setup...)
+			ids = append(ids, result.RequestIDs.Attack...)
+			finding.RequestIDs = ids
+		}
+		findings = append(findings, finding)
+	}
+
+	return findings, nil
+}
+
 // buildVariables creates the template substitution variables map from an operation and base URL.
 func buildVariables(op *model.Operation, baseURL string) map[string]string {
 	variables := map[string]string{
@@ -336,4 +490,62 @@ func buildVariables(op *model.Operation, baseURL string) map[string]string {
 		}
 	}
 	return variables
+}
+
+// buildCacheDeceptionPath resolves op.Path into a concrete, brace-free URL path
+// for the cache-deception probe (both phases use it, so both hit the same cache
+// key). Path-parameter values are URL-path-escaped — a raw '/', '?', or space
+// would otherwise split the path or start a query string — and every REQUIRED
+// query parameter declared on the operation is appended (URL-query-escaped) so a
+// query-driven endpoint is actually reached rather than 400ing or resolving a
+// different resource. Values use the spec example when present, else "1".
+//
+// primeAuth is the prime role's resolved auth. When it authenticates via a
+// QUERY-located api-key, that key's parameter is EXCLUDED from the probe path:
+// copying it here would (a) pollute the anonymous replay URL — which must carry
+// no auth key at all — with the auth parameter name and its placeholder value,
+// and (b) collide on the prime with the real key that executePhase/applyHeaders
+// injects. The prime still receives its real query key via applyHeaders, so the
+// prime is authenticated and the replay stays anonymous. Consequence: for
+// query-key auth the prime and replay cache keys differ (the key rides in the
+// prime's URL, absent from the replay's), so query-key-authenticated endpoints
+// are a documented false negative for the two-phase check.
+func buildCacheDeceptionPath(op *model.Operation, primeAuth *auth.AuthInfo) string {
+	path := op.Path
+	for _, p := range op.PathParams {
+		val := "1"
+		if p.Example != nil {
+			val = fmt.Sprintf("%v", p.Example)
+		}
+		path = strings.ReplaceAll(path, "{"+p.Name+"}", url.PathEscape(val))
+	}
+
+	// Auth key to exclude when the prime authenticates via a query api-key.
+	var authQueryKey string
+	if primeAuth != nil && primeAuth.Location == "query" {
+		authQueryKey = primeAuth.KeyName
+	}
+
+	q := url.Values{}
+	for _, p := range op.QueryParams {
+		if !p.Required {
+			continue
+		}
+		if authQueryKey != "" && p.Name == authQueryKey {
+			continue // never leak the auth query key onto the anonymous replay
+		}
+		val := "1"
+		if p.Example != nil {
+			val = fmt.Sprintf("%v", p.Example)
+		}
+		q.Set(p.Name, val)
+	}
+	if enc := q.Encode(); enc != "" {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		path += sep + enc
+	}
+	return path
 }

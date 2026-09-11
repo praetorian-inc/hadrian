@@ -1,0 +1,146 @@
+# Template: Web Cache Deception - Cacheable Authenticated Response Served by CDN
+# Detects a CDN/edge cache that stores an AUTHENTICATED response and then serves
+# it to UNAUTHENTICATED clients (Web Cache Deception / CWE-525).
+#
+# What it does: selects auth-required GET endpoints, sends ONE UNAUTHENTICATED
+# GET, and flags a response that carries an EXPLICIT CDN cache-HIT status header
+# (`CF-Cache-Status: HIT` or `X-Cache: ...HIT`). Those headers are EVIDENCE the
+# response may have been served from a shared cache rather than freshly
+# authorized at the origin — a CANDIDATE for Web Cache Deception, not proof. To
+# confirm, verify the shared cache key crosses identities (an unauthenticated
+# client receives the same cached entry an authenticated one would) and that the
+# cached body actually exposes authenticated data. The active two-phase template
+# (examples/cache-deception/) establishes both and is the HIGH-confidence path.
+#
+# --- Detection semantics (correctness-critical) -----------------------------
+# The REST matcher engine OR-combines matchers: evaluateMatchers() returns true
+# on the FIRST matching matcher (pkg/templates/execute.go:664). It has no
+# request-level `condition`, `dsl` is unimplemented (execute.go default:continue,
+# ~line 660), and the `detection` block below is NOT evaluated for REST — only
+# gRPC calls evaluateDetection (pkg/templates/execute_grpc.go:180). REST match is
+# driven solely by evaluateMatchers.
+#
+# The REST matcher can read only response HEADERS and BODY, never the HTTP status
+# code: it is absent from every matcher content string (getContent/
+# buildHeaderString, execute.go:730-748). So this template cannot AND a status
+# check with the header check, and must NOT add a separate `status` matcher —
+# OR-combination would make a plain uncached 200 fire (that is API2 broken auth,
+# out of scope here). We use ONE regex matcher over the response headers
+# (`condition: or`) across the two explicit cache-HIT signals only.
+#
+# The broad `Age` and `X-Iinfo` arms were REMOVED to cut false positives: a
+# positive `Age` fires on ANY cached response regardless of status or vendor
+# (cached errors/redirects/non-sensitive 200s), and `X-Iinfo` presence does not
+# imply a cache hit (Imperva sends it on origin responses too).
+#
+# Residual limitation (honest): even an explicit cache-HIT header can accompany a
+# cached non-2xx or non-sensitive response (CDNs cache and serve HIT on 3xx
+# redirects and 4xx/5xx errors; RFC 9111 applies to any cached response). Because
+# the matcher cannot read status or confirm the cached body is sensitive
+# authenticated content, a match is a CANDIDATE that REQUIRES confirmation, not a
+# proven vulnerability.
+#
+# On confirmation: `requires_llm_triage: true` (below) declares triage INTENT and
+# is kept for consistency with other templates, but in the current engine triage
+# only ANNOTATES a finding (confidence / IsVulnerability) and does NOT drop it,
+# and the library `RunTest` path skips triage entirely. Confirmation is therefore
+# a human/triage REVIEW step, not an automatic in-engine validity gate.
+#
+# Cold-cache limitation: the single unauthenticated request is OBSERVATIONAL — it
+# catches an exposure only when the cache is already warm; on a cold cache it may
+# miss. A self-priming two-phase test is a possible future enhancement.
+#
+# Simple-path limitations: this template uses the shared simple request path, so
+# operator `--header` values ARE applied to its probe (an auth-bearing header makes
+# it authenticated -> possible false positive) and required query parameters are NOT
+# appended (query-driven endpoints are under-detected). The active two-phase template
+# under examples/cache-deception/ handles both; prefer it for header-authenticated or
+# query-driven targets.
+
+id: 12-api8-web-cache-deception
+
+info:
+  name: "Web Cache Deception - Cacheable Authenticated Response Served by CDN"
+  category: "API8:2023"
+  # MEDIUM: this observational check cannot read the HTTP status code or confirm
+  # the cached body is sensitive authenticated content, so a cache-HIT header is a
+  # CANDIDATE requiring confirmation, not a proven leak. The active two-phase
+  # template (examples/cache-deception/) is the HIGH-confidence path.
+  severity: "MEDIUM"
+  author: "hadrian"
+  description: |
+    Detects candidate Web Cache Deception (CWE-525): a CDN or edge cache that may
+    be storing an authenticated API response and serving it to unauthenticated
+    clients. The template selects auth-required GET endpoints, sends one
+    UNAUTHENTICATED GET, and flags a response carrying an EXPLICIT CDN cache-HIT
+    status header (CF-Cache-Status: HIT or X-Cache: ...HIT). Those headers are
+    EVIDENCE the response may have been served from a shared cache rather than
+    freshly authorized at the origin. To confirm the exposure, verify the shared
+    cache key crosses identities and that the cached body exposes authenticated
+    data — a cache-HIT header alone is a candidate, not proof, which is why this
+    check is reported at MEDIUM severity and the active two-phase template is the
+    HIGH-confidence path.
+
+    Detection scope: the REST matcher OR-combines matchers (execute.go:664),
+    has no dsl for REST, does not evaluate the detection block (gRPC-only), and
+    cannot read the HTTP status code — it is absent from matcher content
+    (execute.go:730-748). The matcher reads response headers/body only. The
+    broad Age and X-Iinfo signals were removed to cut false positives (Age fires
+    on any cached response; X-Iinfo presence does not imply a cache hit).
+
+    Residual limitation: even an explicit cache-HIT header can accompany a cached
+    non-2xx or non-sensitive response, and the template cannot confirm in-engine
+    that the cached body is sensitive authenticated content — so a match is a
+    CANDIDATE that requires confirmation. requires_llm_triage: true declares
+    triage intent, but in the current engine triage ANNOTATES findings
+    (confidence / IsVulnerability) and does not drop them, and library RunTest
+    skips triage — so confirmation is a human/triage review step, not an
+    automatic gate. The single unauthenticated request is observational: it
+    catches an already-cache-warm exposure and may miss on a cold cache (a
+    self-priming two-phase test is a possible future enhancement).
+  tags: ["web-cache-deception", "cache-deception", "cwe-525", "security-misconfiguration", "owasp", "owasp-api-top10", "api8"]
+  requires_llm_triage: true
+  test_pattern: "simple"
+
+# Select auth-required GET endpoints. GET is the method CDNs key and cache.
+endpoint_selector:
+  requires_auth: true
+  methods: ["GET"]
+
+# No attacker role (unauthenticated request); victim is any authenticated user.
+role_selector:
+  attacker_permission_level: "none"
+  victim_permission_level: "all"
+
+# Single UNAUTHENTICATED GET. Fire only when the response carries a CDN cache-HIT
+# header. A single regex matcher (part: header, condition: or) is used because
+# the engine OR-combines matchers; a separate status matcher would false-fire on
+# a plain uncached 200. See the header comment for the full code citation.
+http:
+  - method: "GET"
+    path: "{{operation.path}}"
+    headers:
+      Content-Type: "application/json"
+    # No Authorization header provided
+    matchers:
+      - type: regex
+        part: header
+        condition: or
+        regex:
+          - '(?im)^cf-cache-status:\s*hit'      # Cloudflare cache hit
+          - '(?im)^x-cache:.*hit\b'             # CloudFront / Varnish / Fastly / Akamai TCP_HIT
+
+# Detection logic (advisory for REST — the matcher above drives the match; this
+# block documents intent and is consumed by triage/reporting).
+detection:
+  success_indicators:
+    - type: status_code
+      status_code: 200
+    - type: regex_match
+      pattern: '(?im)^(cf-cache-status:\s*hit|x-cache:.*hit\b)'
+  failure_indicators:
+    - type: status_code
+      status_code: 401
+    - type: status_code
+      status_code: 403
+  vulnerability_pattern: "cacheable_authenticated_response_served_unauthenticated"
