@@ -383,7 +383,10 @@ func executeCacheDeceptionTemplate(
 
 	// Resolve a concrete, brace-free path: URL-escape path params and append the
 	// operation's required query params so both phases hit the same cache key.
-	concretePath := buildCacheDeceptionPath(op)
+	// victimInfo is passed so a QUERY-located auth api-key is NOT copied onto the
+	// shared probe path — the anonymous replay must carry no auth key (see
+	// buildCacheDeceptionPath).
+	concretePath := buildCacheDeceptionPath(op, victimInfo)
 
 	authInfos := map[string]*auth.AuthInfo{"victim": victimInfo}
 	cacheExecutor.ClearTracker()
@@ -399,13 +402,34 @@ func executeCacheDeceptionTemplate(
 	}
 
 	if result.Matched {
+		// Distinguish the two proof modes the detector can match on. A
+		// canary-confirmed match (non-empty CanaryValue) found the self-scoped
+		// canary value in the anonymous body — identity-specific proof, so keep
+		// the template's severity (HIGH). A body-equality-only match (empty
+		// CanaryValue) proved only that the authenticated and anonymous bodies are
+		// byte-for-byte equal; a long PUBLIC, role-independent response also
+		// satisfies equality, so it does not by itself prove identity-specific
+		// disclosure. Downgrade that to MEDIUM and describe it as a CANDIDATE to
+		// confirm with canary_field. The detection gate (2xx + cache-HIT + leak
+		// proof) is unchanged; only the emitted severity/description differ.
+		severity := model.Severity(tmpl.Info.Severity)
+		description := tmpl.Info.Description
+		if result.CanaryValue == "" {
+			severity = model.SeverityMedium
+			description = "CANDIDATE (unconfirmed) Web Cache Deception: the authenticated (prime) and " +
+				"anonymous replay bodies are byte-for-byte equal and the anonymous response was a 2xx cache HIT. " +
+				"Byte-equality alone does not prove the body is identity-specific — a long PUBLIC, role-independent " +
+				"cached response would match too — so this is a candidate, not confirmed disclosure. Set " +
+				"cache_deception.canary_field to a unique, self-scoped value (e.g. the canary account's email or an " +
+				"account token) and re-run to confirm identity-specific disclosure."
+		}
 		finding := &model.Finding{
 			ID:              fmt.Sprintf("%s-%s-%s-%s-%s", tmpl.ID, op.Method, strings.ReplaceAll(op.Path, "/", "-"), "anonymous", primeRoleName),
 			TemplateID:      tmpl.ID,
 			Category:        tmpl.Info.Category,
 			Name:            tmpl.Info.Name,
-			Description:     tmpl.Info.Description,
-			Severity:        model.Severity(tmpl.Info.Severity),
+			Description:     description,
+			Severity:        severity,
 			Endpoint:        op.Path,
 			Method:          op.Method,
 			AttackerRole:    "anonymous",
@@ -463,7 +487,18 @@ func buildVariables(op *model.Operation, baseURL string) map[string]string {
 // query parameter declared on the operation is appended (URL-query-escaped) so a
 // query-driven endpoint is actually reached rather than 400ing or resolving a
 // different resource. Values use the spec example when present, else "1".
-func buildCacheDeceptionPath(op *model.Operation) string {
+//
+// primeAuth is the prime role's resolved auth. When it authenticates via a
+// QUERY-located api-key, that key's parameter is EXCLUDED from the probe path:
+// copying it here would (a) pollute the anonymous replay URL — which must carry
+// no auth key at all — with the auth parameter name and its placeholder value,
+// and (b) collide on the prime with the real key that executePhase/applyHeaders
+// injects. The prime still receives its real query key via applyHeaders, so the
+// prime is authenticated and the replay stays anonymous. Consequence: for
+// query-key auth the prime and replay cache keys differ (the key rides in the
+// prime's URL, absent from the replay's), so query-key-authenticated endpoints
+// are a documented false negative for the two-phase check.
+func buildCacheDeceptionPath(op *model.Operation, primeAuth *auth.AuthInfo) string {
 	path := op.Path
 	for _, p := range op.PathParams {
 		val := "1"
@@ -473,10 +508,19 @@ func buildCacheDeceptionPath(op *model.Operation) string {
 		path = strings.ReplaceAll(path, "{"+p.Name+"}", url.PathEscape(val))
 	}
 
+	// Auth key to exclude when the prime authenticates via a query api-key.
+	var authQueryKey string
+	if primeAuth != nil && primeAuth.Location == "query" {
+		authQueryKey = primeAuth.KeyName
+	}
+
 	q := url.Values{}
 	for _, p := range op.QueryParams {
 		if !p.Required {
 			continue
+		}
+		if authQueryKey != "" && p.Name == authQueryKey {
+			continue // never leak the auth query key onto the anonymous replay
 		}
 		val := "1"
 		if p.Example != nil {

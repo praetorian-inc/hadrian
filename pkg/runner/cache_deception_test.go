@@ -334,7 +334,18 @@ func TestIntegration_CacheDeceptionActive_TwoPhase(t *testing.T) {
 	leak, ok := byEndpoint["/api/account/statement"]
 	require.True(t, ok, "Case A (genuine leak, cache-HIT header, matching body) must be flagged; got %v", endpoints)
 	assert.Equal(t, "API8:2023", leak.Category)
-	assert.Equal(t, model.Severity("HIGH"), leak.Severity)
+	// The shipped active example (examples/cache-deception/12-api8-web-cache-deception-active.yaml)
+	// ships with canary_field: "" (body-equality proof mode only), so per Fix 2 this
+	// match is a body-equality-only ("CANDIDATE") match, not a canary-confirmed one —
+	// it must be downgraded to MEDIUM and carry CANDIDATE guidance, never the
+	// template's own HIGH/description. The canary-confirmed HIGH case is proven
+	// separately in TestIntegration_CacheDeceptionActive_CanaryVsBodyEquality.
+	assert.Equal(t, model.SeverityMedium, leak.Severity,
+		"a body-equality-only match (no canary_field configured) must be downgraded to MEDIUM, not the template's HIGH")
+	assert.Contains(t, leak.Description, "CANDIDATE",
+		"a body-equality-only match must carry CANDIDATE (unconfirmed) guidance directing the operator to canary_field")
+	assert.Contains(t, leak.Description, "canary_field",
+		"the CANDIDATE description must tell the operator how to confirm the leak (set cache_deception.canary_field)")
 	assert.True(t, leak.IsVulnerability)
 	assert.Equal(t, "anonymous", leak.AttackerRole, "the finding must attribute the leak to the anonymous replay")
 	assert.NotEmpty(t, leak.VictimRole, "the finding must record which role primed the cache")
@@ -410,4 +421,17 @@ func TestIntegration_CacheDeceptionActive_CanaryVsBodyEquality(t *testing.T) {
 	assert.Equal(t, "/api/account/canary-dynamic", canaryFindings[0].Endpoint)
 	assert.Equal(t, "API8:2023", canaryFindings[0].Category)
 	assert.True(t, canaryFindings[0].IsVulnerability)
+
+	// (Fix 2) A canary-confirmed match (the stored canary value was found in the
+	// anonymous body — identity-specific proof) must keep the TEMPLATE's own
+	// severity (HIGH here) and its own (non-CANDIDATE) description, proving the
+	// two confidence tiers are distinct: this canary-confirmed case is HIGH,
+	// while the body-equality-only case in TestIntegration_CacheDeceptionActive_TwoPhase
+	// is downgraded to MEDIUM with CANDIDATE guidance.
+	assert.Equal(t, model.SeverityHigh, canaryFindings[0].Severity,
+		"a canary-confirmed match must keep the template's own severity (HIGH), not the body-equality-only downgrade")
+	assert.NotContains(t, canaryFindings[0].Description, "CANDIDATE",
+		"a canary-confirmed match must use the template's own description, never the CANDIDATE (unconfirmed) description")
+	assert.Contains(t, canaryFindings[0].Description, "canary containment",
+		"a canary-confirmed match must carry the template's own description text")
 }
