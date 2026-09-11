@@ -73,6 +73,23 @@ make build
 
 ## How to Test Your API with Hadrian
 
+### Subcommands
+
+<!-- BEGIN generated: cli-subcommands -->
+Hadrian organizes its functionality into these focused subcommands:
+
+```bash
+hadrian parse   # Parse API specification and show operations
+hadrian test    # Run security tests against an API
+hadrian version # Show Hadrian version
+```
+<!-- END generated: cli-subcommands -->
+
+<!-- BEGIN generated: cli-aliases -->
+The full reference — every subcommand, alias and flag, including the ones hidden from `--help` — is generated into [docs/CLI.md](docs/CLI.md).
+<!-- END generated: cli-aliases -->
+
+
 ### REST API Security Testing
 
 ```bash

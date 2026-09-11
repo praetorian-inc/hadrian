@@ -1,0 +1,575 @@
+{
+  "schemaVersion": 1,
+  "surfaceHash": "sha256:bca3ae7706898aae6369cf1a6b9110fa09318903017b177ad26d37db4da425e0",
+  "commands": [
+    {
+      "path": "hadrian",
+      "use": "hadrian",
+      "short": "Hadrian - API Security Testing Framework",
+      "runnable": false,
+      "flags": [
+        {
+          "name": "no-banner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Suppress the startup banner"
+        }
+      ]
+    },
+    {
+      "path": "hadrian parse",
+      "use": "parse <api-spec-file>",
+      "short": "Parse API specification and show operations",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "no-banner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Suppress the startup banner",
+          "inherited": true
+        }
+      ]
+    },
+    {
+      "path": "hadrian test",
+      "use": "test",
+      "short": "Run security tests against an API",
+      "runnable": false,
+      "flags": [
+        {
+          "name": "no-banner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Suppress the startup banner",
+          "inherited": true
+        }
+      ]
+    },
+    {
+      "path": "hadrian test graphql",
+      "use": "graphql",
+      "short": "Run security tests against a GraphQL API",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "auth",
+          "type": "string",
+          "usage": "Authentication configuration YAML file"
+        },
+        {
+          "name": "batch-size",
+          "type": "int",
+          "default": "100",
+          "usage": "Number of queries in batch attack tests"
+        },
+        {
+          "name": "ca-cert",
+          "type": "string",
+          "usage": "CA certificate for proxy"
+        },
+        {
+          "name": "complexity-limit",
+          "type": "int",
+          "default": "1000",
+          "usage": "Maximum complexity score for DoS testing"
+        },
+        {
+          "name": "depth-limit",
+          "type": "int",
+          "default": "10",
+          "usage": "Maximum query depth for DoS testing"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "Dry run (don't execute tests)"
+        },
+        {
+          "name": "endpoint",
+          "type": "string",
+          "default": "/graphql",
+          "usage": "GraphQL endpoint path"
+        },
+        {
+          "name": "header",
+          "shorthand": "H",
+          "type": "stringArray",
+          "default": "[]",
+          "usage": "Custom HTTP header (format: 'Key: Value', can specify multiple)"
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "Skip TLS verification"
+        },
+        {
+          "name": "llm-context",
+          "type": "string",
+          "usage": "Additional context for LLM triage"
+        },
+        {
+          "name": "llm-host",
+          "type": "string",
+          "usage": "LLM service host for finding triage"
+        },
+        {
+          "name": "llm-model",
+          "type": "string",
+          "usage": "LLM model name for triage"
+        },
+        {
+          "name": "llm-provider",
+          "type": "string",
+          "default": "ollama",
+          "usage": "LLM provider for triage: ollama, openai, anthropic"
+        },
+        {
+          "name": "llm-timeout",
+          "type": "int",
+          "default": "180",
+          "usage": "LLM request timeout (seconds)"
+        },
+        {
+          "name": "no-banner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Suppress the startup banner",
+          "inherited": true
+        },
+        {
+          "name": "output",
+          "type": "string",
+          "default": "terminal",
+          "usage": "Output format: terminal, json, markdown, sarif"
+        },
+        {
+          "name": "output-file",
+          "type": "string",
+          "usage": "Output file path"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP/HTTPS proxy URL"
+        },
+        {
+          "name": "rate-limit",
+          "type": "float64",
+          "default": "5",
+          "usage": "Rate limit (req/s)"
+        },
+        {
+          "name": "rate-limit-backoff",
+          "type": "string",
+          "default": "exponential",
+          "usage": "Rate limit backoff strategy: exponential, fixed"
+        },
+        {
+          "name": "rate-limit-max-retries",
+          "type": "int",
+          "default": "5",
+          "usage": "Maximum retry attempts on rate limit"
+        },
+        {
+          "name": "rate-limit-max-wait",
+          "type": "duration",
+          "default": "1m0s",
+          "usage": "Maximum backoff wait time"
+        },
+        {
+          "name": "rate-limit-status-codes",
+          "type": "intSlice",
+          "default": "[429,503]",
+          "usage": "HTTP status codes that trigger rate limiting"
+        },
+        {
+          "name": "request-ids-limit",
+          "type": "int",
+          "default": "1",
+          "usage": "Limit request IDs in output (0 = show all)"
+        },
+        {
+          "name": "roles",
+          "type": "string",
+          "usage": "Roles and permissions YAML file"
+        },
+        {
+          "name": "schema",
+          "type": "string",
+          "usage": "GraphQL SDL schema file (uses introspection if not provided)"
+        },
+        {
+          "name": "skip-builtin-checks",
+          "type": "bool",
+          "default": "false",
+          "usage": "Skip built-in security checks (introspection, depth limit, batching)"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "usage": "Target base URL (e.g., https://api.example.com)"
+        },
+        {
+          "name": "template",
+          "type": "stringSlice",
+          "default": "[]",
+          "usage": "Filter templates by ID (can specify multiple)"
+        },
+        {
+          "name": "template-dir",
+          "type": "string",
+          "usage": "GraphQL templates directory (default: $HADRIAN_TEMPLATES or ./templates/graphql)"
+        },
+        {
+          "name": "timeout",
+          "type": "int",
+          "default": "30",
+          "usage": "Request timeout in seconds"
+        },
+        {
+          "name": "verbose",
+          "type": "bool",
+          "default": "false",
+          "usage": "Verbose output"
+        }
+      ]
+    },
+    {
+      "path": "hadrian test grpc",
+      "use": "grpc",
+      "short": "Run security tests against a gRPC API",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "auth",
+          "type": "string",
+          "usage": "Authentication configuration YAML file"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "Dry run (don't execute tests)"
+        },
+        {
+          "name": "header",
+          "shorthand": "H",
+          "type": "stringArray",
+          "default": "[]",
+          "usage": "Custom HTTP header (format: 'Key: Value', can specify multiple)"
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "Skip TLS verification"
+        },
+        {
+          "name": "no-banner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Suppress the startup banner",
+          "inherited": true
+        },
+        {
+          "name": "output",
+          "type": "string",
+          "default": "terminal",
+          "usage": "Output format: terminal, json, markdown, sarif"
+        },
+        {
+          "name": "output-file",
+          "type": "string",
+          "usage": "Output file path"
+        },
+        {
+          "name": "plaintext",
+          "type": "bool",
+          "default": "false",
+          "usage": "Use plaintext connection (no TLS)"
+        },
+        {
+          "name": "proto",
+          "type": "string",
+          "usage": "Proto file path (uses reflection if not provided)"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP/HTTPS proxy URL"
+        },
+        {
+          "name": "rate-limit",
+          "type": "float64",
+          "default": "5",
+          "usage": "Rate limit (req/s)"
+        },
+        {
+          "name": "reflection",
+          "type": "bool",
+          "default": "false",
+          "usage": "Use server reflection to discover service definition"
+        },
+        {
+          "name": "roles",
+          "type": "string",
+          "usage": "Roles and permissions YAML file"
+        },
+        {
+          "name": "target",
+          "type": "string",
+          "usage": "Target gRPC server address (e.g., localhost:50051)"
+        },
+        {
+          "name": "template",
+          "type": "stringSlice",
+          "default": "[]",
+          "usage": "Filter templates by ID or name (can specify multiple)"
+        },
+        {
+          "name": "template-dir",
+          "type": "string",
+          "usage": "gRPC templates directory (default: $HADRIAN_TEMPLATES or ./templates/grpc)"
+        },
+        {
+          "name": "timeout",
+          "type": "int",
+          "default": "30",
+          "usage": "Request timeout in seconds"
+        },
+        {
+          "name": "tls-ca-cert",
+          "type": "string",
+          "usage": "Custom CA certificate for TLS"
+        },
+        {
+          "name": "verbose",
+          "type": "bool",
+          "default": "false",
+          "usage": "Verbose output"
+        }
+      ]
+    },
+    {
+      "path": "hadrian test rest",
+      "use": "rest",
+      "short": "Run security tests against a REST API",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "api",
+          "type": "string",
+          "usage": "API specification (OpenAPI, Swagger, Postman)"
+        },
+        {
+          "name": "audit-log",
+          "type": "string",
+          "default": ".hadrian/audit.log",
+          "usage": "Audit log file"
+        },
+        {
+          "name": "auth",
+          "type": "string",
+          "usage": "Authentication configuration YAML file"
+        },
+        {
+          "name": "ca-cert",
+          "type": "string",
+          "usage": "CA certificate for proxy (Burp Suite)"
+        },
+        {
+          "name": "category",
+          "type": "stringSlice",
+          "default": "[owasp]",
+          "usage": "Filter by template metadata — exact match against info.category and info.tags (case-insensitive, default: owasp)"
+        },
+        {
+          "name": "dry-run",
+          "type": "bool",
+          "default": "false",
+          "usage": "Show what would be tested without making requests"
+        },
+        {
+          "name": "header",
+          "shorthand": "H",
+          "type": "stringArray",
+          "default": "[]",
+          "usage": "Custom HTTP header (format: 'Key: Value', can specify multiple)"
+        },
+        {
+          "name": "insecure",
+          "type": "bool",
+          "default": "false",
+          "usage": "Skip TLS verification (use with proxies)"
+        },
+        {
+          "name": "llm-context",
+          "type": "string",
+          "usage": "Additional context for LLM analysis (e.g., 'This API handles financial data')"
+        },
+        {
+          "name": "llm-host",
+          "type": "string",
+          "usage": "LLM provider host URL (e.g., http://localhost:11434 for Ollama)"
+        },
+        {
+          "name": "llm-model",
+          "type": "string",
+          "usage": "LLM model name (e.g., llama3.2:latest)"
+        },
+        {
+          "name": "llm-provider",
+          "type": "string",
+          "default": "ollama",
+          "usage": "LLM provider for triage: ollama, openai, anthropic"
+        },
+        {
+          "name": "llm-timeout",
+          "type": "int",
+          "default": "180",
+          "usage": "LLM request timeout in seconds"
+        },
+        {
+          "name": "no-banner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Suppress the startup banner",
+          "inherited": true
+        },
+        {
+          "name": "output",
+          "type": "string",
+          "default": "terminal",
+          "usage": "Output format: terminal, json, markdown, sarif"
+        },
+        {
+          "name": "output-file",
+          "type": "string",
+          "usage": "Write findings to file"
+        },
+        {
+          "name": "planner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Enable LLM-assisted attack planning (experimental)"
+        },
+        {
+          "name": "planner-context",
+          "type": "string",
+          "usage": "Additional context for the planner (e.g., 'Focus on payment endpoints, this is a fintech API')"
+        },
+        {
+          "name": "planner-model",
+          "type": "string",
+          "usage": "LLM model for planner (default: gpt-4o for openai, claude-sonnet-4-20250514 for anthropic)"
+        },
+        {
+          "name": "planner-only",
+          "type": "bool",
+          "default": "false",
+          "usage": "Run ONLY the LLM-planned steps, skip brute-force (requires --planner)"
+        },
+        {
+          "name": "planner-provider",
+          "type": "string",
+          "default": "openai",
+          "usage": "LLM provider for planner: openai, anthropic, ollama"
+        },
+        {
+          "name": "planner-timeout",
+          "type": "int",
+          "default": "120",
+          "usage": "Planner LLM request timeout in seconds"
+        },
+        {
+          "name": "proxy",
+          "type": "string",
+          "usage": "HTTP/HTTPS proxy URL (e.g., http://localhost:8080)"
+        },
+        {
+          "name": "rate-limit",
+          "type": "float64",
+          "default": "5",
+          "usage": "Global rate limit (req/s)"
+        },
+        {
+          "name": "rate-limit-backoff",
+          "type": "string",
+          "default": "exponential",
+          "usage": "Backoff type for rate limit retries: exponential, fixed"
+        },
+        {
+          "name": "rate-limit-max-retries",
+          "type": "int",
+          "default": "5",
+          "usage": "Maximum retry attempts on rate limit response"
+        },
+        {
+          "name": "rate-limit-max-wait",
+          "type": "duration",
+          "default": "1m0s",
+          "usage": "Maximum backoff wait time on rate limit"
+        },
+        {
+          "name": "rate-limit-status-codes",
+          "type": "intSlice",
+          "default": "[429,503]",
+          "usage": "Status codes that trigger rate limit retry"
+        },
+        {
+          "name": "request-ids",
+          "type": "int",
+          "default": "1",
+          "usage": "Number of request IDs to display per finding (0 = all)"
+        },
+        {
+          "name": "roles",
+          "type": "string",
+          "usage": "Roles and permissions YAML file"
+        },
+        {
+          "name": "template",
+          "type": "stringSlice",
+          "default": "[]",
+          "usage": "Filter templates by ID or name (can specify multiple)"
+        },
+        {
+          "name": "template-dir",
+          "type": "string",
+          "usage": "Directory containing test templates (default: $HADRIAN_TEMPLATES or ./templates/rest)"
+        },
+        {
+          "name": "timeout",
+          "type": "int",
+          "default": "30",
+          "usage": "Request timeout (seconds)"
+        },
+        {
+          "name": "verbose",
+          "shorthand": "v",
+          "type": "bool",
+          "default": "false",
+          "usage": "Enable verbose logging output"
+        }
+      ]
+    },
+    {
+      "path": "hadrian version",
+      "use": "version",
+      "short": "Show Hadrian version",
+      "runnable": true,
+      "flags": [
+        {
+          "name": "no-banner",
+          "type": "bool",
+          "default": "false",
+          "usage": "Suppress the startup banner",
+          "inherited": true
+        }
+      ]
+    }
+  ]
+}
