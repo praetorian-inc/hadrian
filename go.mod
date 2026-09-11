@@ -10,7 +10,7 @@ require (
 
 require (
 	github.com/bufbuild/protocompile v0.14.1
-	github.com/praetorian-inc/capability-sdk v0.0.0-20260908174325-de5f920e8132
+	github.com/praetorian-inc/capability-sdk v0.0.0-20260911152927-8c267220a40d
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.33
