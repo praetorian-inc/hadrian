@@ -8,8 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Run is the main entry point for the Hadrian CLI
-func Run() error {
+func newRoot() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "hadrian",
 		Short: "Hadrian - API Security Testing Framework",
@@ -21,6 +20,13 @@ func Run() error {
 	rootCmd.AddCommand(newTestCmd())
 	rootCmd.AddCommand(newParseCmd())
 	rootCmd.AddCommand(newVersionCmd())
+
+	return rootCmd
+}
+
+// Run is the main entry point for the Hadrian CLI
+func Run() error {
+	rootCmd := newRoot()
 
 	// Parse flags early so --no-banner is available before Execute().
 	// Cobra's PersistentPreRun doesn't chain, so calling printBanner here
