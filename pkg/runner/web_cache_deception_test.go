@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/praetorian-inc/hadrian/pkg/model"
@@ -16,10 +17,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// webCacheDeceptionHandler: 6 GET endpoints modelling a CDN in front of an authed API.
+// wcdRecorder records, per request, which credential headers were present.
+type wcdRecorder struct {
+	mu   sync.Mutex
+	reqs map[string][]map[string]bool // path -> per-request header presence, in arrival order
+}
+
+var wcdCredentialHeaders = []string{"Authorization", "Cookie", "X-Api-Key"}
+
+func (r *wcdRecorder) record(req *http.Request) {
+	present := make(map[string]bool, len(wcdCredentialHeaders))
+	for _, h := range wcdCredentialHeaders {
+		present[h] = len(req.Header.Values(h)) > 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.reqs == nil {
+		r.reqs = make(map[string][]map[string]bool)
+	}
+	r.reqs[req.URL.Path] = append(r.reqs[req.URL.Path], present)
+}
+
+func (r *wcdRecorder) requests(path string) []map[string]bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]map[string]bool(nil), r.reqs[path]...)
+}
+
+// webCacheDeceptionHandler: 7 GET endpoints modelling a CDN in front of an authed API.
 //
 //	/api/account/statement — POSITIVE #1: unauth GET -> 200 + sensitive body + CF-Cache-Status: HIT. MUST flag.
 //	/api/account/invoice   — POSITIVE #2: unauth GET -> 200 + sensitive body + X-Cache: TCP_HIT (Akamai). MUST flag.
+//	/api/account/cache-miss — NEG #5: 200 unauth + sensitive body + CF-Cache-Status: MISS. MUST NOT flag.
 //	/api/account/settings  — NEG #1 (anti-dup vs API2): 200 unauth, NO cache header. MUST NOT flag.
 //	/api/account/secure    — NEG #2: 401 unauth (properly protected). MUST NOT flag.
 //	/api/account/history   — NEG #3 (regression): 200 unauth + sensitive body + bare `Age` header only
@@ -28,20 +57,28 @@ import (
 //	/api/account/profile   — NEG #4 (regression): 200 unauth + sensitive body + Imperva-style `X-Iinfo`
 //	                          header only (no CF-Cache-Status/X-Cache). Proves the removed X-Iinfo matcher
 //	                          arm no longer fires — Imperva sends X-Iinfo on origin/miss responses too.
-func webCacheDeceptionHandler() http.Handler {
+func webCacheDeceptionHandler(rec *wcdRecorder) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/account/statement", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/account/statement", func(w http.ResponseWriter, r *http.Request) {
+		rec.record(r)
 		w.Header().Set("CF-Cache-Status", "HIT")
 		fixtureJSON(w, http.StatusOK, map[string]interface{}{
 			"account_id": 1, "holder": "Victim User", "balance": 10425.50,
 			"iban": "DE89370400440532013000", "statement_pdf": "confidential",
 		})
 	})
-	mux.HandleFunc("/api/account/invoice", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/api/account/invoice", func(w http.ResponseWriter, r *http.Request) {
+		rec.record(r)
 		w.Header().Set("X-Cache", "TCP_HIT from edge.akamai.example")
 		fixtureJSON(w, http.StatusOK, map[string]interface{}{
 			"account_id": 1, "holder": "Victim User", "invoice_total": 4821.00,
 			"billing_address": "123 Confidential Ln", "invoice_pdf": "confidential",
+		})
+	})
+	mux.HandleFunc("/api/account/cache-miss", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("CF-Cache-Status", "MISS")
+		fixtureJSON(w, http.StatusOK, map[string]interface{}{
+			"account_id": 1, "holder": "Victim User", "balance": 10425.50,
 		})
 	})
 	mux.HandleFunc("/api/account/settings", func(w http.ResponseWriter, _ *http.Request) {
@@ -88,6 +125,11 @@ paths:
       summary: Account invoice (cacheable authenticated response, Akamai X-Cache)
       security: [{bearerAuth: []}]
       responses: {"200": {description: OK}}
+  /api/account/cache-miss:
+    get:
+      summary: Account cache-miss (CF-Cache-Status MISS, not served from cache)
+      security: [{bearerAuth: []}]
+      responses: {"200": {description: OK}}
   /api/account/settings:
     get:
       summary: Account settings (broken auth, not cache-served)
@@ -113,9 +155,9 @@ components:
     bearerAuth: {type: http, scheme: bearer}
 `
 
-func runWebCacheDeceptionTemplates(t *testing.T, templateIDs ...string) []*model.Finding {
+func runWebCacheDeceptionTemplates(t *testing.T, rec *wcdRecorder, templateIDs ...string) []*model.Finding {
 	t.Helper()
-	server := httptest.NewServer(webCacheDeceptionHandler())
+	server := httptest.NewServer(webCacheDeceptionHandler(rec))
 	t.Cleanup(server.Close)
 
 	dir := t.TempDir()
@@ -143,7 +185,8 @@ func runWebCacheDeceptionTemplates(t *testing.T, templateIDs ...string) []*model
 }
 
 func TestIntegration_WebCacheDeception(t *testing.T) {
-	findings := runWebCacheDeceptionTemplates(t, "12-api8-web-cache-deception")
+	rec := &wcdRecorder{}
+	findings := runWebCacheDeceptionTemplates(t, rec, "12-api8-web-cache-deception")
 	var endpoints []string
 	flaggedEndpoints := make(map[string]bool)
 	for _, f := range findings {
@@ -155,7 +198,20 @@ func TestIntegration_WebCacheDeception(t *testing.T) {
 	assert.True(t, flaggedEndpoints["/api/account/invoice"], "the Akamai X-Cache: TCP_HIT endpoint must be flagged; got %v", endpoints)
 	assert.False(t, flaggedEndpoints["/api/account/history"], "a bare Age header (no cache-HIT status) must NOT be flagged — the removed Age matcher arm must not fire; got %v", endpoints)
 	assert.False(t, flaggedEndpoints["/api/account/profile"], "an Imperva X-Iinfo header alone (no cache-HIT status) must NOT be flagged — the removed X-Iinfo matcher arm must not fire; got %v", endpoints)
+	assert.False(t, flaggedEndpoints["/api/account/cache-miss"], "CF-Cache-Status: MISS must NOT be flagged; got %v", endpoints)
+	// The WCD template is a passive unauthenticated probe: no request to a flagged
+	// endpoint may carry credentials.
+	for _, path := range []string{"/api/account/statement", "/api/account/invoice"} {
+		reqs := rec.requests(path)
+		require.NotEmpty(t, reqs, "%s: expected at least one recorded request", path)
+		for i, req := range reqs {
+			for _, h := range wcdCredentialHeaders {
+				assert.False(t, req[h], "%s request %d must not carry %s", path, i, h)
+			}
+		}
+	}
 	for _, f := range findings {
+		assert.Equal(t, model.Severity("MEDIUM"), f.Severity, "finding for %s must be MEDIUM", f.Endpoint)
 		assert.Equal(t, "API8:2023", f.Category, "finding for %s must be categorized as API8:2023", f.Endpoint)
 		assert.NotEqual(t, "/api/account/settings", f.Endpoint, "plain broken auth (200, no cache header) must NOT be flagged")
 		assert.NotEqual(t, "/api/account/secure", f.Endpoint, "a properly protected endpoint (401) must NOT be flagged")

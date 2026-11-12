@@ -350,3 +350,41 @@ func TestExecuteCacheDeception_OperatorHeadersStrippedFromAnonymousReplay(t *tes
 	assert.Empty(t, replayReq.Header.Get("Cookie"),
 		"the anonymous replay must NOT carry a Cookie header")
 }
+
+// --- prime_repeat clamping ---
+
+func TestExecuteCacheDeception_PrimeRepeatClamp(t *testing.T) {
+	tests := []struct {
+		name         string
+		primeRepeat  int
+		wantRequests int // primes + 1 anonymous replay
+	}{
+		{"zero falls back to default of 2", 0, 3},
+		{"negative falls back to default of 2", -1, 3},
+		{"above max is clamped to 20", 21, 21},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var responses []*http.Response
+			for i := 0; i < tc.wantRequests-1; i++ {
+				responses = append(responses, newMockResponse(200, `{"data":"authenticated prime body content"}`))
+			}
+			// Distinct anon body so the run does not match/short-circuit.
+			responses = append(responses, newMockResponse(200, `{"data":"anonymous replay body, entirely different"}`))
+
+			client := &MockHTTPClient{responses: responses}
+			executor := NewCacheDeceptionExecutor(client, nil)
+			tmpl := &templates.Template{
+				ID:             "t-clamp",
+				CacheDeception: &templates.CacheDeception{PrimeRepeat: tc.primeRepeat},
+			}
+
+			result, err := executor.ExecuteCacheDeception(context.Background(), tmpl, "/api/account/statement", "victim", makeAuthInfos("", "victim-token"), "http://example.test")
+
+			require.NoError(t, err)
+			assert.False(t, result.Matched)
+			assert.Len(t, client.requests, tc.wantRequests)
+		})
+	}
+}

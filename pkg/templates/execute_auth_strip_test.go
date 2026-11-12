@@ -53,6 +53,20 @@ func TestBuildRequest_AnonymousAuthHeaderStripping(t *testing.T) {
 			},
 			absentHeaders: []string{"Authorization", "Cookie"},
 		},
+		{
+			name:     "anonymous strips well-known API-key headers",
+			authInfo: nil,
+			customHeaders: map[string]string{
+				"X-Api-Key":           "secret-key",
+				"Api-Key":             "secret-key",
+				"X-Auth-Token":        "secret-token",
+				"X-Access-Token":      "secret-token",
+				"Proxy-Authorization": "Basic creds",
+				"X-Custom-Trace":      "trace-123",
+			},
+			wantHeaders:   map[string]string{"X-Custom-Trace": "trace-123"},
+			absentHeaders: []string{"X-Api-Key", "Api-Key", "X-Auth-Token", "X-Access-Token", "Proxy-Authorization"},
+		},
 	}
 
 	for _, tc := range tests {

@@ -607,13 +607,15 @@ func buildRequest(
 	}
 
 	// Add custom headers first (auth/template headers take precedence).
-	// When authInfo is nil the request is anonymous: skip well-known auth
-	// headers so operator --header values don't leak credentials onto what
-	// should be an unauthenticated probe (e.g. the WCD observational check).
+	// When authInfo is nil the request is anonymous: skip well-known
+	// credential headers so operator --header values don't leak credentials
+	// onto what should be an unauthenticated probe (e.g. the WCD
+	// observational check).
 	for key, value := range customHeaders {
 		if authInfo == nil {
 			switch strings.ToLower(key) {
-			case "authorization", "cookie":
+			case "authorization", "cookie", "proxy-authorization",
+				"x-api-key", "api-key", "x-auth-token", "x-access-token":
 				continue
 			}
 		}

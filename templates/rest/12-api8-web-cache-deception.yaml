@@ -48,7 +48,8 @@
 #
 # Cold-cache limitation: the single unauthenticated request is OBSERVATIONAL — it
 # catches an exposure only when the cache is already warm; on a cold cache it may
-# miss. A self-priming two-phase test is a possible future enhancement.
+# miss. The active two-phase template (examples/cache-deception/, test_pattern
+# cache-deception) self-primes the cache and is the HIGH-confidence path.
 #
 # Simple-path limitation: this template uses the shared simple request path, so
 # required query parameters are NOT appended (query-driven endpoints are
@@ -96,8 +97,9 @@ info:
     (confidence / IsVulnerability) and does not drop them, and library RunTest
     skips triage — so confirmation is a human/triage review step, not an
     automatic gate. The single unauthenticated request is observational: it
-    catches an already-cache-warm exposure and may miss on a cold cache (a
-    self-priming two-phase test is a possible future enhancement).
+    catches an already-cache-warm exposure and may miss on a cold cache.
+    The active two-phase template (examples/cache-deception/, test_pattern
+    cache-deception) self-primes the cache and is the HIGH-confidence path.
   tags: ["web-cache-deception", "cache-deception", "cwe-525", "security-misconfiguration", "owasp", "owasp-api-top10", "api8"]
   requires_llm_triage: true
   test_pattern: "simple"

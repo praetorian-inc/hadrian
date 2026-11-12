@@ -111,6 +111,11 @@ func executeTemplate(
 				RequestIDs: result.RequestIDs,
 				Timestamp:  time.Now(),
 			}
+			// The WCD observational template's match (cache-HIT header)
+			// is a candidate, not proof — override to non-confirmed.
+			if tmpl.Detection.VulnerabilityPattern == "cacheable_authenticated_response_served_unauthenticated" {
+				finding.IsVulnerability = false
+			}
 			findings = append(findings, finding)
 		}
 		return findings, nil
