@@ -213,6 +213,7 @@ func TestIntegration_WebCacheDeception(t *testing.T) {
 	for _, f := range findings {
 		assert.Equal(t, model.Severity("MEDIUM"), f.Severity, "finding for %s must be MEDIUM", f.Endpoint)
 		assert.Equal(t, "API8:2023", f.Category, "finding for %s must be categorized as API8:2023", f.Endpoint)
+		assert.False(t, f.IsVulnerability, "passive WCD finding for %s must not be marked as confirmed vulnerability", f.Endpoint)
 		assert.NotEqual(t, "/api/account/settings", f.Endpoint, "plain broken auth (200, no cache header) must NOT be flagged")
 		assert.NotEqual(t, "/api/account/secure", f.Endpoint, "a properly protected endpoint (401) must NOT be flagged")
 		assert.NotEqual(t, "/api/account/history", f.Endpoint, "bare Age header (no cache-HIT status) must NOT be flagged")
