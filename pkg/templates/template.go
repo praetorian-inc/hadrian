@@ -90,7 +90,6 @@ type EndpointSelector struct {
 	Methods          []string `yaml:"methods"`
 	Service          string   `yaml:"service,omitempty"` // gRPC: exact service name filter
 	Method           string   `yaml:"method,omitempty"`  // gRPC: exact method name filter
-	ReturnsObject    bool     `yaml:"returns_object"`
 	PathPattern      string   `yaml:"path_pattern,omitempty"`
 	Tags             []string `yaml:"tags,omitempty"`
 
