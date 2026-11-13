@@ -19,7 +19,6 @@ endpoint_selector:
   requires_auth: true
   methods: ["GET"]
   path_pattern: ".*/profiles/.*"
-  returns_object: true
 
 # Attacker tries to access victim's profile containing sensitive data
 role_selector:

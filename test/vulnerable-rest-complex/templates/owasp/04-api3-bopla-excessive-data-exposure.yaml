@@ -20,7 +20,6 @@ endpoint_selector:
   requires_auth: true
   methods: ["GET"]
   path_pattern: ".*/dashboard.*"
-  returns_object: true
 
 # Use lower/higher levels — testing that the authenticated user's OWN dashboard
 # over-exposes data regardless of privilege level.

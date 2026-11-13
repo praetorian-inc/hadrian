@@ -18,7 +18,6 @@ endpoint_selector:
   requires_auth: true
   methods: ["GET"]
   path_pattern: ".*/documents/.*"
-  returns_object: true
 
 # Attacker tries to access victim's private documents
 role_selector:
