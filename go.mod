@@ -1,6 +1,6 @@
 module github.com/praetorian-inc/hadrian
 
-go 1.26
+go 1.26.0
 
 require (
 	github.com/getkin/kin-openapi v0.153.0
@@ -13,7 +13,7 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/stretchr/testify v1.12.1
 	github.com/vektah/gqlparser/v2 v2.5.64
-	golang.org/x/time v0.15.0
+	golang.org/x/time v0.16.0
 	google.golang.org/grpc v1.83.0
 	google.golang.org/protobuf v1.36.12
 )
