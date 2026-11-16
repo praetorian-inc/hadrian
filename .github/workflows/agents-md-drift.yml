@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   drift-check:
-    uses: praetorian-inc/public-workflows/.github/workflows/agents-md-drift.yml@defe609cc7ff3f7630a36928d620c29bcf3b7930  # v2.19.3
+    uses: praetorian-inc/public-workflows/.github/workflows/agents-md-drift.yml@6d7f04eca0fc8c6f61121a530fbc2485877da3a6  # v2.21.16
     permissions:
       contents: read
       pull-requests: write
