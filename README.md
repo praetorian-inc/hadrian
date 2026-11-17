@@ -190,7 +190,7 @@ Yes. Hadrian uses YAML templates that define endpoint selectors, role selectors,
 
 ### Does Hadrian integrate with CI/CD pipelines?
 
-Yes. Use `--output json --output-file report.json` to generate machine-readable reports, or `--output sarif --output-file report.sarif` to publish findings to GitHub Code Scanning (a complete example workflow lives at [`.github/workflows/example-sarif-upload.yml`](.github/workflows/example-sarif-upload.yml)). Hadrian returns a non-zero exit code when vulnerabilities are found, making it suitable for CI/CD gates.
+Yes. Use `--output json --output-file report.json` to generate machine-readable reports, or `--output sarif --output-file report.sarif` to publish findings to GitHub Code Scanning (a complete example workflow lives at [`docs/examples/example-sarif-upload.yml`](docs/examples/example-sarif-upload.yml)). Hadrian returns a non-zero exit code when vulnerabilities are found, making it suitable for CI/CD gates.
 
 ## Development
 

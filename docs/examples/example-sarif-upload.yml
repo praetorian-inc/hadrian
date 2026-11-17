@@ -1,6 +1,8 @@
 # Example workflow: run Hadrian against an API and publish the findings to
 # GitHub Code Scanning via SARIF upload.
 #
+# This copy is not executed in the Hadrian repo because it is not under .github/workflows/.
+#
 # Copy this file into your own repository under .github/workflows/ and adjust
 # the API spec / target / credentials to match your environment. Hadrian's
 # `partialFingerprints` keep alerts stable across runs so re-running the scan
@@ -45,7 +47,7 @@ jobs:
     env:
       # Single source of truth: the binary and the templates are both pinned to
       # this Hadrian release so they never drift. Bump to the release you want.
-      HADRIAN_VERSION: v1.2.3
+      HADRIAN_VERSION: v1.0.0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
