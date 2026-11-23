@@ -14,7 +14,7 @@ on:
 
 jobs:
   codex-review:
-    uses: praetorian-inc/public-workflows/.github/workflows/codex-code.yml@bea437fe87b9c4f67a891d7c6539e7bcdbe988e9  # v2.21.21
+    uses: praetorian-inc/public-workflows/.github/workflows/codex-code.yml@fe82661912c4569ea4662e32cada87603795cab9  # v2.21.22
     permissions:
       contents: read
       pull-requests: write
